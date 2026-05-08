@@ -4453,6 +4453,23 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       }
     }
 
+    // EGOW attribution: code, unit, PIC — non-destructive (only fills blank fields)
+    if (fullCallsign) {
+      const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
+      if (egowAttrib) {
+        if (egowCodeInput && !egowCodeInput.value.trim() && egowAttrib.egowCode) {
+          egowCodeInput.value = egowAttrib.egowCode;
+        }
+        if (unitCodeInput && !unitCodeInput.value.trim() && egowAttrib.unitCode) {
+          unitCodeInput.value = egowAttrib.unitCode;
+        }
+        const captainEl = document.getElementById('newCaptain');
+        if (captainEl && !captainEl.value.trim() && egowAttrib.name) {
+          captainEl.value = egowAttrib.name;
+        }
+      }
+    }
+
     // If callsign matches a fixed callsign, auto-fill registration (only if registration is empty)
     if (fullCallsign && regInput && (!regInput.value || regInput.value === '')) {
       const regData = lookupRegistrationByFixedCallsign(fullCallsign);
@@ -5364,6 +5381,15 @@ function openNewLocFlightModal() {
             <label class="modal-label">EGOW Unit</label>
             <input id="newLocUnitCode" class="modal-input is-derived" placeholder="e.g. L, M, A" />
           </div>
+          <div class="modal-field">
+            <label class="modal-label">PIC</label>
+            <input id="newLocCaptain"
+                   class="modal-input"
+                   placeholder="Pilot in Command"
+                   list="newLocCaptainPilotSuggestions"
+                   autocomplete="off" />
+            <datalist id="newLocCaptainPilotSuggestions"></datalist>
+          </div>
         </div>
       </section>
 
@@ -5508,6 +5534,7 @@ function openNewLocFlightModal() {
   makeInputUppercase(typeInput);
   makeInputUppercase(egowCodeInput);
   makeInputUppercase(unitCodeInput);
+  makeInputUppercase(document.getElementById("newLocCaptain"));
 
   // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
@@ -5563,6 +5590,19 @@ function openNewLocFlightModal() {
           maybeAutofillLocWtc();
         }
       }
+
+      // Aircraft pilot suggestions from registration
+      const captainEl = document.getElementById('newLocCaptain');
+      const pilotDl = document.getElementById('newLocCaptainPilotSuggestions');
+      if (captainEl && pilotDl) {
+        const pilots = lookupAircraftPilots(regInput.value, '');
+        if (pilots.length > 0) {
+          pilotDl.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
+          if (!captainEl.value.trim() && pilots.length === 1) {
+            captainEl.value = pilots[0].displayName;
+          }
+        }
+      }
     };
     regInput.addEventListener("input", applyLocRegAutofill);
     regInput.addEventListener("change", applyLocRegAutofill);
@@ -5584,6 +5624,24 @@ function openNewLocFlightModal() {
         unitCodeInput.value = unitData['UC'];
       }
     }
+
+    // EGOW attribution: code, unit, PIC — non-destructive
+    if (fullCallsign) {
+      const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
+      if (egowAttrib) {
+        if (egowCodeInput && !egowCodeInput.value.trim() && egowAttrib.egowCode) {
+          egowCodeInput.value = egowAttrib.egowCode;
+        }
+        if (unitCodeInput && !unitCodeInput.value.trim() && egowAttrib.unitCode) {
+          unitCodeInput.value = egowAttrib.unitCode;
+        }
+        const captainEl = document.getElementById('newLocCaptain');
+        if (captainEl && !captainEl.value.trim() && egowAttrib.name) {
+          captainEl.value = egowAttrib.name;
+        }
+      }
+    }
+
     if (fullCallsign && regInput && (!regInput.value || regInput.value === '')) {
       const regData = lookupRegistrationByFixedCallsign(fullCallsign);
       if (regData) {
@@ -5591,6 +5649,21 @@ function openNewLocFlightModal() {
         if (registration && registration !== '-') {
           regInput.value = registration;
           regInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+    }
+
+    // Aircraft pilot suggestions from fixed callsign
+    if (fullCallsign) {
+      const captainEl = document.getElementById('newLocCaptain');
+      const pilotDl = document.getElementById('newLocCaptainPilotSuggestions');
+      if (captainEl && pilotDl) {
+        const pilots = lookupAircraftPilots('', fullCallsign);
+        if (pilots.length > 0) {
+          pilotDl.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
+          if (!captainEl.value.trim() && pilots.length === 1) {
+            captainEl.value = pilots[0].displayName;
+          }
         }
       }
     }
@@ -5907,7 +5980,7 @@ function openNewLocFlightModal() {
       egowDesc: "",
       unitCode: document.getElementById("newLocUnitCode")?.value || "",
       unitDesc: "",
-      captain: "",
+      captain: document.getElementById("newLocCaptain")?.value || "",
       pob: parseInt(pob, 10),
       priorityLetter: priorityLetterValue,
       remarks: remarksValue,
@@ -6060,7 +6133,7 @@ function openNewLocFlightModal() {
       egowDesc: "",
       unitCode: document.getElementById("newLocUnitCode")?.value || "",
       unitDesc: "",
-      captain: "",
+      captain: document.getElementById("newLocCaptain")?.value || "",
       pob: parseInt(pob, 10),
       priorityLetter: priorityLetterValue,
       remarks: remarksValue,
@@ -6506,6 +6579,23 @@ function openEditMovementModal(m) {
       const unitData = lookupCallsign(fullCallsign);
       if (unitData && unitData['UC'] && unitData['UC'] !== '-' && unitData['UC'] !== '') {
         unitCodeInput.value = unitData['UC'];
+      }
+    }
+
+    // EGOW attribution: code, unit, PIC — non-destructive
+    if (fullCallsign) {
+      const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
+      if (egowAttrib) {
+        if (egowCodeInput && !egowCodeInput.value.trim() && egowAttrib.egowCode) {
+          egowCodeInput.value = egowAttrib.egowCode;
+        }
+        if (unitCodeInput && !unitCodeInput.value.trim() && egowAttrib.unitCode) {
+          unitCodeInput.value = egowAttrib.unitCode;
+        }
+        const captainEl = document.getElementById('editCaptain');
+        if (captainEl && !captainEl.value.trim() && egowAttrib.name) {
+          captainEl.value = egowAttrib.name;
+        }
       }
     }
 

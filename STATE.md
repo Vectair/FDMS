@@ -16,9 +16,15 @@ Last updated: 2026-05-08 (Europe/London)
   - Callsign-derived EGOW enrichment restored in `enrichMovementData()` (non-destructive).
   - Edit-save timing recalculation now detects the actual changed timing field rather than always using `depActual`.
   - LOC planned-time sync (`bindPlannedTimesSync` non-ARR mode) now always applies `start + duration → end` on start/duration change, and `end − start → duration` on end change.
-- **EGOW attribution and aircraft pilot data implemented** (branch `claude/egow-aircraft-datasets-CwnXX`):
-  - Expanded EGOW attribution using revised `FDMS_EGOW_CODES.csv` schema with `CALLSIGN_BASE`, `APPROVED_CONTRACTION`, `FLIGHT_NUMBER`, `EGOW_CODE`, `UNIT`, `UNIT_CODE`, `NAME`, `POSITION`, `NOTES`.
-  - Aircraft pilot suggestion loading from `FDMS_AIRCRAFT_PILOTS.csv`.
+- **EGOW attribution consolidated** (branch `claude/consolidate-egow-attribution-clean`):
+  - Expanded EGOW attribution using corrected `FDMS_EGOW_CODES.csv` schema: `CALLSIGN_BASE`, `APPROVED_CONTRACTION` (corrected spelling), `FLIGHT_NUMBER`, `EGOW_CODE`, `UNIT`, `UNIT_CODE`, `NAME`, `POSITION`, `NOTES`.
+  - Resolver supports numeric suffix, leading-zero normalisation, blank `FLIGHT_NUMBER` fallback, and `APPROVED_CONTRACTION` alias with backward-compat typo fallback.
+  - `lookupEgowAttributionFromCallsign()` is wired form-level across all three modal paths: `openNewFlightModal` (DEP/ARR/OVR), `openNewLocFlightModal` (LOC), `openEditMovementModal`. Visible EGOW Code, EGOW Unit, and PIC are populated before save validation. Manual entries remain authoritative.
+  - LOC creation modal now includes PIC field (`newLocCaptain`) with aircraft-pilot datalist (`newLocCaptainPilotSuggestions`). Both LOC save paths persist `captain`.
+  - Aircraft pilot suggestion loading from `FDMS_AIRCRAFT_PILOTS.csv` wired to pilot datalists in new-flight, LOC, and edit modals.
+  - `enrichMovementData()` retained as final non-destructive safety net.
+  - `FDMS_REGISTRATIONS.csv` untouched; verified at **25,713 lines**.
+  - Post-launch backlog: learned PIC ranking; alphanumeric flight-suffix support beyond pure digit suffixes.
 - V1 is not release-ready until the remaining V1 workstreams and acceptance sweep are complete.
 
 This file is the shared source of truth for the Manager–Worker workflow.
