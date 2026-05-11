@@ -176,38 +176,25 @@ formation expanded child-strip display refactor
 History Retrieval H1–H5b
 Native Save As export consolidation H5b
 4. Current active defect / next engineering priority
-4.1 EGOW / LOC / timing regression cluster
+### 4.1 Resolved: EGOW / LOC / timing regression cluster
 
-This is the next active engineering priority and should be handled before new feature work.
+The EGOW / LOC / timing regression cluster has been resolved and merged into `main` at commit `73023df`.
 
-Observed / reported symptoms
+Resolved scope included:
 
-The known regression cluster includes:
+- LOC EGOW validation now rejects blank and invalid EGOW codes where required.
+- Callsign-derived EGOW enrichment has been restored and consolidated through `lookupEgowAttributionFromCallsign()`.
+- Visible EGOW Code, EGOW Unit, and PIC fields now use tracked autofill provenance via `dataset.autofillValue`.
+- Stale autofill clearing now removes previous system-filled values when attribution becomes unresolved or partially blank, while preserving manual overrides.
+- The legacy untracked EGOW Unit writer has been removed.
+- UAM leading-zero semantics are enforced: `UAM03` resolves, `UAM3` does not.
+- UAM family fallback supports unknown UAM numbers such as `UAM99` resolving to `BM` only, with blank EGOW Unit and PIC.
+- LOC PIC layout now matches DEP/ARR/OVR modal layout.
+- LOC planned-time sync and edit-save timing recalculation have been restored.
+- ARR Active no longer fabricates ATD.
+- OVR semantics remain unchanged.
 
-Callsign-to-EGOW autofill regression
-Callsign-derived EGOW code enrichment no longer reliably fills as expected.
-New LOC creation allows blank EGOW
-LOC strip creation can pass with blank/invalid EGOW when validation should reject it.
-New LOC ETD tab-out no longer recalculates ETA
-Editing the departure/start time on a new LOC no longer automatically updates the arrival/end time as expected.
-Existing strip dep-time edits do not update dependent timing
-Existing strip time edits do not reliably recalculate dependent timing unless duration arrows are touched.
-Suspected implementation causes from prior diagnosis
-
-The active investigation previously identified likely causes:
-
-LOC validation checks only invalid non-blank EGOW values, rather than requiring a value:
-if (egowCode && !validEgowCodes.includes(egowCode)) ...
-
-should likely become:
-
-if (!egowCode || !validEgowCodes.includes(egowCode)) ...
-enrichMovementData lacks or has lost callsign-based EGOW inference/backstop.
-Edit-save recalculation is too narrow and only runs when updates.depActual !== undefined, not when planned/start/end/duration fields change.
-New LOC planned-time sync path is incomplete or not firing on the correct field events.
-Required handling
-
-This must be treated as a functional regression, not a polish item.
+Preserve the EGOW / LOC / timing smoke tests as regression tests for future related changes, but do not treat this cluster as active work.
 
 Claude must not be asked to investigate from scratch. ChatGPT must inspect current implementation, state actual cause, exact files to change, and exact behaviour required before Claude receives a patch ticket.
 
@@ -1046,18 +1033,20 @@ EGOW / LOC / timing regression cluster
 minimum desktop productization definition and implementation
 documentation refresh
 final release acceptance sweep
-V1 freeze / release decision
-14.2 V1 required / candidate workstreams
-A. EGOW / LOC / timing regression fix
+The following remain relevant before V1 release:
 
-Current next priority.
+- minimum desktop productization definition and implementation
+- documentation refresh
+- V1 freeze / release decision
+- regression preservation for resolved EGOW / LOC / timing behaviour
 
-Must restore reliable:
+### 14.2 V1 required / candidate workstreams
 
-EGOW validation
-callsign-derived EGOW enrichment
-LOC timing sync
-dependent timing recalculation after edits
+#### A. Resolved baseline: EGOW / LOC / timing fix
+
+Resolved and merged into `main` at `73023df`.
+
+This area should now be treated as a regression baseline, not an active workstream. Future changes touching callsign attribution, EGOW validation, LOC timing, edit timing, ARR activation, or OVR handling must preserve the smoke-test behaviours recorded in section 18.6.
 B. H6 History polish / integration
 
 Remaining closeout after H1–H5b.
@@ -1161,13 +1150,24 @@ Admin-configurable export locations
 full backend/database architecture
 multi-user/concurrent operations model
 full API/VKB live integration
-17. Recommended next implementation order
-17.1 Immediate next item
-1. Fix EGOW / LOC / timing regression cluster
+## 17. Recommended next implementation order
+
+### 17.1 Immediate next item
+
+1. Live Board summary counter aggregation and computed tooltips
 
 Reason:
 
-This is a functional regression affecting core strip creation/editing. It should be fixed before starting new feature work.
+The EGOW / LOC / timing regression cluster is now resolved and merged into `main` at `73023df`. The next highest-value engineering item is the Live Board summary counter work, because it is visible operationally, bounded in scope, and should be corrected before Monthly Return reconciliation work.
+
+Recommended order:
+
+1. Live Board summary counter aggregation and computed tooltips
+2. Monthly Return ghost-count contamination
+3. Day Timeline fixed DEP/ARR display windows
+4. Semantic refinement / WTC exact-time display / rounding polish
+
+Reason:
 
 17.2 Then close History properly
 2. H6 History polish / integration
@@ -1293,9 +1293,13 @@ Search / Table results match filter criteria
 Search / Table export exports all filtered rows, not only visible capped rows
 Cancelled Sorties and Deleted Strips remain unaffected
 all History exports use native Save As in Tauri
-18.6 EGOW / LOC / timing regression smoke baseline
+### 18.6 EGOW / LOC / timing regression smoke baseline
 
-After the active regression fix, smoke must include:
+Resolved and merged into `main` at `73023df`.
+
+These tests must be preserved as regression coverage for future changes touching attribution, validation, timing, activation, or movement counting.
+
+Smoke must include:
 
 DEP creation with valid callsign/EGOW enrichment
 ARR creation with valid callsign/EGOW enrichment
@@ -1374,35 +1378,17 @@ documentation impact
 
 The next work item is:
 
-Fix EGOW / LOC / timing regression cluster
+**Live Board summary counter aggregation and computed tooltips**
 
-Before producing a Claude prompt, ChatGPT should inspect the relevant current files on main, especially:
+Before producing a Claude prompt, ChatGPT should inspect the relevant current files on `main`, especially:
 
-src/js/ui_liveboard.js
-src/js/datamodel.js
-src/js/vkb.js
+- `src/js/ui_liveboard.js`
+- any summary/stat aggregation helpers
+- any tooltip/computed-count rendering paths
+- movement counting logic for DEP, ARR, LOC, OVR, T&G, and O/S
+- EGOW-based civil/military classification only where it contributes to displayed summary counters
 
-Likely inspection targets:
-
-new movement modal validation
-LOC validation path
-EGOW code validation rules
-callsign enrichment path
-enrichMovementData
-planned-time sync helpers
-duration recalculation helpers
-inline edit save path
-modal edit save path
-timing recalculation triggers
-
-Expected output before Claude implementation:
-
-actual cause
-exact files to change
-exact functions to modify
-exact behaviour to restore
-smoke tests
-docs impact
+The resolved EGOW / LOC / timing cluster should remain part of regression testing, not the active implementation target.
 
 ---
 
