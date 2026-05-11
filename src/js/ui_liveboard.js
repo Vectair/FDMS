@@ -50,10 +50,13 @@ import {
   shouldShowUtcLocalToggleForNewForms,
   getOperationalTimezoneOffsetHours,
   DELETED_STRIPS_RETENTION_HOURS,
-  resolveFormationElementIdentity
+  resolveFormationElementIdentity,
+  egowRunwayContribution,
+  isOverflight
 } from "./datamodel.js";
 
 import { showToast } from "./app.js";
+import { classifyMovement } from "./reporting.js";
 import { saveTextFileWithDialogOrDownload } from "./export_utils.js";
 
 import { onMovementUpdated, onMovementStatusChanged, clearStripLinks } from "./services/bookingSync.js";
@@ -11727,4 +11730,114 @@ export function initModalAutocomplete(modal) {
 
 export function initAdminPanel() {
   // No-op stub: implement if needed in this file.
+}
+
+/* ------------------------------------------------------------------ *
+ * Live Board summary counter aggregation                              *
+ * ------------------------------------------------------------------ */
+
+function _lbNonNegInt(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+}
+
+function _egowBreakdown(m) {
+  if (m.formation && Array.isArray(m.formation.elements) && m.formation.elements.length > 0) {
+    return _formationEgowBreakdown(m);
+  }
+  const ft  = String(m.flightType || "").toUpperCase();
+  const tng = _lbNonNegInt(m.tngCount);
+  const os  = _lbNonNegInt(m.osCount);
+  const hasDep = !!(m.depActual && String(m.depActual).trim());
+  const hasArr = !!(m.arrActual && String(m.arrActual).trim());
+  if (ft === "DEP") return { dep: hasDep ? 1 : 0, arr: 0,              locBase: 0,                             tng: 2 * tng, os };
+  if (ft === "ARR") return { dep: 0,              arr: hasArr ? 1 : 0, locBase: 0,                             tng: 2 * tng, os };
+  if (ft === "LOC") return { dep: 0,              arr: 0,              locBase: (hasDep ? 1 : 0) + (hasArr ? 1 : 0), tng: 2 * tng, os };
+  return { dep: 0, arr: 0, locBase: 0, tng: 0, os: 0 };
+}
+
+function _formationEgowBreakdown(m) {
+  const parentFt = String(m.flightType || "").toUpperCase();
+  const bd = { dep: 0, arr: 0, locBase: 0, tng: 0, os: 0 };
+  for (const el of m.formation.elements) {
+    const ov  = el.overrides || {};
+    const ft  = String("flightType" in ov ? ov.flightType : parentFt).toUpperCase();
+    const tng = _lbNonNegInt("tngCount" in ov ? ov.tngCount : m.tngCount);
+    const os  = _lbNonNegInt("osCount"  in ov ? ov.osCount  : m.osCount);
+    const depActual = (el.depActual && String(el.depActual).trim()) || m.depActual || "";
+    const arrActual = (el.arrActual && String(el.arrActual).trim()) || m.arrActual || "";
+    const hasDep = !!(depActual && String(depActual).trim());
+    const hasArr = !!(arrActual && String(arrActual).trim());
+    if (ft === "OVR") continue;
+    if (ft === "DEP") { bd.dep     += hasDep ? 1 : 0; bd.tng += 2 * tng; bd.os += os; }
+    else if (ft === "ARR") { bd.arr += hasArr ? 1 : 0; bd.tng += 2 * tng; bd.os += os; }
+    else if (ft === "LOC") { bd.locBase += (hasDep ? 1 : 0) + (hasArr ? 1 : 0); bd.tng += 2 * tng; bd.os += os; }
+  }
+  return bd;
+}
+
+/**
+ * Calculate Live Board summary statistics for today.
+ * Event-based / EGOW-realized counting — not the Monthly Return nominal model.
+ *
+ * VM bucket includes VM, VMH, VNH.
+ * VC bucket includes VC, VCH.
+ * OVR is counted separately and excluded from runway totals.
+ *
+ * @param {Array} movements - All movements from datamodel
+ * @returns {{ BM, BC, VM, VC, OVR, totalRunway }}
+ */
+export function calculateLiveBoardSummaryStats(movements) {
+  const today = getTodayDateString();
+
+  const mkCat = (codes) => ({
+    total: 0,
+    codes,
+    breakdown: { dep: 0, arr: 0, locBase: 0, tng: 0, os: 0 },
+  });
+
+  const stats = {
+    BM:          mkCat(["BM"]),
+    BC:          mkCat(["BC"]),
+    VM:          mkCat(["VM", "VMH", "VNH"]),
+    VC:          mkCat(["VC", "VCH"]),
+    OVR:         { total: 0, breakdown: { strips: 0 } },
+    totalRunway: 0,
+  };
+
+  const seen = new Set();
+  for (const m of movements) {
+    if (m.dof !== today) continue;
+    if (m.status !== "ACTIVE" && m.status !== "COMPLETED") continue;
+    if (seen.has(m.id)) continue;
+    seen.add(m.id);
+
+    if (isOverflight(m)) {
+      stats.OVR.total++;
+      stats.OVR.breakdown.strips++;
+      continue;
+    }
+
+    const contrib = egowRunwayContribution(m);
+    const { egowFlightType } = classifyMovement(m);
+    let cat = null;
+    if      (egowFlightType === "BM")                          cat = "BM";
+    else if (egowFlightType === "BC")                          cat = "BC";
+    else if (["VM", "VMH", "VNH"].includes(egowFlightType))   cat = "VM";
+    else if (["VC", "VCH"].includes(egowFlightType))          cat = "VC";
+
+    if (cat) {
+      stats[cat].total += contrib;
+      const bd = _egowBreakdown(m);
+      stats[cat].breakdown.dep     += bd.dep;
+      stats[cat].breakdown.arr     += bd.arr;
+      stats[cat].breakdown.locBase += bd.locBase;
+      stats[cat].breakdown.tng     += bd.tng;
+      stats[cat].breakdown.os      += bd.os;
+    }
+    // Unknown EGOW category movements still count toward runway total
+    stats.totalRunway += contrib;
+  }
+
+  return stats;
 }

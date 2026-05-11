@@ -15,7 +15,8 @@ import {
   updateTimelineNowLine,
   initCancelledSortiesLog,
   initDeletedStripsLog,
-  renderDeletedStripsLog
+  renderDeletedStripsLog,
+  calculateLiveBoardSummaryStats
 } from "./ui_liveboard.js";
 
 import {
@@ -45,10 +46,6 @@ import {
   incrementGenericOverflights,
   decrementGenericOverflights,
   getMovements,
-  isOverflight,
-  runwayMovementContribution,
-  egowRunwayContribution,
-  getResolvedFormationMovements,
   getOperationalTimezoneOffsetHours
 } from "./datamodel.js";
 
@@ -56,8 +53,6 @@ import {
   loadVKBData,
   getVKBStatus
 } from "./vkb.js";
-
-import { classifyMovement } from "./reporting.js";
 
 /* -----------------------------
    Toast Notification System
@@ -1727,77 +1722,76 @@ function getTodayDateString() {
 }
 
 /**
- * Calculate daily movement statistics for today.
- * Counts only ACTIVE and COMPLETED movements (today's DOF).
- * Excludes PLANNED and CANCELLED from main movement totals.
- * Each movement is counted exactly once (by ID dedup).
- * @returns {object} Object with movement counts
+ * Build a computed tooltip string for a Live Board summary stat item.
+ * @param {"BM"|"BC"|"VM"|"VC"|"OVR"|"Total"} category
+ * @param {object} stats - Result from calculateLiveBoardSummaryStats
+ * @returns {string}
  */
-function calculateDailyStats() {
-  const movements = getMovements();
-  const today = getTodayDateString();
-
-  // Filter: today only, exclude PLANNED and CANCELLED
-  const countable = movements.filter(m =>
-    m.dof === today &&
-    (m.status === "ACTIVE" || m.status === "COMPLETED")
-  );
-
-  // Deduplicate by ID (defensive — should already be unique)
-  const seen = new Set();
-  let bm = 0, bc = 0, vm = 0, vc = 0, total = 0, ovr = 0;
-  for (const m of countable) {
-    if (seen.has(m.id)) continue;
-    seen.add(m.id);
-
-    // OVR counted separately — excluded from runway totals
-    if (isOverflight(m)) {
-      ovr++;
-      continue;
-    }
-
-    // Event-based runway contribution: only realized EGOW events count.
-    // depActual required for DEP/LOC departure credit; arrActual required for ARR/LOC arrival credit.
-    const contrib = egowRunwayContribution(m);
-    total += contrib;
-
-    const { egowFlightType } = classifyMovement(m);
-    if (egowFlightType === 'BM') bm += contrib;
-    else if (egowFlightType === 'BC') bc += contrib;
-    else if (egowFlightType === 'VM') vm += contrib;
-    else if (egowFlightType === 'VC') vc += contrib;
+function _liveBoardTooltip(category, stats) {
+  if (category === "OVR") {
+    return [
+      "Overflights/FIS today.",
+      "Shown separately and excluded from runway totals.",
+      `Current strip/FIS contribution: ${stats.OVR.breakdown.strips} strip(s).`,
+    ].join("\n");
   }
-
-  return {
-    bookedMovements: bm,       // BM - Based Military (runway-movement-equivalent)
-    bookedCompleted: bc,       // BC - Based Civil
-    vfrMovements: vm,          // VM - Visiting Military
-    vfrCompleted: vc,          // VC - Visiting Civil
-    total,                     // Total runway movements (excludes OVR)
-    ovr                        // Overflights (separate counter)
-  };
+  if (category === "Total") {
+    const { BM, BC, VM, VC, totalRunway } = stats;
+    return [
+      "Total runway movements today.",
+      "BM + BC + VM + VC.",
+      "Excludes OVR.",
+      `Current total: BM ${BM.total} + BC ${BC.total} + VM ${VM.total} + VC ${VC.total} = ${totalRunway}.`,
+    ].join("\n");
+  }
+  const cat = stats[category];
+  const bd  = cat.breakdown;
+  const lines = [
+    `${category} runway movements today.`,
+    `Includes realized DEP/ARR/LOC/T&G/O/S contributions for EGOW code ${category}.`,
+  ];
+  if (cat.codes.length > 1) lines.push(`Included codes: ${cat.codes.join(", ")}.`);
+  lines.push("Excludes OVR.");
+  lines.push(`Current breakdown: DEP x ${bd.dep}, ARR x ${bd.arr}, LOC base x ${bd.locBase}, T&G x ${bd.tng}, O/S x ${bd.os}.`);
+  return lines.join("\n");
 }
 
 /**
- * Update daily movement statistics display
+ * Update daily movement statistics display with event-based counters and computed tooltips.
+ * VM bucket: VM, VMH, VNH.  VC bucket: VC, VCH.  OVR excluded from runway total.
  */
 function updateDailyStats() {
   if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) window.__fdmsDiag.updateDailyStatsCount++;
-  const stats = calculateDailyStats();
+  const stats = calculateLiveBoardSummaryStats(getMovements());
 
-  const bmDisplay = document.getElementById("statBookedMvmts");
-  const bcDisplay = document.getElementById("statBookedComp");
-  const vmDisplay = document.getElementById("statVfrMvmts");
-  const vcDisplay = document.getElementById("statVfrComp");
-  const totalDisplay = document.getElementById("statTotalToday");
-  const ovrDisplay = document.getElementById("statOvrToday");
+  const bmEl    = document.getElementById("statBookedMvmts");
+  const bcEl    = document.getElementById("statBookedComp");
+  const vmEl    = document.getElementById("statVfrMvmts");
+  const vcEl    = document.getElementById("statVfrComp");
+  const totalEl = document.getElementById("statTotalToday");
+  const ovrEl   = document.getElementById("statOvrToday");
 
-  if (bmDisplay) bmDisplay.textContent = stats.bookedMovements;
-  if (bcDisplay) bcDisplay.textContent = stats.bookedCompleted;
-  if (vmDisplay) vmDisplay.textContent = stats.vfrMovements;
-  if (vcDisplay) vcDisplay.textContent = stats.vfrCompleted;
-  if (totalDisplay) totalDisplay.textContent = stats.total;
-  if (ovrDisplay) ovrDisplay.textContent = stats.ovr;
+  if (bmEl)    bmEl.textContent    = stats.BM.total;
+  if (bcEl)    bcEl.textContent    = stats.BC.total;
+  if (vmEl)    vmEl.textContent    = stats.VM.total;
+  if (vcEl)    vcEl.textContent    = stats.VC.total;
+  if (totalEl) totalEl.textContent = stats.totalRunway;
+  if (ovrEl)   ovrEl.textContent   = stats.OVR.total;
+
+  // Apply computed tooltips to parent .stat-item elements
+  const bmItem    = bmEl?.closest(".stat-item");
+  const bcItem    = bcEl?.closest(".stat-item");
+  const vmItem    = vmEl?.closest(".stat-item");
+  const vcItem    = vcEl?.closest(".stat-item");
+  const ovrItem   = ovrEl?.closest(".stat-item");
+  const totalItem = totalEl?.closest(".stat-item");
+
+  if (bmItem)    bmItem.title    = _liveBoardTooltip("BM",    stats);
+  if (bcItem)    bcItem.title    = _liveBoardTooltip("BC",    stats);
+  if (vmItem)    vmItem.title    = _liveBoardTooltip("VM",    stats);
+  if (vcItem)    vcItem.title    = _liveBoardTooltip("VC",    stats);
+  if (ovrItem)   ovrItem.title   = _liveBoardTooltip("OVR",  stats);
+  if (totalItem) totalItem.title = _liveBoardTooltip("Total", stats);
 }
 
 // Export for use in other modules

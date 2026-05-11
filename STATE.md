@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-11 (Europe/London, rev 3 — roadmap consolidation)
+Last updated: 2026-05-11 (Europe/London, rev 4 — Live Board counter aggregation and computed tooltips)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -21,9 +21,10 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 - The current next engineering item is:
 
 ```text
-Live Board summary counter aggregation and computed tooltips
+Monthly Return ghost-count contamination
 ```
 
+- **Live Board summary counter aggregation and computed tooltips** is **complete and merged**.
 - The EGOW / LOC / timing regression cluster is **resolved and merged**. It is now a regression baseline, not active work.
 - History Retrieval is complete through **H5b**. **H6 polish / integration closeout** remains open.
 - Formation implementation through **FR-15** is complete for V1 launch purposes. Further formation refinement is post-launch unless a specific launch-blocking defect appears.
@@ -379,7 +380,8 @@ The following workstreams should be treated as merged and complete for current p
 
 | Workstream | Status |
 |---|---|
-| Core Live Board strip workflow | Complete baseline, with current counter/tooltips work still open |
+| Core Live Board strip workflow | Complete baseline |
+| Live Board counter aggregation and computed tooltips | Complete — merged |
 | UTC-first timing hardening | Complete baseline |
 | Day Timeline presentation tranche | Complete baseline |
 | Cancellation / deleted-strip lifecycle tranche | Complete |
@@ -400,24 +402,12 @@ The following workstreams should be treated as merged and complete for current p
 ### 6.1 Immediate next item
 
 ```text
-Live Board summary counter aggregation and computed tooltips
+Monthly Return ghost-count contamination
 ```
 
-This is the next highest-value engineering item because it is visible operationally, bounded, and must be corrected before Monthly Return reconciliation.
+Live Board counter aggregation and computed tooltips is **complete** (smoke testing pending).
 
-Expected scope:
-
-- inspect `src/js/ui_liveboard.js`;
-- inspect `src/js/datamodel.js`;
-- find summary/stat aggregation paths;
-- find tooltip rendering paths;
-- verify DEP / ARR / LOC / OVR / T&G / O/S semantics;
-- ensure OVR is excluded from runway totals;
-- ensure BM / BC / VM / VC / TOTAL counters are computed consistently;
-- add or repair explanatory computed tooltips;
-- preserve the EGOW / LOC / timing regression baseline.
-
-Claude must not be asked to investigate from scratch. ChatGPT must inspect the current implementation, state the actual cause, state exact files to change, and write a precise implementation ticket.
+Monthly Return ghost-count contamination is now the next highest-value engineering item.
 
 ### 6.2 Next major integrity item
 
@@ -1471,7 +1461,7 @@ This is V2+ unless a minimum subset is required by V1 Desktop Productization.
 
 The current confirmed V1 required list is:
 
-1. Live Board summary counter aggregation and computed tooltips.
+1. ~~Live Board summary counter aggregation and computed tooltips.~~ **Complete.**
 2. Monthly Return ghost-count contamination.
 3. Desktop Productization audit.
 4. Create From workflow.
@@ -1501,17 +1491,18 @@ The recommended implementation order is intentional:
 Status:
 
 ```text
-ACTIVE — next engineering priority
+COMPLETE — smoke testing required
 ```
 
-Purpose:
+Delivered:
 
-- make visible Live Board counters trustworthy;
-- clarify BM / BC / VM / VC / TOTAL composition;
-- keep OVR excluded from runway totals;
-- show OVR separately;
-- preserve T&G = 2 and O/S = 1;
-- provide computed explanatory tooltips.
+- `calculateLiveBoardSummaryStats()` in `ui_liveboard.js` returns structured per-category breakdown.
+- VM bucket: VM, VMH, VNH. VC bucket: VC, VCH. OVR excluded from runway totals.
+- Per-category breakdown: DEP, ARR, LOC base, T&G, O/S counts.
+- Formation contributions counted per element via `_formationEgowBreakdown()`.
+- Computed `title` tooltips set dynamically on each `.stat-item` element on every update.
+- Static misleading HTML `title` attributes removed from `index.html`.
+- `updateDailyStats()` in `app.js` uses the new structured function.
 
 #### B. Monthly Return ghost-count contamination
 
@@ -2106,16 +2097,15 @@ No Claude prompt should be issued until ChatGPT has already stated:
 The next work item is:
 
 ```text
-Live Board summary counter aggregation and computed tooltips
+Monthly Return ghost-count contamination
 ```
 
 Before producing a Claude prompt, ChatGPT should inspect the relevant current files on `main`, especially:
 
-- `src/js/ui_liveboard.js`;
-- `src/js/datamodel.js`;
-- summary/stat aggregation helpers;
-- tooltip/computed-count rendering paths;
-- movement counting logic for DEP, ARR, LOC, OVR, T&G, and O/S;
-- EGOW-based civil/military classification only where it contributes to displayed summary counters.
+- `src/js/reporting.js` — Monthly Return computation logic;
+- `src/js/datamodel.js` — movement store and status lifecycle;
+- ensure Monthly Return is not contaminated by ghost, deleted, cancelled, or stale movements;
+- preserve the nominal reporting model (LOC=2, DEP=1, ARR=1, OVR=0);
+- keep nominal reporting distinct from Live Board event-based reporting.
 
-The resolved EGOW / LOC / timing cluster should remain part of regression testing, not the active implementation target.
+Live Board counter aggregation is complete and pending Stuart's smoke test pass.
