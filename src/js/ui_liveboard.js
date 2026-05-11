@@ -4438,6 +4438,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
             if (match[2] && flightNumberInput && (!flightNumberInput.value || flightNumberInput.value === '')) {
               flightNumberInput.value = match[2]; // Number part
             }
+            updateCallsignDerivedFields();
           }
         }
       } else {
@@ -4473,14 +4474,6 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     // UAM* pattern → POB = 2
     if (code.startsWith('UAM') && pobInput && (pobInput.value === '0' || !pobInput.value)) {
       pobInput.value = '2';
-    }
-
-    // Lookup unit code from full callsign
-    if (fullCallsign && unitCodeInput) {
-      const unitData = lookupCallsign(fullCallsign);
-      if (unitData && unitData['UC'] && unitData['UC'] !== '-' && unitData['UC'] !== '') {
-        unitCodeInput.value = unitData['UC'];
-      }
     }
 
     // EGOW attribution: code, unit, PIC — tracked autofill (overwrites previous autofill, preserves manual)
@@ -4527,9 +4520,11 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
 
   if (callsignCodeInput) {
     callsignCodeInput.addEventListener("input", updateCallsignDerivedFields);
+    callsignCodeInput.addEventListener("change", updateCallsignDerivedFields);
   }
   if (flightNumberInput) {
     flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
+    flightNumberInput.addEventListener("change", updateCallsignDerivedFields);
   }
 
   // Wire collapsible sections
@@ -5581,6 +5576,7 @@ function openNewLocFlightModal() {
             if (match[2] && flightNumberInput && (!flightNumberInput.value || flightNumberInput.value === '')) {
               flightNumberInput.value = match[2];
             }
+            updateCallsignDerivedFields();
           }
         }
         // Auto-fill Remarks/Warnings from registration data
@@ -5638,13 +5634,6 @@ function openNewLocFlightModal() {
     if (code.startsWith('UAM') && pobInput && (pobInput.value === '0' || !pobInput.value)) {
       pobInput.value = '2';
     }
-    if (fullCallsign && unitCodeInput) {
-      const unitData = lookupCallsign(fullCallsign);
-      if (unitData && unitData['UC'] && unitData['UC'] !== '-' && unitData['UC'] !== '') {
-        unitCodeInput.value = unitData['UC'];
-      }
-    }
-
     // EGOW attribution: code, unit, PIC — tracked autofill (overwrites previous autofill, preserves manual)
     if (fullCallsign) {
       const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
@@ -5685,8 +5674,14 @@ function openNewLocFlightModal() {
     }
   };
 
-  if (callsignCodeInput) callsignCodeInput.addEventListener("input", updateCallsignDerivedFields);
-  if (flightNumberInput) flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
+  if (callsignCodeInput) {
+    callsignCodeInput.addEventListener("input", updateCallsignDerivedFields);
+    callsignCodeInput.addEventListener("change", updateCallsignDerivedFields);
+  }
+  if (flightNumberInput) {
+    flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
+    flightNumberInput.addEventListener("change", updateCallsignDerivedFields);
+  }
 
   // Wire formation section — draft-backed toggle and count/callsign rebuild
   const getLocCallsign = () =>
@@ -6551,6 +6546,7 @@ function openEditMovementModal(m) {
             if (match[2] && flightNumberInput && (!flightNumberInput.value || flightNumberInput.value === '')) {
               flightNumberInput.value = match[2]; // Number part
             }
+            updateCallsignDerivedFields();
           }
         }
       } else {
@@ -6586,14 +6582,6 @@ function openEditMovementModal(m) {
     // UAM* pattern → POB = 2
     if (code.startsWith('UAM') && pobInput && (pobInput.value === '0' || !pobInput.value)) {
       pobInput.value = '2';
-    }
-
-    // Lookup unit code from full callsign
-    if (fullCallsign && unitCodeInput) {
-      const unitData = lookupCallsign(fullCallsign);
-      if (unitData && unitData['UC'] && unitData['UC'] !== '-' && unitData['UC'] !== '') {
-        unitCodeInput.value = unitData['UC'];
-      }
     }
 
     // EGOW attribution: code, unit, PIC — tracked autofill (overwrites previous autofill, preserves manual)
@@ -6640,9 +6628,11 @@ function openEditMovementModal(m) {
 
   if (callsignCodeInput) {
     callsignCodeInput.addEventListener("input", updateCallsignDerivedFields);
+    callsignCodeInput.addEventListener("change", updateCallsignDerivedFields);
   }
   if (flightNumberInput) {
     flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
+    flightNumberInput.addEventListener("change", updateCallsignDerivedFields);
   }
 
   // WTC display auto-update
