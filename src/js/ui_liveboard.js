@@ -4066,6 +4066,20 @@ function applyTrackedAutofill(inputEl, value) {
 }
 
 /**
+ * Clear an auto-filled input only if its current value matches what was last auto-filled.
+ * Leaves manual entries (and blanks) untouched.
+ */
+function clearTrackedAutofill(inputEl) {
+  if (!inputEl) return;
+  const current = inputEl.value.trim();
+  const previousAuto = inputEl.dataset.autofillValue || '';
+  if (current && previousAuto && current === previousAuto) {
+    inputEl.value = '';
+    delete inputEl.dataset.autofillValue;
+  }
+}
+
+/**
  * Returns true if the UTC/Local time-mode toggle should be shown in new-strip forms.
  * Controlled by Admin tri-state policy config.newFormUtcLocalTogglePolicy:
  *   "show"  — always visible
@@ -4472,10 +4486,15 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     // EGOW attribution: code, unit, PIC — tracked autofill (overwrites previous autofill, preserves manual)
     if (fullCallsign) {
       const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
+      const captainEl = document.getElementById('newCaptain');
       if (egowAttrib) {
-        applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode);
-        applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode);
-        applyTrackedAutofill(document.getElementById('newCaptain'), egowAttrib.name);
+        egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
+        egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
+        egowAttrib.name ? applyTrackedAutofill(captainEl, egowAttrib.name) : clearTrackedAutofill(captainEl);
+      } else {
+        clearTrackedAutofill(egowCodeInput);
+        clearTrackedAutofill(unitCodeInput);
+        clearTrackedAutofill(captainEl);
       }
     }
 
@@ -5629,10 +5648,15 @@ function openNewLocFlightModal() {
     // EGOW attribution: code, unit, PIC — tracked autofill (overwrites previous autofill, preserves manual)
     if (fullCallsign) {
       const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
+      const captainEl = document.getElementById('newLocCaptain');
       if (egowAttrib) {
-        applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode);
-        applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode);
-        applyTrackedAutofill(document.getElementById('newLocCaptain'), egowAttrib.name);
+        egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
+        egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
+        egowAttrib.name ? applyTrackedAutofill(captainEl, egowAttrib.name) : clearTrackedAutofill(captainEl);
+      } else {
+        clearTrackedAutofill(egowCodeInput);
+        clearTrackedAutofill(unitCodeInput);
+        clearTrackedAutofill(captainEl);
       }
     }
 
@@ -6575,10 +6599,15 @@ function openEditMovementModal(m) {
     // EGOW attribution: code, unit, PIC — tracked autofill (overwrites previous autofill, preserves manual)
     if (fullCallsign) {
       const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
+      const captainEl = document.getElementById('editCaptain');
       if (egowAttrib) {
-        applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode);
-        applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode);
-        applyTrackedAutofill(document.getElementById('editCaptain'), egowAttrib.name);
+        egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
+        egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
+        egowAttrib.name ? applyTrackedAutofill(captainEl, egowAttrib.name) : clearTrackedAutofill(captainEl);
+      } else {
+        clearTrackedAutofill(egowCodeInput);
+        clearTrackedAutofill(unitCodeInput);
+        clearTrackedAutofill(captainEl);
       }
     }
 

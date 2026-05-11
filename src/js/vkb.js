@@ -514,6 +514,7 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
   // not pad single digits). Formation element callsigns whose base has an
   // APPROVED_CONTRACTION are reached via Priority 2 anyway (e.g. MERSY2).
   let row = null;
+  let malformedInput = false;
   if (flightNum) {
     // Detect whether the raw input suffix was a single digit with no leading zero.
     const rawSuffix = splitMatch[2] || '';
@@ -528,12 +529,16 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
     // If we found a match but the input was a bare single digit, check whether
     // this base family contains multi-digit flight numbers (>= 10). If it does,
     // the family uses leading-zero protocol for 1-9 and the input is malformed.
+    // Set malformedInput to prevent fallthrough to base-strip (Priority 3/4) rows.
     if (row && inputIsSingleDigitNoLeadingZero) {
       const familyHasMultiDigit = vkbData.egowCodes.some(ec => {
         const csBase = normalizeCallsignToken(ec['CALLSIGN_BASE']);
         return csBase === base && parseInt(ec['FLIGHT_NUMBER'] || '0', 10) >= 10;
       });
-      if (familyHasMultiDigit) row = null;
+      if (familyHasMultiDigit) {
+        row = null;
+        malformedInput = true;
+      }
     }
   }
 
@@ -546,6 +551,10 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
       return csContr && csContr === base && fNum === flightNum;
     });
   }
+
+  // Malformed input (e.g. bare single digit where leading-zero is required):
+  // do not fall through to base-strip fallbacks — no attribution is better than wrong attribution.
+  if (malformedInput) return null;
 
   // Priority 3: CALLSIGN_BASE + blank FLIGHT_NUMBER fallback
   if (!row) {

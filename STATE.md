@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-08 (Europe/London)
+Last updated: 2026-05-11 (Europe/London)
 
 ## Current headline status
 
@@ -22,6 +22,9 @@ Last updated: 2026-05-08 (Europe/London)
   - **Individual-pilot callsign leading-zero rule**: bases whose highest FLIGHT_NUMBER is ≥ 10 (e.g. UAM) require zero-padded single-digit inputs. UAM3 does not resolve; UAM03 resolves correctly. Formation-element bases with all flight numbers < 10 (e.g. VITAL1) and contraction-routed families (e.g. MERSY2) are not affected.
   - `lookupEgowAttributionFromCallsign()` is wired form-level across all three modal paths: `openNewFlightModal` (DEP/ARR/OVR), `openNewLocFlightModal` (LOC), `openEditMovementModal`. Visible EGOW Code, EGOW Unit, and PIC are populated before save validation.
   - **Tracked autofill provenance** (`dataset.autofillValue`): EGOW Code, EGOW Unit, and PIC auto-fills are tracked per field. When the callsign changes, a field updates only if it is blank or still shows the previous autofill value — so UAM03→UAM32 updates PIC from JENKINS to HAIGH, but a manually typed value is never overwritten. Same tracking applied to aircraft-pilot single-match auto-fills.
+  - **Stale autofill clearing** (`clearTrackedAutofill`): When attribution changes to unresolved (callsign not found) or returns a blank value for a specific field, any previously auto-filled value is cleared per-field. Manual entries are never cleared. Pattern applied in all three modal EGOW blocks.
+  - **UAM family fallback row**: A blank-FLIGHT_NUMBER row for `UAM` (EGOW Code = BM) is appended to both `FDMS_EGOW_CODES.csv` files. Unlisted UAM flight numbers (e.g. UAM99) now resolve to BM. UNIT, UNIT_CODE, and NAME are intentionally blank for this fallback row.
+  - **Malformed-input safeguard**: When Priority 1 rejects a bare-single-digit suffix as malformed (e.g. UAM3 in a leading-zero family), `lookupEgowAttributionFromCallsign()` now returns `null` immediately without falling through to Priority 3/4 base-strip fallbacks. UAM3 cannot acquire BM via the UAM family fallback.
   - **LOC PIC layout parity**: `newLocCaptain` field is now in the Identity section (matching DEP/ARR/OVR modal), not the EGOW/Operational section. Both LOC save paths persist `captain`.
   - Aircraft pilot suggestion loading from `FDMS_AIRCRAFT_PILOTS.csv` wired to pilot datalists in new-flight, LOC, and edit modals.
   - `enrichMovementData()` retained as final non-destructive safety net.
