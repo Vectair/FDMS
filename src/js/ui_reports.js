@@ -275,11 +275,15 @@ async function handleExportCSV() {
  * Handle XLSX export
  */
 async function handleExportXLSX() {
-  const movements = getMovementsForCurrentPeriod();
   const hoursMap = loadHours();
-  const monthlyReturn = computeMonthlyReturn(movements, currentYear, currentMonth, hoursMap);
+  // Grid: pass all movements so midnight-crossing LOCs from adjacent month
+  // boundaries are included. Scope filtering (COMPLETED only) is applied inside
+  // computeMonthlyReturn() via isMovementInMonthlyReturnScope().
+  const monthlyReturn = computeMonthlyReturn(getMovements(), currentYear, currentMonth, hoursMap);
+  // Detail sheet: completed movements in the selected month only (no midnight-cross concern).
+  const detailMovements = getMovementsForCurrentPeriod();
   const filename = `monthly_return_${currentYear}-${String(currentMonth).padStart(2, '0')}.xlsx`;
-  const result = await exportMonthlyReturnToXLSX(monthlyReturn, movements, filename);
+  const result = await exportMonthlyReturnToXLSX(monthlyReturn, detailMovements, filename);
   _showExportToast(result, filename, 'XLSX');
 }
 
@@ -314,14 +318,21 @@ function _showExportToast(result, filename, label) {
 }
 
 /**
- * Get movements for the current selected period
+ * Get COMPLETED movements for the current selected period.
+ * Used for CSV export detail, Dashboard KPIs, and Insights leaderboards.
+ * Filters to COMPLETED status only — PLANNED, ACTIVE, and CANCELLED movements
+ * are excluded from all reporting views. This mirrors the scope predicate used
+ * inside computeMonthlyReturn().
  */
 function getMovementsForCurrentPeriod() {
   const allMovements = getMovements();
   const monthStr = String(currentMonth).padStart(2, '0');
   const prefix = `${currentYear}-${monthStr}`;
 
-  return allMovements.filter(m => (m.dof || '').startsWith(prefix));
+  return allMovements.filter(m =>
+    (m.dof || '').startsWith(prefix) &&
+    String(m.status || '').toUpperCase().trim() === 'COMPLETED'
+  );
 }
 
 // ========================================
@@ -377,8 +388,10 @@ export function renderReports() {
  * Render Official Monthly Return grid
  */
 function renderOfficialMonthlyReturn(container) {
-  const movements = getMovementsForCurrentPeriod();
   const hoursMap = loadHours();
+  // Pass all movements so that midnight-crossing LOCs from adjacent month
+  // boundaries are captured correctly. The scope predicate inside
+  // computeMonthlyReturn() handles COMPLETED-only filtering and deduplication.
   const monthlyReturn = computeMonthlyReturn(getMovements(), currentYear, currentMonth, hoursMap);
 
   const { rows, totals } = monthlyReturn;

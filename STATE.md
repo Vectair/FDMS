@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-11 (Europe/London, rev 4 — Live Board counter aggregation and computed tooltips)
+Last updated: 2026-05-11 (Europe/London, rev 5 — Monthly Return ghost-count contamination)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -21,9 +21,10 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 - The current next engineering item is:
 
 ```text
-Monthly Return ghost-count contamination
+Desktop Productization audit
 ```
 
+- **Monthly Return ghost-count contamination** is implemented on branch; smoke testing pending before merge.
 - **Live Board summary counter aggregation and computed tooltips** is implemented on branch; smoke testing pending before merge.
 - The EGOW / LOC / timing regression cluster is **resolved and merged**. It is now a regression baseline, not active work.
 - History Retrieval is complete through **H5b**. **H6 polish / integration closeout** remains open.
@@ -381,7 +382,8 @@ The following workstreams should be treated as merged and complete for current p
 | Workstream | Status |
 |---|---|
 | Core Live Board strip workflow | Complete baseline |
-| Live Board counter aggregation and computed tooltips | Complete — merged |
+| Live Board counter aggregation and computed tooltips | Implemented on branch; smoke testing pending |
+| Monthly Return ghost-count contamination | Implemented on branch; smoke testing pending |
 | UTC-first timing hardening | Complete baseline |
 | Day Timeline presentation tranche | Complete baseline |
 | Cancellation / deleted-strip lifecycle tranche | Complete |
@@ -402,12 +404,12 @@ The following workstreams should be treated as merged and complete for current p
 ### 6.1 Immediate next item
 
 ```text
-Monthly Return ghost-count contamination
+Desktop Productization audit
 ```
 
-Live Board counter aggregation and computed tooltips is implemented on branch; smoke testing pending before merge.
+Monthly Return ghost-count contamination is implemented on branch; smoke testing pending before merge.
 
-Monthly Return ghost-count contamination is now the next highest-value engineering item.
+Live Board counter aggregation and computed tooltips is implemented on branch; smoke testing pending before merge.
 
 ### 6.2 Next major integrity item
 
@@ -1461,8 +1463,9 @@ This is V2+ unless a minimum subset is required by V1 Desktop Productization.
 
 The current confirmed V1 required list is:
 
-1. ~~Live Board summary counter aggregation and computed tooltips.~~ **Complete.**
-2. Monthly Return ghost-count contamination.
+1. ~~Live Board summary counter aggregation and computed tooltips.~~ **Implemented on branch.**
+2. ~~Monthly Return ghost-count contamination.~~ **Implemented on branch.**
+3. Desktop Productization audit.
 3. Desktop Productization audit.
 4. Create From workflow.
 5. METAR Builder.
@@ -1509,14 +1512,27 @@ Delivered:
 Status:
 
 ```text
-V1 required
+Implemented on branch; smoke testing pending before merge
 ```
 
-Purpose:
+Delivered:
 
-- ensure Monthly Return is not contaminated by ghost, deleted, cancelled, or stale movements;
-- preserve the nominal reporting model;
-- keep nominal reporting distinct from Live Board event-based reporting.
+- `isMovementInMonthlyReturnScope()` predicate in `reporting.js`: only COMPLETED
+  movements enter the Official Monthly Return; PLANNED, ACTIVE, CANCELLED, and
+  any residual soft-delete-marker records are excluded.
+- `computeMonthlyReturn()` applies the predicate before midnight-splitting and
+  adds Set-based deduplication by source movement ID.
+- `getMovementsForCurrentPeriod()` in `ui_reports.js` now filters COMPLETED
+  only, so Dashboard, Insights, and CSV exports also exclude ghost/non-completed
+  records.
+- `renderOfficialMonthlyReturn()` passes `getMovements()` (all) to
+  `computeMonthlyReturn()` so midnight-crossing LOCs from adjacent month
+  boundaries are captured correctly; scope filtering is done inside.
+- `handleExportXLSX()` similarly passes `getMovements()` for the grid and uses
+  `getMovementsForCurrentPeriod()` for the Movement Details sheet.
+- Nominal counting formulas (LOC=2, DEP/ARR=1, OVR=0, T&G×2, O/S×1) unchanged.
+- Cancellation Report unchanged — it sources from CANCELLED movements
+  independently of the Monthly Return pipeline.
 
 #### C. Desktop Productization audit
 
@@ -2097,15 +2113,9 @@ No Claude prompt should be issued until ChatGPT has already stated:
 The next work item is:
 
 ```text
-Monthly Return ghost-count contamination
+Desktop Productization audit
 ```
 
-Before producing a Claude prompt, ChatGPT should inspect the relevant current files on `main`, especially:
+Monthly Return ghost-count contamination is implemented on branch and pending Stuart's smoke test pass.
 
-- `src/js/reporting.js` — Monthly Return computation logic;
-- `src/js/datamodel.js` — movement store and status lifecycle;
-- ensure Monthly Return is not contaminated by ghost, deleted, cancelled, or stale movements;
-- preserve the nominal reporting model (LOC=2, DEP=1, ARR=1, OVR=0);
-- keep nominal reporting distinct from Live Board event-based reporting.
-
-Live Board counter aggregation is complete and pending Stuart's smoke test pass.
+Live Board counter aggregation and computed tooltips is implemented on branch and pending Stuart's smoke test pass.

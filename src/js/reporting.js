@@ -366,6 +366,30 @@ export function getTotalWeightedCount(movement) {
 // ========================================
 
 /**
+ * Returns true when a movement is eligible for the Official Monthly Return.
+ * Only current-state COMPLETED movements contribute to official reporting.
+ *
+ * Soft-deleted movements are not present in getMovements() — deleteMovement()
+ * splices them out of the live array before adding them to the deleted-strips
+ * retention store. The _deleted / deletedAt / isDeleted guards below are
+ * purely defensive against any residual stale markers that might survive a
+ * restore or import edge case.
+ *
+ * PLANNED and ACTIVE movements are excluded: they have not yet been realised.
+ * CANCELLED movements are excluded: they belong in the Cancellation Report only.
+ *
+ * @param {Object} movement
+ * @returns {boolean}
+ */
+function isMovementInMonthlyReturnScope(movement) {
+  const status = String(movement.status || '').toUpperCase().trim();
+  if (status !== 'COMPLETED') return false;
+  // Defensive guard against any residual soft-delete markers.
+  if (movement._deleted || movement.deletedAt || movement.isDeleted) return false;
+  return true;
+}
+
+/**
  * Compute Official Monthly Return grid
  * @param {Array} movements - All movements
  * @param {number} year - Year (e.g., 2026)
@@ -408,10 +432,26 @@ export function computeMonthlyReturn(movements, year, month, hoursMap = null) {
   const monthStr = String(month).padStart(2, '0');
   const targetMonthPrefix = `${year}-${monthStr}`;
 
-  // Build list of movements to process (including split midnight-crossing movements)
+  // Build list of movements to process (including split midnight-crossing movements).
+  // Only COMPLETED movements enter the Official Monthly Return — see isMovementInMonthlyReturnScope().
+  // Deduplication guard: track source movement IDs to prevent ghost/stale duplicates.
   const movementsToProcess = [];
+  const seenSourceIds = new Set();
 
   for (const m of movements) {
+    // Scope filter: only current-state COMPLETED movements count.
+    if (!isMovementInMonthlyReturnScope(m)) continue;
+
+    // Deduplication: skip if this source movement ID has already been processed.
+    // Allows the split portions of a single midnight-crossing movement to be
+    // pushed individually, but prevents a duplicate copy of the same record
+    // from being counted twice.
+    const sourceId = m.id;
+    if (sourceId != null) {
+      if (seenSourceIds.has(sourceId)) continue;
+      seenSourceIds.add(sourceId);
+    }
+
     const dof = m.dof || '';
 
     // Check if this is a midnight-crossing local flight
@@ -419,7 +459,7 @@ export function computeMonthlyReturn(movements, year, month, hoursMap = null) {
       const depDate = dof;
       const arrDate = getNextDate(dof);
 
-      // Split the movement
+      // Split the movement — each portion carries the source ID for traceability.
       const [depPortion, arrPortion] = splitMidnightMovement(m, depDate, arrDate);
 
       // Add portions that fall within this month
@@ -430,7 +470,7 @@ export function computeMonthlyReturn(movements, year, month, hoursMap = null) {
         movementsToProcess.push(arrPortion);
       }
     } else {
-      // Regular movement - only include if DOF is in this month
+      // Regular movement — only include if DOF is in this month
       if (dof.startsWith(targetMonthPrefix)) {
         movementsToProcess.push(m);
       }
@@ -554,6 +594,8 @@ export function computeMonthlyReturn(movements, year, month, hoursMap = null) {
       year,
       month,
       daysInMonth,
+      // Count of report-scope movement portions processed (midnight-split LOCs
+      // contribute two portions; non-split movements contribute one each).
       movementCount: movementsToProcess.length
     }
   };
