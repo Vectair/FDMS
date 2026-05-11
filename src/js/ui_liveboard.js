@@ -11835,9 +11835,8 @@ export function calculateLiveBoardSummaryStats(movements) {
       stats[cat].breakdown.tng     += bd.tng;
       stats[cat].breakdown.os      += bd.os;
     }
-    // Unknown EGOW category movements still count toward runway total
-    stats.totalRunway += contrib;
   }
 
+  stats.totalRunway = stats.BM.total + stats.BC.total + stats.VM.total + stats.VC.total;
   return stats;
 }

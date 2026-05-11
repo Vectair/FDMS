@@ -1746,11 +1746,15 @@ function _liveBoardTooltip(category, stats) {
   }
   const cat = stats[category];
   const bd  = cat.breakdown;
+  const isFamilyBucket = cat.codes.length > 1;
+  const codeDesc = isFamilyBucket
+    ? `${category}-family EGOW codes`
+    : `EGOW code ${category}`;
   const lines = [
     `${category} runway movements today.`,
-    `Includes realized DEP/ARR/LOC/T&G/O/S contributions for EGOW code ${category}.`,
+    `Includes realized DEP/ARR/LOC/T&G/O/S contributions for ${codeDesc}.`,
   ];
-  if (cat.codes.length > 1) lines.push(`Included codes: ${cat.codes.join(", ")}.`);
+  if (isFamilyBucket) lines.push(`Included codes: ${cat.codes.join(", ")}.`);
   lines.push("Excludes OVR.");
   lines.push(`Current breakdown: DEP x ${bd.dep}, ARR x ${bd.arr}, LOC base x ${bd.locBase}, T&G x ${bd.tng}, O/S x ${bd.os}.`);
   return lines.join("\n");

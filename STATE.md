@@ -24,7 +24,7 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 Monthly Return ghost-count contamination
 ```
 
-- **Live Board summary counter aggregation and computed tooltips** is **complete and merged**.
+- **Live Board summary counter aggregation and computed tooltips** is implemented on branch; smoke testing pending before merge.
 - The EGOW / LOC / timing regression cluster is **resolved and merged**. It is now a regression baseline, not active work.
 - History Retrieval is complete through **H5b**. **H6 polish / integration closeout** remains open.
 - Formation implementation through **FR-15** is complete for V1 launch purposes. Further formation refinement is post-launch unless a specific launch-blocking defect appears.
@@ -405,7 +405,7 @@ The following workstreams should be treated as merged and complete for current p
 Monthly Return ghost-count contamination
 ```
 
-Live Board counter aggregation and computed tooltips is **complete** (smoke testing pending).
+Live Board counter aggregation and computed tooltips is implemented on branch; smoke testing pending before merge.
 
 Monthly Return ghost-count contamination is now the next highest-value engineering item.
 
