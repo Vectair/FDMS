@@ -25,10 +25,10 @@ Desktop Productization audit
 ```
 
 - **Monthly Return ghost-count contamination** is implemented on branch; smoke testing pending before merge.
-- **Live Board summary counter aggregation and computed tooltips** is implemented on branch; smoke testing pending before merge.
+- **Live Board summary counter aggregation and computed tooltips** is complete and merged.
 - The EGOW / LOC / timing regression cluster is **resolved and merged**. It is now a regression baseline, not active work.
 - History Retrieval is complete through **H5b**. **H6 polish / integration closeout** remains open.
-- Formation implementation through **FR-15** is complete for V1 launch purposes. Further formation refinement is post-launch unless a specific launch-blocking defect appears.
+- Formation implementation through **FR-15** is complete for  launch purposes. Further formation refinement is post-launch unless a specific launch-blocking defect appears.
 - Native **Save As** export behaviour is implemented for the relevant CSV/XLSX export paths in the Tauri desktop environment.
 - Browser/download fallback remains available for non-Tauri/local-browser harness use.
 - `FDMS_REGISTRATIONS.csv` has been restored and verified at **25,713 lines**.
@@ -382,7 +382,7 @@ The following workstreams should be treated as merged and complete for current p
 | Workstream | Status |
 |---|---|
 | Core Live Board strip workflow | Complete baseline |
-| Live Board counter aggregation and computed tooltips | Implemented on branch; smoke testing pending |
+| Live Board counter aggregation and computed tooltips | Complete — merged |
 | Monthly Return ghost-count contamination | Implemented on branch; smoke testing pending |
 | UTC-first timing hardening | Complete baseline |
 | Day Timeline presentation tranche | Complete baseline |
@@ -1463,17 +1463,15 @@ This is V2+ unless a minimum subset is required by V1 Desktop Productization.
 
 The current confirmed V1 required list is:
 
-1. ~~Live Board summary counter aggregation and computed tooltips.~~ **Implemented on branch.**
-2. ~~Monthly Return ghost-count contamination.~~ **Implemented on branch.**
-3. Desktop Productization audit.
+1. ~~Live Board summary counter aggregation and computed tooltips.~~ **Complete — merged.**
+2. ~~Monthly Return ghost-count contamination.~~ **Implemented on branch; smoke testing pending.**
 3. Desktop Productization audit.
 4. Create From workflow.
 5. METAR Builder.
-6. H6 History polish / closeout.
-7. Desktop Productization implementation / offline installable build.
+6. H6 History polish / integration closeout.
+7. Full Desktop Productization implementation / offline installable build.
 8. Documentation refresh.
 9. Final V1 regression and acceptance sweep.
-10. V1 release candidate / freeze decision.
 
 ### 16.2 Priority rationale
 
