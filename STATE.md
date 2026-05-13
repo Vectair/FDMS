@@ -21,9 +21,11 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 - The current next engineering item is:
 
 ```text
-Desktop Productization audit
+Vendor SheetJS for offline operation (DP-03)
 ```
 
+- **Desktop Productization audit** is implemented on branch `claude/desktop-productization-audit-BsDcx`; review pending. See `docs/DESKTOP_PRODUCTIZATION_AUDIT.md`.
+- **One release blocker identified:** SheetJS loaded from CDN (`src/index.html` line 8). Must be vendored locally before V1 ships offline.
 - **Monthly Return ghost-count contamination** is implemented on branch; smoke testing pending before merge.
 - **Live Board summary counter aggregation and computed tooltips** is complete and merged.
 - The EGOW / LOC / timing regression cluster is **resolved and merged**. It is now a regression baseline, not active work.
@@ -2106,13 +2108,40 @@ No Claude prompt should be issued until ChatGPT has already stated:
 
 ---
 
-## 23. Immediate next action
+## 23. Desktop Productization audit record
+
+**Branch:** `claude/desktop-productization-audit-BsDcx`  
+**Status:** Implemented; review pending. Do not mark complete until Stuart passes review and branch is merged.  
+**Audit document:** `docs/DESKTOP_PRODUCTIZATION_AUDIT.md`
+
+**Release blocker identified:**
+- BLOCKER-1: SheetJS XLSX library loaded from CDN (`src/index.html` line 8). Breaks XLSX export offline. Must vendor before V1.
+
+**V1 required fixes (not build-blocking, required before handover):**
+- V1-REQ-1: Add `tauri:dev` / `tauri:build` scripts to `package.json`.
+- V1-REQ-2: Rename `package.json` from `fdms-lite-dev-tooling` to `vectair-flite`.
+- V1-REQ-3: Rewrite README Getting Started / Architecture for desktop launch procedure.
+
+**V1 recommended (not blocking):**
+- Enable CSP in `tauri.conf.json` after SheetJS is vendored.
+- Confirm Admin backup/restore covers all seven localStorage keys.
+- Document dev→release localStorage origin change.
+
+**SQLite decision:** Not required for V1. localStorage with identifier `com.vectair.flite` is stable for single-operator use. V2 workstream.
+
+**Next implementation ticket:** DP-03 — Vendor SheetJS. Single file download + one `<script>` tag change in `src/index.html`. See audit document section 12 for exact steps.
+
+---
+
+## 24. Immediate next action
 
 The next work item is:
 
 ```text
-Desktop Productization audit
+DP-03: Vendor SheetJS for offline operation
 ```
+
+See `docs/DESKTOP_PRODUCTIZATION_AUDIT.md` section 12 for the exact implementation steps.
 
 Monthly Return ghost-count contamination is implemented on branch and pending Stuart's smoke test pass.
 
