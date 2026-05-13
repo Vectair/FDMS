@@ -406,22 +406,41 @@ The following workstreams should be treated as merged and complete for current p
 ### 6.1 Immediate next item
 
 ```text
-Desktop Productization audit
-```
+DP-03 — Vendor SheetJS for offline operation
 
-Monthly Return ghost-count contamination is implemented on branch; smoke testing pending before merge.
+Desktop Productization audit is implemented on branch claude/desktop-productization-audit-BsDcx; review pending before merge.
 
-Live Board counter aggregation and computed tooltips is implemented on branch; smoke testing pending before merge.
+The audit identified one V1 offline release blocker:
 
-### 6.2 Next major integrity item
+SheetJS is loaded from CDN in src/index.html and must be vendored locally.
 
-```text
-Monthly Return ghost-count contamination
-```
+DP-03 should be a narrow implementation ticket:
 
-This should follow the Live Board counter work while the counting/reporting model is mentally loaded.
+add a pinned local SheetJS file at src/lib/xlsx.full.min.js;
+update src/index.html to load ./lib/xlsx.full.min.js;
+do not change export logic;
+do not change Rust/Tauri commands;
+verify XLSX export works offline in Tauri.
+6.2 Next productization sequence
 
-Monthly Return, Dashboard, and Insights use nominal strip-type reporting unless explicitly redesigned.
+After DP-03, continue the desktop productization closeout sequence:
+
+DP-04 — Update package.json identity and add Tauri dev/build scripts
+DP-05 — Rewrite README / Getting Started for desktop launch and release build
+DP-06 — Enable and smoke-test CSP after SheetJS is vendored
+DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys
+DP-08 — First full release build smoke test on Windows
+
+Monthly Return, Dashboard, and Insights retain the nominal strip-type reporting model unless explicitly redesigned:
+
+LOC = 2
+DEP = 1
+ARR = 1
+OVR = 0
+T&G = +2
+O/S = +1
+
+Live Board daily counters remain separate and event-based / EGOW-realized.
 
 ---
 
