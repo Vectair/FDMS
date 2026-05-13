@@ -1,261 +1,265 @@
-# Vectair FDMS Lite – Front-End Skeleton
+# Vectair Flite
 
-This repository contains the initial front-end skeleton for **Vectair FDMS Lite**, built from the single-file prototype into a modular structure suitable for further development (and later a desktop wrapper).
+Vectair Flite is a desktop-local flight data management tool for aviation and ATC-style administrative strip management.
 
-Current focus:
+It was previously referred to during development as FDMS, FDMS Lite, Vectair FDMS, or Vectair FDMS Lite. Those names refer to the same product unless a document explicitly distinguishes them.
 
-- Single-page HTML app under `/src`
-- Vectair-style UI (colours, typography, table layout)
-- “Live Board” with demo movements, including a formation example
-- Static “New Flight” / “New Local” modals (visual only for now)
+Vectair Flite is not a hosted web application. It uses HTML, CSS, and JavaScript internally, and is packaged as a desktop application using Tauri.
 
-Back-end, persistence, and VKB pack handling will be added later.
+The V1 target is a local, offline-capable desktop application for single-operator use.
 
 ---
 
-## Project Structure
+## Current architecture
 
 ```text
-fdms-lite/
-├─ README.md
-├─ roadmap.md                 # High-level roadmap/spec (not included here)
-├─ prototype/
-│  └─ vectair_fdms_demo.html  # Original single-file demo (optional, reference)
-└─ src/
-   ├─ index.html              # Main app shell
-   ├─ css/
-   │  └─ vectair.css          # Shared styling / design tokens
-   └─ js/
-      ├─ app.js               # App bootstrap, tab switching
-      ├─ datamodel.js         # Demo movement data + helpers
-      └─ ui_liveboard.js      # Live Board rendering + modals
-Only the /src content is required to run the current demo.
+src/                    Static frontend application
+src/index.html           Application shell; loads js/app.js
+src/js/                  Application modules
+src/css/                 Styling
+src/data/                Bundled CSV reference data / VKB packs
+src/lib/                 Vendored browser libraries, including SheetJS
+src-tauri/               Tauri desktop shell
+docs/                    Productization, audit, and project documentation
+STATE.md                 Project continuity and current engineering state
 
-## How to Run
+The application entry point is:
 
-FDMS Lite is a **standalone desktop application** (Windows + Linux) using **web UI technologies** (HTML/CSS/JS). During development, it is run locally via a **local server harness** serving `src/` (e.g. `python -m http.server`) to load the UI. This is a local runtime convenience and **not** a hosted web product.
+src/index.html
 
-No build step is required.
+That file loads:
 
-Clone or download this repository, then use one of the runner scripts (see `DEV-SETUP.md`), or manually:
+src/js/app.js
 
-```bash
-cd src
-python -m http.server 8000
-# Open http://localhost:8000 in a browser to load the local UI
-```
+The Tauri desktop wrapper is configured under:
 
-You should see:
+src-tauri/
+Development run: Tauri desktop mode
 
-Vectair-style header and navigation tabs.
+Tauri development mode currently loads the frontend from a local development server.
 
-A Live Board tab with a table of demo movements:
+Start the frontend server first:
 
-Local circuits, visiting military flights, an overflight, and two formations (CNNCT and MEMORIAL).
+cd C:\Users\dmshs\FDMS
+python -m http.server 8000 --directory src
 
-Click a row’s “Details ▾” button to expand and see:
+In a second terminal, start Tauri:
 
-Movement summary
+cd C:\Users\dmshs\FDMS
+npm run tauri:dev
 
-Coding & classification
+Equivalent direct command:
 
-Formation details (for CNNCT and MEMORIAL).
+cargo tauri dev
 
-Use:
+If the Python server is not running, the Tauri development window may show a connection error or blank page because tauri.conf.json currently points development mode at:
 
-Global search to filter any text.
+http://localhost:8000
+Browser-only development harness
 
-Column filters for Callsign, Reg/Type, and Route.
+The frontend can also be run directly in a browser for frontend-only testing:
 
-“New Flight” and “New Local” buttons open static modals to show the intended form layout; they do not yet save data.
+cd C:\Users\dmshs\FDMS
+python -m http.server 8000 --directory src
 
-Next Steps (for development)
-Suggested immediate next steps (see roadmap.md for full context):
+Then open:
 
-Refactor the in-memory demo data into a richer data model with:
+http://localhost:8000/
 
-Movement lifecycle
+The browser-only harness is useful for fast frontend testing, but it does not exercise Tauri-native behaviour such as native Save As export dialogs.
 
-Formation groups and element inheritance
+Release build
 
-WTC caching per scheme
+Build the desktop release with:
 
-Wire the “New Flight” / “New Local” modals to create new movements in memory.
+cd C:\Users\dmshs\FDMS
+npm run tauri:build
 
-Extend the tab system:
+Equivalent direct command:
 
-Build out History using the same table component.
+cargo tauri build
 
-Add placeholder views for VKB Lookup and Admin.
+The release build uses:
 
-Plan persistence (SQLite / API) and a desktop wrapper (e.g. Electron).
+src-tauri/tauri.conf.json
 
-This skeleton is intentionally simple and self-contained so that tools like Codex / Copilot can work directly from the existing HTML, CSS, and JS.
+The current Tauri configuration uses:
 
-php-template
-Copy code
+frontendDist: "../src"
+
+That means the release build bundles the static frontend from src/ directly.
+
+The Python development server is not required for the release build or for the installed runtime.
+
+Release build outputs are generated under:
+
+src-tauri/target/release/bundle/
+
+The exact installer or package format depends on the target platform and Tauri build configuration.
+
+Offline operation
+
+Vectair Flite V1 is intended to support offline-capable desktop use.
+
+Key offline dependencies are bundled locally:
+
+src/lib/xlsx.full.min.js
+src/data/
+
+SheetJS is vendored locally at:
+
+src/lib/xlsx.full.min.js
+
+XLSX export relies on the browser global:
+
+window.XLSX
+
+CSV reference data and VKB-style local reference packs are bundled under:
+
+src/data/
+
+No CDN should be required for ordinary V1 operation.
+
+Some registry or lookup links may intentionally open external websites. Those are external reference conveniences, not core offline runtime dependencies.
+
+Persistence and backup
+
+Vectair Flite V1 currently uses browser/WebView localStorage for local persistence.
+
+Important implication:
+
+Development browser mode, Tauri development mode, and packaged release builds may use different storage origins. Data entered in one environment may not automatically appear in another.
+
+Before moving between builds, machines, profiles, or runtime environments, operators should use the available backup/export procedures.
+
+Known local storage areas include:
+
+vectair_fdms_movements_v3
+vectair_fdms_config
+cancelled_sorties_v1
+deleted_strips_v1
+booking_profiles_v1
+calendar_events_v1
+hours_log_v1
+
+The V1 closeout workstream includes confirmation that Admin backup/restore covers all required local storage keys.
+
+A SQLite or local database persistence layer is a future/V2 item unless promoted due to a concrete V1 release-blocking storage issue.
+
+Export behaviour
+
+In the Tauri desktop application, CSV and XLSX exports should use native Save As behaviour where implemented.
+
+In the browser-only harness, exports may fall back to browser download behaviour.
+
+Native export handling is routed through the existing export utility layer and Tauri commands. Static frontend files should not directly import Tauri JavaScript packages such as:
+
+@tauri-apps/plugin-dialog
+@tauri-apps/plugin-fs
+
+Those package imports are not safe in the current unbundled static frontend architecture.
+
+Current project status
+
+Vectair Flite is in Desktop Productization / V1 closeout.
+
+The project is not yet release-ready.
+
+The current engineering and productization state is tracked in:
+
+STATE.md
+
+The desktop productization audit is recorded in:
+
+docs/DESKTOP_PRODUCTIZATION_AUDIT.md
+Working model
+
+Project roles:
+
+Stuart      Product Owner / SME / manual smoke tester
+ChatGPT     Solutions Architect / QA Lead / documentation owner
+Claude Code Production Engineer / implementer
+
+STATE.md is the continuity anchor.
+
+Implementation work should be defined as precise tickets. Claude Code should implement specific tickets and should not be asked to infer product direction, diagnose architecture, or choose roadmap priorities independently.
+
 
 ---
 
-### `src/index.html`
+# STATE.md section 6 replacement
 
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Vectair FDMS Lite – Live Board</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="css/vectair.css" />
-</head>
-<body>
-  <div class="app-shell">
-    <header class="header">
-      <div class="header-left">
-        <div class="va-logo-box">VA</div>
-        <div>
-          <div class="va-title-main">Vectair FDMS Lite</div>
-          <div class="va-title-sub">Flight Data Management – Local VFR / Admin</div>
-        </div>
-      </div>
-      <div class="header-right">
-        <div>Facility: EGOW · RAF Woodvale (Demo)</div>
-        <div id="utcClock">UTC: --:-- · ----------</div>
-      </div>
-    </header>
+Replace the existing section 6 with this, adjusting only if DP-04 has not yet been merged:
 
-    <nav class="nav-bar">
-      <div class="nav-tabs">
-        <button class="nav-tab active" data-tab="live">Live Board</button>
-        <button class="nav-tab" data-tab="history">History</button>
-        <button class="nav-tab" data-tab="reports">Reports</button>
-        <button class="nav-tab" data-tab="lookup">VKB Lookup</button>
-        <button class="nav-tab" data-tab="admin">Admin</button>
-      </div>
-    </nav>
+````markdown
+## 6. Current active engineering priority
 
-    <main class="page-body">
-      <!-- Live toolbar -->
-      <div class="toolbar" id="live-toolbar">
-        <div class="toolbar-left">
-          <select class="field field-select" id="dateRange">
-            <option value="today">Today</option>
-            <option value="3days">Today + 3 days</option>
-            <option value="all">All demo flights</option>
-          </select>
-          <select class="field field-select" id="statusFilter">
-            <option value="planned_active">Status: Planned & Active</option>
-            <option value="active">Status: Active only</option>
-            <option value="all">Status: All</option>
-          </select>
-          <input
-            class="field field-search-global"
-            id="searchGlobal"
-            placeholder="Global search (callsign, reg, aerodrome…)"
-          />
-        </div>
-        <div class="toolbar-right">
-          <button class="btn btn-secondary" id="btnNewLocal">New Local</button>
-          <button class="btn btn-primary" id="btnNewFlight">New Flight</button>
-        </div>
-      </div>
+### 6.1 Immediate next item
 
-      <!-- Toolbar placeholder for non-live tabs -->
-      <div class="toolbar" id="other-toolbar">
-        <div class="toolbar-left">
-          <span class="page-subtitle" style="margin:0;">
-            Demo view – filters and controls for this tab are not implemented yet.
-          </span>
-        </div>
-      </div>
+```text
+DP-06 — Enable and smoke-test CSP after SheetJS is vendored
 
-      <!-- Live Board panel -->
-      <section class="panel" id="live-panel">
-        <div class="page-title">Live Board</div>
-        <div class="page-subtitle">
-          Planned and active movements for EGOW. Click a row to view full details. Demo data only.
-        </div>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th style="width:8px;"></th>
-                <th>Callsign</th>
-                <th>Reg / Type / WTC</th>
-                <th>Route</th>
-                <th>Times (Planned / Actual)</th>
-                <th>Activity</th>
-                <th style="width:70px; text-align:right;">Actions</th>
-              </tr>
-              <tr class="filter-row">
-                <th></th>
-                <th><input type="text" id="filterCallsign" placeholder="Search…" /></th>
-                <th><input type="text" id="filterReg" placeholder="Search…" /></th>
-                <th><input type="text" id="filterRoute" placeholder="DEP/ARR…" /></th>
-                <th></th>
-                <th></th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="liveBody">
-              <!-- Rows injected by ui_liveboard.js -->
-            </tbody>
-          </table>
-        </div>
-      </section>
+DP-03 — Vendor SheetJS for offline operation is complete.
 
-      <!-- History panel -->
-      <section class="panel" id="history-panel">
-        <div class="page-title">History</div>
-        <div class="page-subtitle">
-          Completed and cancelled movements. Will reuse the Live Board table with additional filters.
-        </div>
-        <div class="placeholder">
-          This demo focuses on the Live Board. History will be implemented in a later stage.
-        </div>
-      </section>
+DP-04 — package.json identity and Tauri dev/build scripts is complete.
 
-      <!-- Reports panel -->
-      <section class="panel" id="reports-panel">
-        <div class="page-title">Reports</div>
-        <div class="page-subtitle">
-          EGOW-style movement summaries, monthly statistics, and export tools.
-        </div>
-        <div class="placeholder">
-          In the full system this tab will produce reports similar to your existing annual Excel stats,
-          including movement counts by EGOW code, unit, T&amp;Gs, O/S, and other metrics.
-        </div>
-      </section>
+DP-05 — README / Getting Started rewrite for desktop launch and release build is complete once the README and this STATE.md section have been updated.
 
-      <!-- VKB Lookup panel -->
-      <section class="panel" id="lookup-panel">
-        <div class="page-title">VKB Lookup</div>
-        <div class="page-subtitle">
-          Embedded view onto the Vectair Knowledge Base (airline codes, callsigns, locations, types, squawks).
-        </div>
-        <div class="placeholder">
-          Future implementation: tables mirroring vectair.org with per-column search and the ability
-          to send selected rows directly into a strip (e.g. &ldquo;Use as callsign&rdquo;, &ldquo;Use as DEP/ARR&rdquo;).
-        </div>
-      </section>
+6.2 Next productization sequence
 
-      <!-- Admin panel -->
-      <section class="panel" id="admin-panel">
-        <div class="page-title">Admin</div>
-        <div class="page-subtitle">
-          Facility configuration, VKB packs, users &amp; roles, and business rules.
-        </div>
-        <div class="placeholder">
-          This demo does not implement Admin logic yet. In the full version this tab will control facility settings,
-          WTC scheme selection, VKB pack recommendations, and user permissions.
-        </div>
-      </section>
-    </main>
-  </div>
+After DP-05, continue the desktop productization closeout sequence:
 
-  <!-- Modal root for New Flight / New Local dialogs -->
-  <div id="modalRoot"></div>
+DP-06 — Enable and smoke-test CSP after SheetJS is vendored
+DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys
+DP-08 — First full release build smoke test on Windows
 
-  <script type="module" src="js/app.js"></script>
-</body>
-</html>
+If DP-08 reveals release-build or packaging issues, those productization defects take priority over feature continuation.
+
+6.3 Remaining V1 sequence
+
+After the immediate desktop productization closeout items, the remaining V1 work is:
+
+Create From workflow
+METAR Builder
+H6 History polish / integration closeout
+Installation / Update / Backup / Troubleshooting documentation
+Final V1 regression and acceptance sweep
+6.4 Reporting invariants
+
+Monthly Return, Dashboard, and Insights retain the nominal strip-type reporting model unless explicitly redesigned:
+
+LOC = 2
+DEP = 1
+ARR = 1
+OVR = 0
+T&G = +2
+O/S = +1
+
+Live Board daily counters remain separate and event-based / EGOW-realized.
+
+OVR is excluded from runway movement totals and counted separately.
+
+
+---
+
+# Commit after manual edit
+
+After saving both files:
+
+```powershell
+cd C:\Users\dmshs\FDMS
+git status
+git diff -- README.md STATE.md
+git add README.md STATE.md
+git commit -m "Update README for desktop productization"
+git push origin main
+```
+
+If you are not on `main`, do not push until you confirm the branch strategy. The cleanest route is usually:
+
+```powershell
+git checkout main
+git pull
+```
+
+Then apply the README/STATE edits on `main`, commit, and push.
