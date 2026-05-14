@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-13 (Europe/London, rev 8 — DP-05 README desktop rewrite and STATE consolidation)
+Last updated: 2026-05-14 (Europe/London, rev 9 — DP-06 CSP enabled and inline handler cleanup)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -19,7 +19,8 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 - Legacy references to **FDMS**, **FDMS Lite**, **Vectair FDMS**, or **Vectair FDMS Lite** refer to the same product unless explicitly stated otherwise.
 - **V1 is not release-ready.**
 - The current phase is **Desktop Productization / V1 closeout**.
-- The current next engineering item is: **DP-06 — Enable and smoke-test CSP after SheetJS is vendored.**
+- **DP-06 — Enable and smoke-test CSP after SheetJS is vendored** is complete and pushed.
+- The current next engineering item is: **DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.**
 
 Recently closed / consolidated:
 
@@ -32,7 +33,7 @@ Recently closed / consolidated:
 
 Current open V1 closeout sequence:
 
-1. **DP-06 — Enable and smoke-test CSP after SheetJS is vendored.**
+1. ~~**DP-06 — Enable and smoke-test CSP after SheetJS is vendored.**~~ **Complete — smoke-tested.**
 2. **DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.**
 3. **DP-08 — First full release build smoke test on Windows.**
 4. **Create From workflow.**
@@ -417,6 +418,7 @@ The following workstreams should be treated as merged and complete for current p
 | DP-03 — Vendor SheetJS for offline operation | Complete — merged |
 | DP-04 — package.json identity and Tauri scripts | Complete — merged |
 | DP-05 — README / Getting Started desktop rewrite | Complete — pushed |
+| DP-06 — Enable and smoke-test CSP after SheetJS is vendored | Complete — smoke-tested |
 | UTC-first timing hardening | Complete baseline |
 | Day Timeline presentation tranche | Complete baseline |
 | Cancellation / deleted-strip lifecycle tranche | Complete |
@@ -437,30 +439,10 @@ The following workstreams should be treated as merged and complete for current p
 ### 6.1 Immediate next item
 
 ```text
-DP-06 — Enable and smoke-test CSP after SheetJS is vendored
+DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys
 ```
 
-DP-03, DP-04, and DP-05 are complete. The immediate documentation clean-up is now done; do not reopen README work unless a later feature changes behaviour.
-
-DP-06 must not be applied as a blind `tauri.conf.json` edit. Before issuing the implementation ticket, inspect current frontend and Tauri files for:
-
-```text
-inline <script>
-inline event handlers such as onclick=""
-eval() or new Function()
-remote scripts, styles, fonts, images, or connect targets
-data: or blob: URL requirements
-inline style requirements
-Tauri scheme / asset loading requirements
-```
-
-A likely CSP candidate from the desktop audit is:
-
-```text
-default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
-```
-
-However, the final CSP must be based on inspection of the current codebase, not assumption.
+DP-06 is complete. Tauri CSP is enabled; all inline `onmouseover`/`onmouseout` event handlers have been removed from `ui_liveboard.js` and replaced with `.flite-menu-item` CSS classes in `vectair.css`. `script-src` does not include `'unsafe-inline'`. `style-src 'unsafe-inline'` is retained because the app uses inline `style=` attributes throughout.
 
 ### 6.2 Next productization sequence
 
@@ -1551,7 +1533,7 @@ The current confirmed V1 required list is:
 4. ~~DP-03 — Vendor SheetJS for offline operation.~~ **Complete — merged.**
 5. ~~DP-04 — package.json identity and Tauri dev/build scripts.~~ **Complete — merged.**
 6. ~~DP-05 — README / Getting Started desktop rewrite.~~ **Complete — pushed.**
-7. DP-06 — Enable and smoke-test CSP after SheetJS is vendored.
+7. ~~DP-06 — Enable and smoke-test CSP after SheetJS is vendored.~~ **Complete — smoke-tested.**
 8. DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.
 9. DP-08 — First full release build smoke test on Windows.
 10. Create From workflow.
@@ -1713,22 +1695,24 @@ Delivered:
 Status:
 
 ```text
-NEXT ENGINEERING ITEM
+COMPLETE — smoke-tested
 ```
 
-Purpose:
+Delivered:
 
-- Enable a restrictive Tauri Content Security Policy now that ordinary operation no longer needs a remote SheetJS CDN dependency.
-- Inspect current frontend/Tauri requirements before changing CSP.
-- Smoke-test all core runtime, export, reporting, and data-loading paths.
+- Removed all generated `onmouseover`/`onmouseout` inline JavaScript event handlers from `src/js/ui_liveboard.js` (Live Board menu, History menu, Cancelled Sorties log menu, and two unused dead constants).
+- Added `.flite-menu-item`, `.flite-menu-item-danger`, `.flite-menu-item-strong`, `.flite-menu-item-separated` CSS classes to `src/css/vectair.css` to replace the removed inline hover styling.
+- Set `"csp"` in `src-tauri/tauri.conf.json` to:
+  ```
+  default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
+  ```
+- `script-src` does not include `'unsafe-inline'`.
+- `style-src 'unsafe-inline'` is retained — the app uses inline `style=` attributes extensively for dynamic layout/colour values; this is acceptable and expected.
 
-Candidate from audit:
+CSP caveats:
 
-```text
-default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
-```
-
-Do not apply this blindly. Inspect current code first.
+- `style-src 'unsafe-inline'` remains necessary due to pervasive inline `style=` attribute usage throughout the app (dynamic colour, layout, and visibility values).
+- No external network dependencies remain in core app scripts; the two known `window.open()` calls in `ui_booking.js` to external registries do not require `connect-src` additions.
 
 #### H. DP-07 — Confirm and document Admin backup/restore coverage
 
@@ -2345,29 +2329,8 @@ localStorage remains acceptable for V1 single-operator desktop use if backup/exp
 The next work item is:
 
 ```text
-DP-06 — Enable and smoke-test CSP after SheetJS is vendored
+DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys
 ```
 
-Before issuing the Claude implementation ticket, ChatGPT should inspect the current codebase for CSP-sensitive requirements:
-
-```text
-inline <script>
-inline event handlers
-inline style requirements
-eval() / new Function()
-remote scripts, styles, images, fonts, or fetch/connect targets
-data: / blob: URL usage
-Tauri scheme / asset loading requirements
-```
-
-Suggested diagnostic commands from repo root:
-
-```powershell
-cd C:\Users\dmshs\FDMS
-Select-String -Path .\src\**\*.html,.\src\**\*.js -Pattern "<script","onclick=","onchange=","oninput=","onmouseover=","eval\(","new Function","data:","blob:","http://","https://" -CaseSensitive:$false
-Get-Content .\src-tauri\tauri.conf.json
-Get-Content .\src-tauri\capabilities\default.json
-```
-
-Do not change runtime files until the CSP inspection is complete and the implementation ticket is precise.
+DP-06 is complete. CSP is enabled in `src-tauri/tauri.conf.json`; all inline `onmouseover`/`onmouseout` handlers have been removed from `ui_liveboard.js`.
 

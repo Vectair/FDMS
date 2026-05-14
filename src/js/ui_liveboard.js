@@ -3476,21 +3476,21 @@ export function renderLiveBoard() {
           <div style="position: relative; display: inline-block; z-index: 1;">
             <button class="small-btn js-edit-dropdown" type="button" aria-label="Edit menu">Edit ▾</button>
             <div class="js-edit-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 9999; min-width: 120px; margin-top: 2px;">
-              <button class="js-edit-details" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Details</button>
-              <button class="js-duplicate" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Duplicate</button>
+              <button class="js-edit-details flite-menu-item" type="button">Details</button>
+              <button class="js-duplicate flite-menu-item" type="button">Duplicate</button>
               ${
                 ft === "DEP"
-                  ? '<button class="js-produce-arr" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'">Arrival</button>'
+                  ? '<button class="js-produce-arr flite-menu-item" type="button">Arrival</button>'
                   : ft === "ARR"
-                    ? '<button class="js-produce-dep" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'">Departure</button>'
+                    ? '<button class="js-produce-dep flite-menu-item" type="button">Departure</button>'
                     : ""
               }
               ${
                 m.status === "PLANNED" || m.status === "ACTIVE"
-                  ? '<button class="js-cancel" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; color: #dc3545; white-space: nowrap;" onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'">Cancel</button>'
+                  ? '<button class="js-cancel flite-menu-item flite-menu-item-danger" type="button">Cancel</button>'
                   : ""
               }
-              <button class="js-delete-strip" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; color: #dc3545; font-weight: 600; white-space: nowrap; border-top: 1px solid #eee;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Delete</button>
+              <button class="js-delete-strip flite-menu-item flite-menu-item-danger flite-menu-item-strong flite-menu-item-separated" type="button">Delete</button>
             </div>
           </div>
           <button class="small-btn js-toggle-details" type="button" aria-label="Toggle details for ${escapeHtml(m.callsignCode)}">Info ▾</button>
@@ -8604,9 +8604,9 @@ export function renderHistoryBoard() {
           <div style="position: relative; display: inline-block; z-index: 1;">
             <button class="small-btn js-history-edit-dropdown" type="button" aria-label="Edit menu">Edit ▾</button>
             <div class="js-history-edit-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 9999; min-width: 120px; margin-top: 2px;">
-              <button class="js-history-edit-details" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">View/Edit</button>
-              <button class="js-history-duplicate" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Duplicate</button>
-              <button class="js-history-delete-strip" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; color: #dc3545; font-weight: 600; white-space: nowrap; border-top: 1px solid #eee;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Delete</button>
+              <button class="js-history-edit-details flite-menu-item" type="button">View/Edit</button>
+              <button class="js-history-duplicate flite-menu-item" type="button">Duplicate</button>
+              <button class="js-history-delete-strip flite-menu-item flite-menu-item-danger flite-menu-item-strong flite-menu-item-separated" type="button">Delete</button>
             </div>
           </div>
           <button class="small-btn js-history-toggle-details" type="button" aria-label="Toggle details">Info ▾</button>
@@ -9331,8 +9331,6 @@ export function renderCancelledSortiesLog() {
     return;
   }
 
-  const menuItemStyle = 'display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;';
-  const menuItemHover = 'onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'"';
 
   for (const entry of sorted) {
     const s = entry.snapshot || {};
@@ -9376,10 +9374,10 @@ export function renderCancelledSortiesLog() {
           <div style="position:relative; display:inline-block; z-index:1;">
             <button class="small-btn js-cancel-log-edit-dropdown" type="button" aria-label="Edit menu">Edit ▾</button>
             <div class="js-cancel-log-edit-menu" style="display:none; position:absolute; right:0; top:100%; background:#fff; border:1px solid #ccc; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:9999; min-width:130px; margin-top:2px;">
-              <button class="js-cancel-log-edit-strip" type="button" style="${menuItemStyle}" ${menuItemHover}>Edit Strip</button>
-              <button class="js-cancel-log-edit-reason" type="button" style="${menuItemStyle}" ${menuItemHover}>Edit Reason</button>
-              <button class="js-cancel-log-reinstate" type="button" style="${menuItemStyle} color:#2a7a2a;" ${menuItemHover}>Reinstate ↩</button>
-              <button class="js-cancel-log-delete" type="button" style="${menuItemStyle} color:#a00;" ${menuItemHover}>Delete</button>
+              <button class="js-cancel-log-edit-strip flite-menu-item" type="button">Edit Strip</button>
+              <button class="js-cancel-log-edit-reason flite-menu-item" type="button">Edit Reason</button>
+              <button class="js-cancel-log-reinstate flite-menu-item" type="button" style="color:#2a7a2a;">Reinstate ↩</button>
+              <button class="js-cancel-log-delete flite-menu-item flite-menu-item-danger" type="button">Delete</button>
             </div>
           </div>
           <button class="small-btn js-cancel-log-toggle" type="button" aria-label="Toggle detail">${isExpanded ? 'Hide ▲' : 'Detail ▾'}</button>
@@ -9798,9 +9796,6 @@ export function renderDeletedStripsLog() {
     tbody.appendChild(empty);
     return;
   }
-
-  const menuItemStyle = 'display:block; width:100%; padding:8px 12px; border:none; background:none; text-align:left; cursor:pointer; font-size:14px; white-space:nowrap;';
-  const menuItemHover = 'onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'"';
 
   for (const entry of sorted) {
     const s = entry.snapshot || {};
