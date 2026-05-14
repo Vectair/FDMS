@@ -716,10 +716,11 @@ function generateDiagnosticReport() {
     f('schema_version:', storageInfo.version),
     f('storage_key:', storageInfo.key),
     f('movements:', counts.movements),
-    f('calendar_events:', counts.calendarEvents),
-    f('booking_profiles:', counts.bookingProfiles),
     f('cancelled_sorties:', counts.cancelledSorties),
     f('deleted_strips:', counts.deletedStrips),
+    f('booking_profiles:', counts.bookingProfiles),
+    f('calendar_events:', counts.calendarEvents),
+    f('hours_entries:', counts.hoursEntries),
     f('storage_used_kb:', usedKB),
     f('storage_used_pct:', storageQuota.percentage + '%'),
     f('storage_quota_mb:', quotaMB),
@@ -816,10 +817,11 @@ function refreshDeveloperSection() {
   set('devSchemaVersion',    String(storageInfo.version));
   set('devStorageKey',       storageInfo.key);
   set('devMovementCount',    String(counts.movements));
-  set('devCalendarEvents',   String(counts.calendarEvents));
-  set('devBookingProfiles',  String(counts.bookingProfiles));
   set('devCancelledSorties', String(counts.cancelledSorties));
   set('devDeletedStrips',    String(counts.deletedStrips));
+  set('devBookingProfiles',  String(counts.bookingProfiles));
+  set('devCalendarEvents',   String(counts.calendarEvents));
+  set('devHoursEntries',     String(counts.hoursEntries));
   set('devStorageUsed',      `${usedKB} KB  (${storageQuota.percentage}%)`);
   set('devStorageQuota',     `${quotaMB} MB`);
 
@@ -903,23 +905,7 @@ function initAdminPanelHandlers() {
   if (btnExport) {
     btnExport.addEventListener("click", () => {
       try {
-        const rawData = exportSessionJSON();
-
-        // Compute counts from the payload
-        const movementsCount = Array.isArray(rawData.movements) ? rawData.movements.length : 0;
-        const bookingsCount  = Array.isArray(rawData.bookings)  ? rawData.bookings.length  : 0;
-        const profilesCount  = Array.isArray(rawData.bookingProfiles) ? rawData.bookingProfiles.length : 0;
-
-        // Wrap in v1.2 envelope
-        const envelope = {
-          fdmsBackup: {
-            schemaVersion: 1,
-            createdAtUtc: new Date().toISOString(),
-            createdBy: { app: "Vectair FDMS Lite", gitCommit: "unknown", host: "local" },
-            counts: { movements: movementsCount, bookings: bookingsCount, bookingProfiles: profilesCount }
-          },
-          payload: rawData
-        };
+        const backup = exportSessionJSON();
 
         // Timestamped filename: fdms_backup_YYYYMMDD_HHMMZ.json
         const now = new Date();
@@ -927,7 +913,7 @@ function initAdminPanelHandlers() {
         const ts = `${now.getUTCFullYear()}${pad2(now.getUTCMonth() + 1)}${pad2(now.getUTCDate())}_${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}Z`;
         const filename = `fdms_backup_${ts}.json`;
 
-        const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json" });
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -959,7 +945,7 @@ function initAdminPanelHandlers() {
 
       const reader = new FileReader();
       reader.onload = (ev) => {
-        let dataForImport = null; // unwrapped payload passed to importSessionJSON
+        let parsedForImport = null; // full parsed object passed to importSessionJSON
         let summaryHtml = '';
         let confirmEnabled = true;
 
@@ -967,74 +953,47 @@ function initAdminPanelHandlers() {
           const parsed = JSON.parse(ev.target.result);
 
           // ── Format detection ──────────────────────────────────────
-          // New envelope: { fdmsBackup: {...}, payload: {...} }
+          // Full backup:  { app, format:"vectair-flite-session-backup", formatVersion, storage }
+          // Old envelope: { fdmsBackup: {...}, payload: {...} }
           // Old v2:       { version: number, movements: [...] }
           // Old v1:       bare array of movements
           // Anything else: unrecognized → block confirm
           let format = 'unrecognized';
-          let meta = null;
 
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-              && parsed.fdmsBackup && parsed.payload) {
-            format = 'envelope';
-            meta = parsed.fdmsBackup;
-            dataForImport = parsed.payload;
-          } else if (Array.isArray(parsed)) {
-            format = 'v1';
-            dataForImport = parsed;
-          } else if (parsed && typeof parsed === 'object'
-                     && typeof parsed.version === 'number'
-                     && Array.isArray(parsed.movements)) {
-            format = 'v2';
-            dataForImport = parsed;
+          function parseStorageCount(raw, expectArray) {
+            if (raw === null || raw === undefined) return '—';
+            try {
+              const v = JSON.parse(raw);
+              if (Array.isArray(v)) return v.length;
+              if (!expectArray && v && typeof v === 'object') return Object.keys(v).length;
+              return '—';
+            } catch (_) { return '—'; }
           }
 
-          if (format === 'unrecognized') {
-            confirmEnabled = false;
-            summaryHtml = `
-              <div style="background:#fff3f3;border:1px solid #ffcdd2;border-radius:4px;padding:10px 12px;font-size:12px;color:#c62828;">
-                Unrecognized file structure — this does not appear to be an FDMS backup. Confirm is blocked.
-              </div>`;
-          } else {
-            // ── Resolve counts ────────────────────────────────────
-            const payload = (format === 'envelope') ? dataForImport : dataForImport;
-            const movementsCount = meta?.counts?.movements != null
-              ? meta.counts.movements
-              : (Array.isArray(payload?.movements) ? payload.movements.length
-                 : (Array.isArray(payload) ? payload.length : '—'));
-            const bookingsCount = meta?.counts?.bookings != null
-              ? meta.counts.bookings
-              : (Array.isArray(payload?.bookings) ? payload.bookings.length : '—');
-            const profilesCount = meta?.counts?.bookingProfiles != null
-              ? meta.counts.bookingProfiles
-              : (Array.isArray(payload?.bookingProfiles) ? payload.bookingProfiles.length : '—');
-            const hasConfig = payload?.config != null ? 'Yes' : 'No';
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+              && parsed.format === 'vectair-flite-session-backup' && parsed.storage) {
+            format = 'fullbackup';
+            parsedForImport = parsed;
 
-            // ── Format createdAt ──────────────────────────────────
+            const s = parsed.storage;
+            const movementsCount  = parseStorageCount(s['vectair_fdms_movements_v3'], true);
+            const cancelledCount  = parseStorageCount(s['vectair_fdms_cancelled_sorties_v1'], true);
+            const deletedCount    = parseStorageCount(s['vectair_fdms_deleted_strips_v1'], true);
+            const profilesCount   = parseStorageCount(s['fdms_booking_profiles_v1'], true);
+            const calendarCount   = parseStorageCount(s['vectair_fdms_calendar_events_v1'], true);
+            const hoursCount      = parseStorageCount(s['vectair_fdms_hours_v1'], false);
+            const hasConfig       = (s['vectair_fdms_config'] != null) ? 'Yes' : 'No';
+
             let createdAtStr = '—';
-            if (meta?.createdAtUtc) {
-              try {
-                const d = new Date(meta.createdAtUtc);
-                createdAtStr = d.toUTCString();
-              } catch (_) { createdAtStr = meta.createdAtUtc; }
+            if (parsed.exportedAt) {
+              try { createdAtStr = new Date(parsed.exportedAt).toUTCString(); } catch (_) { createdAtStr = parsed.exportedAt; }
             }
 
-            const schemaVersion = meta?.schemaVersion != null ? meta.schemaVersion : '—';
-            const schemaLabel = format === 'envelope'
-              ? `v${schemaVersion} (current)`
-              : (format === 'v2' ? 'v0 (legacy v2)' : 'v0 (legacy v1)');
-
-            // ── Warning banners ───────────────────────────────────
             let warningHtml = '';
-            if (format !== 'envelope') {
+            if (typeof parsed.formatVersion === 'number' && parsed.formatVersion > 1) {
               warningHtml += `
               <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
-                ⚠ Legacy backup format detected. Metadata (timestamp, counts) is unavailable.
-              </div>`;
-            } else if (typeof schemaVersion === 'number' && schemaVersion > 1) {
-              warningHtml += `
-              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
-                ⚠ This backup was created by a newer version of FDMS (schema v${schemaVersion}). Some data may not be restored.
+                ⚠ This backup was created by a newer version of Vectair Flite (format v${parsed.formatVersion}). Some data may not be restored.
               </div>`;
             }
             if (movementsCount === 0 || movementsCount === '0') {
@@ -1047,13 +1006,90 @@ function initAdminPanelHandlers() {
             summaryHtml = `
               ${warningHtml}
               <div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">
-                <div><span style="color:#555;display:inline-block;width:148px;">File:</span><strong>${escapeHtml(file.name)}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:148px;">Created (UTC):</span><strong>${escapeHtml(createdAtStr)}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:148px;">Schema:</span><strong>${escapeHtml(String(schemaLabel))}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:148px;">Movements:</span><strong>${movementsCount}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:148px;">Booking profiles:</span><strong>${profilesCount}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:148px;">Bookings:</span><strong>${bookingsCount}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:148px;">Config present:</span><strong>${hasConfig}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">File:</span><strong>${escapeHtml(file.name)}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Created (UTC):</span><strong>${escapeHtml(createdAtStr)}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Format:</span><strong>Full backup (v${parsed.formatVersion ?? 1})</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Movements:</span><strong>${movementsCount}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Cancelled sorties:</span><strong>${cancelledCount}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Deleted strips:</span><strong>${deletedCount}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Booking profiles:</span><strong>${profilesCount}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Calendar events:</span><strong>${calendarCount}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Hours log entries:</span><strong>${hoursCount}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Config present:</span><strong>${hasConfig}</strong></div>
+              </div>`;
+
+          } else if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+              && parsed.fdmsBackup && parsed.payload) {
+            format = 'envelope';
+            parsedForImport = parsed;
+            const meta = parsed.fdmsBackup;
+            const payload = parsed.payload;
+
+            const movementsCount = meta?.counts?.movements != null
+              ? meta.counts.movements
+              : (Array.isArray(payload?.movements) ? payload.movements.length : '—');
+
+            let createdAtStr = '—';
+            if (meta?.createdAtUtc) {
+              try { createdAtStr = new Date(meta.createdAtUtc).toUTCString(); } catch (_) { createdAtStr = meta.createdAtUtc; }
+            }
+            const schemaVersion = meta?.schemaVersion != null ? meta.schemaVersion : '—';
+
+            let warningHtml = `
+              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
+                ⚠ Legacy backup format — only movement data will be restored. Cancelled sorties, deleted strips, booking profiles, calendar events, and hours log are not included.
+              </div>`;
+            if (movementsCount === 0 || movementsCount === '0') {
+              warningHtml += `
+              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
+                ⚠ This backup contains 0 movements.
+              </div>`;
+            }
+
+            summaryHtml = `
+              ${warningHtml}
+              <div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">
+                <div><span style="color:#555;display:inline-block;width:160px;">File:</span><strong>${escapeHtml(file.name)}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Created (UTC):</span><strong>${escapeHtml(createdAtStr)}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Format:</span><strong>Legacy envelope (schema v${schemaVersion})</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Movements:</span><strong>${movementsCount}</strong></div>
+              </div>`;
+
+          } else if (Array.isArray(parsed)) {
+            format = 'v1';
+            parsedForImport = parsed;
+
+            summaryHtml = `
+              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
+                ⚠ Legacy backup format — only movement data will be restored.
+              </div>
+              <div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">
+                <div><span style="color:#555;display:inline-block;width:160px;">File:</span><strong>${escapeHtml(file.name)}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Format:</span><strong>Legacy v1 (bare array)</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Movements:</span><strong>${parsed.length}</strong></div>
+              </div>`;
+
+          } else if (parsed && typeof parsed === 'object'
+                     && typeof parsed.version === 'number'
+                     && Array.isArray(parsed.movements)) {
+            format = 'v2';
+            parsedForImport = parsed;
+
+            summaryHtml = `
+              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
+                ⚠ Legacy backup format — only movement data will be restored.
+              </div>
+              <div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">
+                <div><span style="color:#555;display:inline-block;width:160px;">File:</span><strong>${escapeHtml(file.name)}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Format:</span><strong>Legacy v2 (schema v${parsed.version})</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Movements:</span><strong>${parsed.movements.length}</strong></div>
+              </div>`;
+
+          } else {
+            confirmEnabled = false;
+            summaryHtml = `
+              <div style="background:#fff3f3;border:1px solid #ffcdd2;border-radius:4px;padding:10px 12px;font-size:12px;color:#c62828;">
+                Unrecognized file structure — this does not appear to be a Vectair Flite backup. Confirm is blocked.
               </div>`;
           }
         } catch (_parseErr) {
@@ -1065,19 +1101,22 @@ function initAdminPanelHandlers() {
         }
 
         adminConfirm(
-          dataForImport
-            ? `Restore will overwrite ALL current local movement data with the contents of "${file.name}". This cannot be undone.`
-            : `"${file.name}" cannot be restored as FDMS backup data.`,
+          parsedForImport
+            ? `Restore recognised Vectair Flite backup data from "${file.name}" into this app profile. Existing local data for restored sections will be replaced. Reload the app after import.`
+            : `"${file.name}" cannot be restored as a Vectair Flite backup.`,
           () => {
             try {
-              const result = importSessionJSON(dataForImport);
+              const result = importSessionJSON(parsedForImport);
               if (result.success) {
                 renderLiveBoard();
                 renderHistoryBoard();
                 renderReports();
                 diagnostics.lastRenderTime = new Date().toISOString();
                 updateDiagnostics();
-                showToast(`Restore applied from "${file.name}" — ${result.count} movements loaded`, 'success');
+                const detail = result.format === 'full'
+                  ? `${result.count} movements loaded — reload the app to apply all restored data`
+                  : `${result.count} movements loaded`;
+                showToast(`Restore applied from "${file.name}" — ${detail}`, 'success');
               } else {
                 showToast(`Restore failed: ${result.error}`, 'error');
               }

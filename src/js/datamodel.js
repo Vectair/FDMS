@@ -16,6 +16,18 @@ const STORAGE_KEY_V1 = "vectair_fdms_movements_v1";
 const SCHEMA_VERSION = 3;
 const CONFIG_KEY = "vectair_fdms_config";
 
+// Canonical list of all V1 localStorage keys included in Admin backup/restore.
+// Do not add unrelated browser or application storage keys here.
+export const SESSION_BACKUP_KEYS = [
+  "vectair_fdms_movements_v3",
+  "vectair_fdms_config",
+  "vectair_fdms_cancelled_sorties_v1",
+  "vectair_fdms_deleted_strips_v1",
+  "fdms_booking_profiles_v1",
+  "vectair_fdms_calendar_events_v1",
+  "vectair_fdms_hours_v1"
+];
+
 // Default configuration
 const defaultConfig = {
   defaultTimeOffsetMinutes: 10, // Legacy - kept for backwards compatibility
@@ -1798,28 +1810,50 @@ export function resetMovementsToDemo() {
 }
 
 export function exportSessionJSON() {
-  ensureInitialised();
+  const storage = {};
+  for (const key of SESSION_BACKUP_KEYS) {
+    const val = window.localStorage.getItem(key);
+    storage[key] = val !== null ? val : null;
+  }
   return {
-    version: SCHEMA_VERSION,
+    app: "Vectair Flite",
+    format: "vectair-flite-session-backup",
+    formatVersion: 1,
     exportedAt: new Date().toISOString(),
-    movements: movements.map(m => ({ ...m }))
+    storage
   };
 }
 
-export function importSessionJSON(data) {
+export function importSessionJSON(parsed) {
   try {
-    if (!data || typeof data !== "object") {
+    if (!parsed || typeof parsed !== "object") {
       throw new Error("Invalid import data");
     }
 
-    // Support both v1 (array) and v2 (object with version) formats
+    // Current format: { app, format, formatVersion, exportedAt, storage }
+    if (parsed.format === "vectair-flite-session-backup" && parsed.storage && typeof parsed.storage === "object") {
+      const restoredKeys = [];
+      for (const key of SESSION_BACKUP_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(parsed.storage, key) && parsed.storage[key] !== null) {
+          window.localStorage.setItem(key, parsed.storage[key]);
+          restoredKeys.push(key);
+        }
+      }
+      // Reload in-memory movements from restored localStorage
+      movementsInitialised = false;
+      ensureInitialised();
+      return { success: true, count: movements.length, format: 'full', restoredKeys };
+    }
+
+    // Legacy envelope format: { fdmsBackup, payload }
+    const payload = (parsed.fdmsBackup && parsed.payload) ? parsed.payload : parsed;
+
+    // Legacy v1 (bare array) or v2 (versioned object with movements array)
     let importedMovements;
-    if (Array.isArray(data)) {
-      // v1 format
-      importedMovements = data;
-    } else if (data.version && Array.isArray(data.movements)) {
-      // v2 format
-      importedMovements = data.movements;
+    if (Array.isArray(payload)) {
+      importedMovements = payload;
+    } else if (payload.version && Array.isArray(payload.movements)) {
+      importedMovements = payload.movements;
     } else {
       throw new Error("Unrecognized import format");
     }
@@ -1828,7 +1862,7 @@ export function importSessionJSON(data) {
     nextId = computeNextId();
     movementsInitialised = true;
     saveToStorage();
-    return { success: true, count: movements.length };
+    return { success: true, count: movements.length, format: 'legacy' };
   } catch (e) {
     console.error("FDMS: import failed", e);
     return { success: false, error: e.message };
@@ -1848,8 +1882,10 @@ export function getDataCounts() {
     try {
       const raw = window.localStorage.getItem(key);
       if (!raw) return 0;
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.length : 0;
+      const val = JSON.parse(raw);
+      if (Array.isArray(val)) return val.length;
+      if (val && typeof val === 'object') return Object.keys(val).length;
+      return 0;
     } catch (e) {
       return 0;
     }
@@ -1860,6 +1896,7 @@ export function getDataCounts() {
     bookingProfiles:  countKey('fdms_booking_profiles_v1'),
     cancelledSorties: countKey('vectair_fdms_cancelled_sorties_v1'),
     deletedStrips:    countKey('vectair_fdms_deleted_strips_v1'),
+    hoursEntries:     countKey('vectair_fdms_hours_v1'),
   };
 }
 

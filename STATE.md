@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-14 (Europe/London, rev 9 — DP-06 CSP enabled and inline handler cleanup)
+Last updated: 2026-05-14 (Europe/London, rev 10 — DP-07 Admin backup/restore full coverage confirmed)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -20,7 +20,8 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 - **V1 is not release-ready.**
 - The current phase is **Desktop Productization / V1 closeout**.
 - **DP-06 — Enable and smoke-test CSP after SheetJS is vendored** is complete and pushed.
-- The current next engineering item is: **DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.**
+- **DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys** is complete and pushed.
+- The current next engineering item is: **DP-08 — First full release build smoke test on Windows.**
 
 Recently closed / consolidated:
 
@@ -34,7 +35,7 @@ Recently closed / consolidated:
 Current open V1 closeout sequence:
 
 1. ~~**DP-06 — Enable and smoke-test CSP after SheetJS is vendored.**~~ **Complete — smoke-tested.**
-2. **DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.**
+2. ~~**DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.**~~ **Complete — pushed.**
 3. **DP-08 — First full release build smoke test on Windows.**
 4. **Create From workflow.**
 5. **METAR Builder.**
@@ -247,16 +248,16 @@ Current persistence model:
 localStorage
 ```
 
-Known localStorage keys requiring backup/restore coverage:
+Confirmed V1 localStorage keys covered by Admin backup/restore (SESSION_BACKUP_KEYS):
 
 ```text
 vectair_fdms_movements_v3
 vectair_fdms_config
-cancelled_sorties_v1
-deleted_strips_v1
-booking_profiles_v1
-calendar_events_v1
-hours_log_v1
+vectair_fdms_cancelled_sorties_v1
+vectair_fdms_deleted_strips_v1
+fdms_booking_profiles_v1
+vectair_fdms_calendar_events_v1
+vectair_fdms_hours_v1
 ```
 
 Current app model:
@@ -419,6 +420,7 @@ The following workstreams should be treated as merged and complete for current p
 | DP-04 — package.json identity and Tauri scripts | Complete — merged |
 | DP-05 — README / Getting Started desktop rewrite | Complete — pushed |
 | DP-06 — Enable and smoke-test CSP after SheetJS is vendored | Complete — smoke-tested |
+| DP-07 — Confirm and document Admin backup/restore coverage | Complete — pushed |
 | UTC-first timing hardening | Complete baseline |
 | Day Timeline presentation tranche | Complete baseline |
 | Cancellation / deleted-strip lifecycle tranche | Complete |
@@ -439,10 +441,10 @@ The following workstreams should be treated as merged and complete for current p
 ### 6.1 Immediate next item
 
 ```text
-DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys
+DP-08 — First full release build smoke test on Windows
 ```
 
-DP-06 is complete. Tauri CSP is enabled; all inline `onmouseover`/`onmouseout` event handlers have been removed from `ui_liveboard.js` and replaced with `.flite-menu-item` CSS classes in `vectair.css`. `script-src` does not include `'unsafe-inline'`. `style-src 'unsafe-inline'` is retained because the app uses inline `style=` attributes throughout.
+DP-07 is complete. Admin backup/restore now covers all seven V1 localStorage keys via `SESSION_BACKUP_KEYS` in `datamodel.js`. Export uses a new `vectair-flite-session-backup` format with raw key/value storage. Import handles new format plus legacy formats. README and STATE.md updated.
 
 ### 6.2 Next productization sequence
 
@@ -1534,7 +1536,7 @@ The current confirmed V1 required list is:
 5. ~~DP-04 — package.json identity and Tauri dev/build scripts.~~ **Complete — merged.**
 6. ~~DP-05 — README / Getting Started desktop rewrite.~~ **Complete — pushed.**
 7. ~~DP-06 — Enable and smoke-test CSP after SheetJS is vendored.~~ **Complete — smoke-tested.**
-8. DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.
+8. ~~DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.~~ **Complete — pushed.**
 9. DP-08 — First full release build smoke test on Windows.
 10. Create From workflow.
 11. METAR Builder.
@@ -1719,26 +1721,32 @@ CSP caveats:
 Status:
 
 ```text
-V1 required
+complete / pushed
 ```
 
-Known localStorage keys requiring coverage:
+Confirmed V1 backup key list (SESSION_BACKUP_KEYS in datamodel.js):
 
 ```text
 vectair_fdms_movements_v3
 vectair_fdms_config
-cancelled_sorties_v1
-deleted_strips_v1
-booking_profiles_v1
-calendar_events_v1
-hours_log_v1
+vectair_fdms_cancelled_sorties_v1
+vectair_fdms_deleted_strips_v1
+fdms_booking_profiles_v1
+vectair_fdms_calendar_events_v1
+vectair_fdms_hours_v1
 ```
 
-Purpose:
+Delivered:
 
-- Confirm Admin backup/export captures all relevant localStorage keys.
-- Confirm restore/import restores all relevant keys.
-- Document any limitations plainly.
+- `SESSION_BACKUP_KEYS` canonical list added to `datamodel.js` (exported).
+- `exportSessionJSON()` rewritten to dump raw localStorage values for all seven keys into `storage` map; backup format is `{ app, format:"vectair-flite-session-backup", formatVersion:1, exportedAt, storage }`.
+- `importSessionJSON()` rewritten to restore all recognised V1 keys from new format; legacy formats (old envelope, v2, v1 array) remain supported and restore movements only.
+- `getDataCounts()` updated to include `hoursEntries` count.
+- Admin Session Management description updated to list all backed-up data categories.
+- Admin Danger Zone restore description updated.
+- Import preflight summary updated to show counts for all seven key categories.
+- `README.md` updated with correct key names and backup/restore instructions.
+- `STATE.md` records confirmed key list.
 
 #### I. DP-08 — First full release build smoke test on Windows
 
@@ -2329,8 +2337,8 @@ localStorage remains acceptable for V1 single-operator desktop use if backup/exp
 The next work item is:
 
 ```text
-DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys
+DP-08 — First full release build smoke test on Windows
 ```
 
-DP-06 is complete. CSP is enabled in `src-tauri/tauri.conf.json`; all inline `onmouseover`/`onmouseout` handlers have been removed from `ui_liveboard.js`.
+DP-07 is complete. Admin backup/restore now covers all seven V1 localStorage keys.
 

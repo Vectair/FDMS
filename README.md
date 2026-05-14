@@ -124,25 +124,27 @@ Some registry or lookup links may intentionally open external websites. Those ar
 
 Persistence and backup
 
-Vectair Flite V1 currently uses browser/WebView localStorage for local persistence.
+Vectair Flite V1 stores data locally in the desktop WebView/browser localStorage profile.
 
 Important implication:
 
 Development browser mode, Tauri development mode, and packaged release builds may use different storage origins. Data entered in one environment may not automatically appear in another.
 
-Before moving between builds, machines, profiles, or runtime environments, operators should use the available backup/export procedures.
+Backups should be exported before moving between development browser, Tauri dev, packaged release, machines, or app profiles.
 
-Known local storage areas include:
+A V1 backup includes movements, configuration, cancelled sorties, deleted strips, booking profiles, calendar events, and hours log data.
+
+The V1 localStorage keys covered by Admin backup/restore are:
 
 vectair_fdms_movements_v3
 vectair_fdms_config
-cancelled_sorties_v1
-deleted_strips_v1
-booking_profiles_v1
-calendar_events_v1
-hours_log_v1
+vectair_fdms_cancelled_sorties_v1
+vectair_fdms_deleted_strips_v1
+fdms_booking_profiles_v1
+vectair_fdms_calendar_events_v1
+vectair_fdms_hours_v1
 
-The V1 closeout workstream includes confirmation that Admin backup/restore covers all required local storage keys.
+Use Admin → Session Management → Backup to JSON to export a backup. Use Admin → Danger Zone → Restore from JSON to import a previous backup. Reload the app after restoring.
 
 A SQLite or local database persistence layer is a future/V2 item unless promoted due to a concrete V1 release-blocking storage issue.
 

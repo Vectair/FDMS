@@ -1088,7 +1088,7 @@
                 <div class="panel">
                   <h3>Session Management</h3>
                   <p style="font-size: 11px; color: #666; margin-bottom: 4px;">
-                    Backup local FDMS data to a JSON file. Backups include movement strip data and export metadata (timestamp, counts).
+                    Exports a local Vectair Flite backup containing movements, configuration, cancelled sorties, deleted strips, booking profiles, calendar events, and hours log data.
                   </p>
                   <p style="font-size: 11px; color: #666; margin-bottom: 12px;">
                     To restore a previous backup or reset to demo data, use the <strong>Danger Zone</strong> section.
@@ -1701,14 +1701,14 @@
                   <div class="admin-danger-zone">
                     <h3>Danger Zone</h3>
                     <p style="font-size: 12px; color: #555; margin-bottom: 16px;">
-                      Destructive actions that overwrite local movement data. These cannot be undone.
+                      Destructive actions that overwrite local data. These cannot be undone.
                     </p>
 
                     <div style="display: flex; flex-direction: column; gap: 20px;">
                       <div>
                         <div style="font-weight: bold; margin-bottom: 4px;">Restore from JSON</div>
                         <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
-                          Overwrite all current movement strips (and any configuration present in the backup file) with the contents of a previous JSON backup. A summary will be shown before confirming.
+                          Restores recognised Vectair Flite local backup data into this app profile. Existing local data for restored sections may be replaced. Reload the app after import. A summary will be shown before confirming.
                         </div>
                         <button class="btn btn-danger" id="btnImportSession" type="button" aria-label="Restore session data from JSON file">Restore from JSON</button>
                         <input type="file" id="importFileInput" accept=".json" style="display: none;" aria-label="Select JSON file to import" />
@@ -1789,10 +1789,11 @@
                     <tr><td>Schema Version</td><td id="devSchemaVersion">—</td></tr>
                     <tr><td>Storage Key</td><td id="devStorageKey">—</td></tr>
                     <tr><td>Movements</td><td id="devMovementCount">—</td></tr>
-                    <tr><td>Calendar Events</td><td id="devCalendarEvents">—</td></tr>
-                    <tr><td>Booking Profiles</td><td id="devBookingProfiles">—</td></tr>
                     <tr><td>Cancelled Sorties</td><td id="devCancelledSorties">—</td></tr>
                     <tr><td>Deleted Strips</td><td id="devDeletedStrips">—</td></tr>
+                    <tr><td>Booking Profiles</td><td id="devBookingProfiles">—</td></tr>
+                    <tr><td>Calendar Events</td><td id="devCalendarEvents">—</td></tr>
+                    <tr><td>Hours Log Entries</td><td id="devHoursEntries">—</td></tr>
                     <tr><td>Storage Used</td><td id="devStorageUsed">—</td></tr>
                     <tr><td>Storage Quota</td><td id="devStorageQuota">—</td></tr>
                   </table>
