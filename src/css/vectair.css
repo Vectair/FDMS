@@ -4284,3 +4284,32 @@ tr.strip.ft-ovr > td {
     grid-template-columns: 1fr;
   }
 }
+
+/* Menu item buttons — replaces inline style + onmouseover/onmouseout handlers */
+.flite-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.flite-menu-item:hover {
+  background-color: #f0f0f0;
+}
+
+.flite-menu-item-danger {
+  color: #dc3545;
+}
+
+.flite-menu-item-strong {
+  font-weight: 600;
+}
+
+.flite-menu-item-separated {
+  border-top: 1px solid #eee;
+}
