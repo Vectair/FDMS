@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-18 (Europe/London, rev 12 — DP-08 version alignment, release build validated, Windows smoke test pending)
+Last updated: 2026-05-21 (Europe/London, rev 13 — DP-09 Windows icon packaging repair: ICO regenerated, window icon configured, version bumped to 1.0.1)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -22,7 +22,8 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 - **DP-06 — Enable and smoke-test CSP after SheetJS is vendored** is complete and pushed.
 - **DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys** is complete and pushed.
 - **DP-08 — Release build smoke test** version alignment and build validation are complete and pushed. Windows manual smoke test is pending on Windows hardware.
-- The current next engineering item is: **DP-08 Windows manual smoke test** (install and exercise the packaged app on Windows), then **Create From workflow**.
+- **DP-09 — Windows desktop icon packaging repair** is complete and pushed. Root causes identified and fixed: (1) all ICO sizes were PNG-in-ICO which some cross-compilation toolchains (windres) silently drop — ICO regenerated with raw BMP DIB for 16/24/32/48/64/128 and PNG-in-ICO only for 256; (2) window config lacked explicit `icon` field required for Tauri v2 titlebar/taskbar icon; (3) version bumped to 1.0.1 to force installer shortcut/icon cache refresh on Windows.
+- The current next engineering item is: **DP-08/DP-09 Windows manual smoke test** (install 1.0.1 on Windows, confirm Flite icon in titlebar, taskbar, shortcut, and Explorer), then **Create From workflow**.
 
 Recently closed / consolidated:
 
@@ -38,7 +39,8 @@ Current open V1 closeout sequence:
 1. ~~**DP-06 — Enable and smoke-test CSP after SheetJS is vendored.**~~ **Complete — smoke-tested.**
 2. ~~**DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.**~~ **Complete — pushed.**
 3. **DP-08 — First full release build smoke test on Windows.** Version alignment complete. Build validated (Linux DEB/RPM produced). **Windows manual smoke test pending.**
-4. **Create From workflow.**
+4. ~~**DP-09 — Windows desktop icon packaging repair.**~~ **Complete — pushed.** ICO regenerated (raw BMP DIB for small sizes), window icon configured, version 1.0.1. Pending Windows manual confirmation.
+5. **Create From workflow.**
 5. **METAR Builder.**
 6. **H6 History polish / integration closeout.**
 7. **Installation / Update / Backup / Troubleshooting documentation.**
@@ -423,6 +425,7 @@ The following workstreams should be treated as merged and complete for current p
 | DP-06 — Enable and smoke-test CSP after SheetJS is vendored | Complete — smoke-tested |
 | DP-07 — Confirm and document Admin backup/restore coverage | Complete — pushed |
 | DP-08 — Version alignment and release build validation | Complete — pushed. Windows smoke test pending. |
+| DP-09 — Windows desktop icon packaging repair | Complete — pushed. Windows manual confirmation pending. |
 | UTC-first timing hardening | Complete baseline |
 | Day Timeline presentation tranche | Complete baseline |
 | Cancellation / deleted-strip lifecycle tranche | Complete |
@@ -443,22 +446,31 @@ The following workstreams should be treated as merged and complete for current p
 ### 6.1 Immediate next item
 
 ```text
-DP-08 — First full release build smoke test on Windows
+DP-08/DP-09 — Windows manual smoke test (install 1.0.1; confirm icon in titlebar, taskbar, shortcut, Explorer)
 ```
 
-DP-07 is complete. Admin backup/restore now covers all seven V1 localStorage keys via `SESSION_BACKUP_KEYS` in `datamodel.js`. Export uses a new `vectair-flite-session-backup` format with raw key/value storage. Import handles new format plus legacy formats. README and STATE.md updated.
+DP-09 is complete and pushed. Root causes of the missing Windows icon were identified and fixed:
+1. All ICO image sizes were stored in PNG-in-ICO format. Cross-compilation toolchains (`windres`) may silently discard or mishandle PNG-in-ICO for small sizes, producing no embedded icon resource in the exe. The ICO has been regenerated with raw BMP DIB format for 16, 24, 32, 48, 64, 128 px, and PNG-in-ICO only for 256 px (Vista+ standard).
+2. The Tauri window config lacked an explicit `icon` field. Tauri v2 requires `"icon": "icons/icon.ico"` in the window entry to set the runtime window icon (titlebar and taskbar).
+3. Version bumped from 1.0.0 to 1.0.1 across `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`. This forces the Windows installer to treat the package as a new version, clearing stale shortcut/icon metadata.
+
+If old icons still persist after installing 1.0.1 over 1.0.0, uninstall the 1.0.0 package first (Programs and Features / Apps & Features), or clear the Windows icon cache (`ie4uinit.exe -show` or delete `%LocalAppData%\IconCache.db` and restart Explorer).
 
 ### 6.2 Next productization sequence
 
 Continue the desktop productization closeout sequence:
 
 ```text
-DP-06 — Enable and smoke-test CSP after SheetJS is vendored
-DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys
-DP-08 — First full release build smoke test on Windows
+DP-06 — Enable and smoke-test CSP after SheetJS is vendored        [Complete]
+DP-07 — Confirm and document Admin backup/restore coverage          [Complete]
+DP-08 — First full release build smoke test on Windows              [Build validated; Windows manual smoke test pending]
+DP-09 — Windows desktop icon packaging repair                       [Complete — pushed; Windows manual confirmation pending]
 ```
 
-If DP-08 reveals release-build or packaging issues, those productization defects take priority over feature continuation.
+DP-09 fixed three root causes that caused the Flite icon to be absent from the titlebar, taskbar, desktop shortcut, and Explorer:
+(1) PNG-in-ICO format for small ICO sizes replaced with raw BMP DIB to maximise cross-compilation compatibility;
+(2) explicit `icon` field added to the Tauri window config;
+(3) version bumped to 1.0.1 to invalidate installer/shortcut icon cache on Windows.
 
 ### 6.3 Remaining V1 sequence
 
@@ -1540,11 +1552,12 @@ The current confirmed V1 required list is:
 7. ~~DP-06 — Enable and smoke-test CSP after SheetJS is vendored.~~ **Complete — smoke-tested.**
 8. ~~DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.~~ **Complete — pushed.**
 9. DP-08 — First full release build smoke test on Windows. **Version alignment + build validation complete — pushed. Windows manual smoke test pending.**
-10. Create From workflow.
-11. METAR Builder.
-12. H6 History polish / integration closeout.
-13. Installation / Update / Backup / Troubleshooting documentation.
-14. Final V1 regression and acceptance sweep.
+10. ~~DP-09 — Windows desktop icon packaging repair.~~ **Complete — pushed.** Version 1.0.1. Windows manual confirmation pending.
+11. Create From workflow.
+12. METAR Builder.
+13. H6 History polish / integration closeout.
+14. Installation / Update / Backup / Troubleshooting documentation.
+15. Final V1 regression and acceptance sweep.
 
 ### 16.2 Priority rationale
 

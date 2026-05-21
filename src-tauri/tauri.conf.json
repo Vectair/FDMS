@@ -1,6 +1,6 @@
 {
   "productName": "Vectair Flite",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.vectair.flite",
   "build": {
     "frontendDist": "../src",
@@ -11,6 +11,7 @@
     "windows": [
       {
         "title": "Vectair Flite",
+        "icon": "icons/icon.ico",
         "width": 1400,
         "height": 860,
         "resizable": true,
