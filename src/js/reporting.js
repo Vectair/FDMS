@@ -113,9 +113,10 @@ export function classifyMovement(movement) {
   // Lookup registration in VKB
   const regData = regIndex.get(reg) || regIndex.get(movement.registration?.toUpperCase().trim());
 
-  // Primary classification source: EGOW FLIGHT TYPE from registration CSV
-  let egowFlightType = regData?.['EGOW FLIGHT TYPE'] || movement.egowCode || '';
-  egowFlightType = egowFlightType.toUpperCase().trim();
+  // Manual movement.egowCode is authoritative; VKB registration data is fallback
+  const manualEgowCode = (movement.egowCode || '').toUpperCase().trim();
+  const regEgowCode = (regData?.['EGOW FLIGHT TYPE'] || '').toUpperCase().trim();
+  let egowFlightType = manualEgowCode || regEgowCode || '';
 
   // Classification flags
   const isMilitary = ['BM', 'VM', 'VMH', 'VNH'].includes(egowFlightType);
