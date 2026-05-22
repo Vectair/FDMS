@@ -255,24 +255,16 @@ function getMovementPlannedTime(m) {
     timeStr = getECT(m);
   }
 
-  if (!timeStr) return null;
+  if (!timeStr || !m.dof) return null;
 
-  // Parse HH:MM format and create Date object for today
+  // Parse HH:MM format and construct UTC timestamp from m.dof
   const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return null;
 
-  const now = new Date();
-  const hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
+  const HH = String(parseInt(match[1], 10)).padStart(2, '0');
+  const MM = String(parseInt(match[2], 10)).padStart(2, '0');
 
-  const movementDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
-
-  // If the time is before current time, assume it's tomorrow
-  if (movementDate < now) {
-    movementDate.setDate(movementDate.getDate() + 1);
-  }
-
-  return movementDate;
+  return new Date(`${m.dof}T${HH}:${MM}:00Z`);
 }
 
 function matchesFilters(m) {
