@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-21 (Europe/London, rev 14 — DP-09b Windows shortcut icon metadata repair: NSIS POSTINSTALL hook recreates shortcuts with explicit IconLocation, version 1.0.2)
+Last updated: 2026-05-21 (Europe/London, rev 15 — DP-09c Windows shortcut icon hook execution repair: $NoShortcutMode fix for Finish page callback, version 1.0.3)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -23,8 +23,9 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 - **DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys** is complete and pushed.
 - **DP-08 — Release build smoke test** version alignment and build validation are complete and pushed. Windows manual smoke test is pending on Windows hardware.
 - **DP-09 — Windows desktop icon packaging repair** is partially complete. Runtime/taskbar icon now shows Flite logo. Desktop shortcut remained blank (DP-09b).
-- **DP-09b — Windows shortcut icon metadata repair** is complete and pushed. Root cause: Tauri's default NSIS `CreateShortcut` omits the icon argument, leaving `IconLocation: ,0` (empty path). Added `src-tauri/nsis-hooks.nsh` defining a `NSIS_HOOK_POSTINSTALL` macro that recreates desktop and Start Menu shortcuts with `IconLocation` explicitly pointing to the installed exe. Wired via `bundle.windows.nsis.installerHooks` in `tauri.conf.json`. Version bumped to 1.0.2. Pending Windows manual confirmation.
-- The current next engineering item is: **DP-09b Windows manual smoke test** (install 1.0.2 NSIS setup; run shortcut metadata check; confirm Flite icon in desktop shortcut, Start Menu, taskbar, and Explorer), then **Create From workflow**.
+- **DP-09b — Windows shortcut icon metadata repair** did not fix the desktop shortcut. Diagnosis in DP-09c found the root cause: in interactive mode the Finish page callback runs `CreateOrUpdateDesktopShortcut` AFTER `NSIS_HOOK_POSTINSTALL`, overwriting the hook's explicit-icon shortcut.
+- **DP-09c — NSIS hook execution repair** is complete and pushed. Fix: hook creates desktop shortcut with explicit icon then sets `$NoShortcutMode = 1`; `CreateOrUpdateDesktopShortcut` checks this flag and returns early, preserving the explicit-icon shortcut. Version 1.0.3. Diagnostic marker file written to `$INSTDIR\dp09c-hook-ran.txt`. Pending Windows manual confirmation.
+- The current next engineering item is: **DP-09c Windows manual smoke test** (install 1.0.3 NSIS setup; confirm `dp09c-hook-ran.txt` exists in install dir; run shortcut metadata check; confirm Flite icon), then **Create From workflow**.
 
 Recently closed / consolidated:
 
@@ -41,7 +42,8 @@ Current open V1 closeout sequence:
 2. ~~**DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.**~~ **Complete — pushed.**
 3. **DP-08 — First full release build smoke test on Windows.** Version alignment complete. Build validated (Linux DEB/RPM produced). **Windows manual smoke test pending.**
 4. **DP-09 — Windows desktop icon packaging repair.** ICO regenerated; runtime/taskbar icon fixed. Desktop shortcut icon still blank — see DP-09b.
-5. ~~**DP-09b — Windows shortcut icon metadata repair.**~~ **Complete — pushed.** NSIS POSTINSTALL hook recreates shortcuts with explicit `IconLocation`. Version 1.0.2. Pending Windows manual confirmation.
+5. **DP-09b — Windows shortcut icon metadata repair.** Hook ran but Finish page callback overwrote shortcut — see DP-09c.
+6. ~~**DP-09c — NSIS hook execution repair.**~~ **Complete — pushed.** `$NoShortcutMode = 1` prevents Finish page overwrite. Version 1.0.3. Pending Windows manual confirmation.
 6. **Create From workflow.**
 7. **METAR Builder.**
 8. **H6 History polish / integration closeout.**
@@ -428,7 +430,8 @@ The following workstreams should be treated as merged and complete for current p
 | DP-07 — Confirm and document Admin backup/restore coverage | Complete — pushed |
 | DP-08 — Version alignment and release build validation | Complete — pushed. Windows smoke test pending. |
 | DP-09 — Windows desktop icon packaging repair | Partial — runtime/taskbar icon fixed. Desktop shortcut remained blank. |
-| DP-09b — Windows shortcut icon metadata repair | Complete — pushed. Version 1.0.2. Windows manual confirmation pending. |
+| DP-09b — Windows shortcut icon metadata repair | Partial — hook ran; Finish page callback overwrote shortcut. |
+| DP-09c — NSIS hook execution repair | Complete — pushed. Version 1.0.3. Windows manual confirmation pending. |
 | UTC-first timing hardening | Complete baseline |
 | Day Timeline presentation tranche | Complete baseline |
 | Cancellation / deleted-strip lifecycle tranche | Complete |
@@ -449,19 +452,30 @@ The following workstreams should be treated as merged and complete for current p
 ### 6.1 Immediate next item
 
 ```text
-DP-09b — Windows manual smoke test (install 1.0.2 NSIS setup; run shortcut metadata check; confirm Flite icon in desktop shortcut, Start Menu, taskbar, Explorer)
+DP-09c — Windows manual smoke test (install 1.0.3 NSIS setup; confirm dp09c-hook-ran.txt in install dir; run shortcut metadata check; confirm Flite icon)
 ```
 
-DP-09 was partially successful: the runtime/taskbar icon now shows the Flite logo, but the installer-created desktop shortcut remained blank. Investigation showed that Tauri's default NSIS `CreateShortcut` call omits the icon argument entirely, leaving `IconLocation: ,0` (empty path, index 0). On some Windows configurations this does not fall back correctly to the target exe's icon.
+DP-09b did not fix the desktop shortcut. DP-09c investigation (reading the Tauri NSIS template source) identified the root cause:
 
-DP-09b fix: Added `src-tauri/nsis-hooks.nsh` containing a `NSIS_HOOK_POSTINSTALL` macro. This hook runs immediately after Tauri's default shortcut creation and deletes then recreates both the desktop shortcut and the Start Menu shortcut, passing the installed exe as the explicit `IconLocation`. Wired via `bundle.windows.nsis.installerHooks` in `tauri.conf.json`. Version bumped to 1.0.2.
+`NSIS_HOOK_POSTINSTALL` runs inside Section Install, BEFORE the MUI Finish page. In interactive mode, Tauri does NOT create the desktop shortcut in Section Install — it creates it via the Finish page "Create desktop shortcut" checkbox callback (`MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateOrUpdateDesktopShortcut`). This callback fires AFTER Section Install completes, so the Finish page was overwriting the DP-09b hook's explicit-icon shortcut.
 
-DP-09 root causes for reference:
-1. All ICO sizes were PNG-in-ICO format. Regenerated with raw BMP DIB for 16–128 px and PNG-in-ICO for 256 px to maximise cross-compilation (`windres`) compatibility.
-2. Tauri window config had no explicit `icon` field (invalid in Tauri v2 schema; reverted in DP-09A).
-3. Version 1.0.1 to force installer/shortcut cache refresh.
+DP-09c fix: The `NSIS_HOOK_POSTINSTALL` macro now:
+1. Creates the desktop shortcut with explicit `IconLocation` pointing to the installed exe.
+2. Sets `$NoShortcutMode = 1`. The Tauri `CreateOrUpdateDesktopShortcut` function checks this flag and returns early — the Finish page callback can no longer overwrite our shortcut.
+3. Recreates the Start Menu shortcut (which IS created before the hook) with the same explicit icon.
+4. Writes `$INSTDIR\dp09c-hook-ran.txt` as a diagnostic marker.
 
-If shortcut icon is still blank after installing 1.0.2, document whether: (a) the shortcut metadata shows the correct `IconLocation`, and (b) whether clearing `%LocalAppData%\IconCache.db` and restarting Explorer resolves the visual result. This distinguishes a genuine metadata fix from a Windows icon cache staleness issue.
+Version bumped to 1.0.3.
+
+Acceptance check (PowerShell after installing 1.0.3):
+```powershell
+# Confirm hook ran
+Test-Path "C:\Users\dmshs\AppData\Local\Vectair Flite\dp09c-hook-ran.txt"
+
+# Confirm shortcut metadata
+$link = (New-Object -ComObject WScript.Shell).CreateShortcut([System.Environment]::GetFolderPath('Desktop') + '\Vectair Flite.lnk')
+$link.IconLocation   # expected: C:\...\vectair-flite.exe,0
+```
 
 ### 6.2 Next productization sequence
 
@@ -470,7 +484,8 @@ DP-06 — Enable and smoke-test CSP after SheetJS is vendored        [Complete]
 DP-07 — Confirm and document Admin backup/restore coverage          [Complete]
 DP-08 — First full release build smoke test on Windows              [Build validated; Windows manual smoke test pending]
 DP-09 — Windows desktop icon packaging repair                       [Partial — runtime/taskbar fixed; shortcut blank]
-DP-09b — Windows shortcut icon metadata repair                      [Complete — pushed; Windows manual confirmation pending v1.0.2]
+DP-09b — Windows shortcut icon metadata repair                      [Partial — Finish page callback overwrote shortcut]
+DP-09c — NSIS hook execution repair ($NoShortcutMode fix)           [Complete — pushed; Windows manual confirmation pending v1.0.3]
 ```
 
 ### 6.3 Remaining V1 sequence
@@ -1554,7 +1569,8 @@ The current confirmed V1 required list is:
 8. ~~DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.~~ **Complete — pushed.**
 9. DP-08 — First full release build smoke test on Windows. **Version alignment + build validation complete — pushed. Windows manual smoke test pending.**
 10. DP-09 — Windows desktop icon packaging repair. **Partial — runtime/taskbar icon fixed. Desktop shortcut icon blank (see DP-09b).**
-11. ~~DP-09b — Windows shortcut icon metadata repair.~~ **Complete — pushed.** NSIS POSTINSTALL hook; explicit `IconLocation`; version 1.0.2. Windows manual confirmation pending.
+11. DP-09b — Windows shortcut icon metadata repair. **Partial — Finish page callback overwrote hook's shortcut (see DP-09c).**
+12. ~~DP-09c — NSIS hook execution repair.~~ **Complete — pushed.** `$NoShortcutMode = 1` blocks Finish page overwrite; version 1.0.3. Windows manual confirmation pending.
 13. Create From workflow.
 14. METAR Builder.
 15. H6 History polish / integration closeout.
