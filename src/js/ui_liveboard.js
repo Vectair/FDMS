@@ -1052,6 +1052,10 @@ function makeInputUppercase(inputElement) {
   });
 }
 
+function normOperationalText(value) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
 /**
  * Bind ZZZZ companion field show/hide behaviour.
  * When codeInput equals "ZZZZ" the companionInput is shown; otherwise hidden.
@@ -2004,8 +2008,8 @@ function readFormationFromModal(baseCallsign, countInputId, containerId, masterS
   const shared = {
     depAd:      (masterShared.depAd      || "").trim().toUpperCase(),
     arrAd:      (masterShared.arrAd      || "").trim().toUpperCase(),
-    reg:        (masterShared.reg        || "").trim(),
-    type:       (masterShared.type       || "").trim(),
+    reg:        normalizeEuCivilRegistration(masterShared.reg || ""),
+    type:       normOperationalText(masterShared.type),
     wtc:        (masterShared.wtc        || "").trim().toUpperCase(),
     flightType: masterShared.flightType  || "",
     tngCount:   masterShared.tngCount    || 0,
@@ -2016,11 +2020,11 @@ function readFormationFromModal(baseCallsign, countInputId, containerId, masterS
   const elements = [];
   for (let i = 0; i < count; i++) {
     const defaultCallsign = fmnElementCallsign(baseCallsign, i + 1);
-    const callsign           = container?.querySelector(`[data-el-callsign="${i}"]`)?.value?.trim() || defaultCallsign;
-    const underlyingCallsign = container?.querySelector(`[data-el-attr-cs="${i}"]`)?.value?.trim()  || "";
+    const callsign           = normOperationalText(container?.querySelector(`[data-el-callsign="${i}"]`)?.value) || defaultCallsign;
+    const underlyingCallsign = normOperationalText(container?.querySelector(`[data-el-attr-cs="${i}"]`)?.value);
     const pilotName          = container?.querySelector(`[data-el-pilot="${i}"]`)?.value?.trim()    || "";
-    const reg    = container?.querySelector(`[data-el-reg="${i}"]`)?.value?.trim()   || "";
-    const type   = container?.querySelector(`[data-el-type="${i}"]`)?.value?.trim()  || "";
+    const reg    = normalizeEuCivilRegistration(container?.querySelector(`[data-el-reg="${i}"]`)?.value || "");
+    const type   = normOperationalText(container?.querySelector(`[data-el-type="${i}"]`)?.value);
     const wtcRaw = container?.querySelector(`[data-el-wtc="${i}"]`)?.value?.trim().toUpperCase() || "";
     const depAdRaw = container?.querySelector(`[data-el-dep-ad="${i}"]`)?.value?.trim().toUpperCase() || "";
     const arrAdRaw = container?.querySelector(`[data-el-arr-ad="${i}"]`)?.value?.trim().toUpperCase() || "";
@@ -4789,8 +4793,8 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     let arrActual  = document.getElementById("newArrActual")?.value  || "";
     const pob = document.getElementById("newPob")?.value || "0";
     const tng = document.getElementById("newTng")?.value || "0";
-    const callsignCode = document.getElementById("newCallsignCode")?.value || "";
-    const flightNumber = document.getElementById("newFlightNumber")?.value || "";
+    const callsignCode = normOperationalText(document.getElementById("newCallsignCode")?.value);
+    const flightNumber = normOperationalText(document.getElementById("newFlightNumber")?.value);
     const callsign = callsignCode + flightNumber; // Combine for full callsign
 
     // Determine which field group is active (planned or actual)
@@ -4912,7 +4916,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     }
 
     // Get operator and popular name from VKB registration data
-    const regValue = document.getElementById("newReg")?.value || "";
+    const regValue = normalizeEuCivilRegistration(document.getElementById("newReg")?.value || "");
     const regData = lookupRegistration(regValue);
     const operator = regData ? (regData['OPERATOR'] || "") : "";
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
@@ -4921,7 +4925,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
     // WTC: manual select override wins; fall back to computed value
-    const aircraftType = document.getElementById("newType")?.value || "";
+    const aircraftType = normOperationalText(document.getElementById("newType")?.value);
     const selectedFlightType = document.getElementById("newFlightType")?.value || flightType;
     const wtcManual = (document.getElementById("newWtc")?.value || "").trim().toUpperCase();
     const wtcComputed = (() => {
@@ -4932,8 +4936,8 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     const wtc = wtcManual || wtcComputed;
 
     // Get departure and arrival location names
-    const depAd = document.getElementById("newDepAd")?.value || "";
-    const arrAd = document.getElementById("newArrAd")?.value || "";
+    const depAd = normOperationalText(document.getElementById("newDepAd")?.value);
+    const arrAd = normOperationalText(document.getElementById("newArrAd")?.value);
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
 
@@ -4954,14 +4958,14 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     // Priority is now a plain select; empty string or "-" means no priority
     const priorityLetterRaw = document.getElementById("priorityLetter")?.value || "";
     const priorityLetterValue = priorityLetterRaw === "-" ? "" : priorityLetterRaw;
-    const remarksValue = document.getElementById("rwRemarks")?.value || "";
-    const warningsValue = document.getElementById("rwWarnings")?.value || "";
+    const remarksValue = normOperationalText(document.getElementById("rwRemarks")?.value);
+    const warningsValue = normOperationalText(document.getElementById("rwWarnings")?.value);
     const notesValue = regData ? (regData['NOTES'] || "") : ""; // Keep notes from VKB for backward compatibility
     const osCountValue = parseInt(document.getElementById("newOsCount")?.value || "0", 10);
     const fisCountValue = parseInt(document.getElementById("newFisCount")?.value || ((document.getElementById("newFlightType")?.value || flightType) === "OVR" ? "1" : "0"), 10);
-    const squawkValue = document.getElementById("atcSquawk")?.value || "";
-    const routeValue = document.getElementById("atcRoute")?.value || "";
-    const clearanceValue = document.getElementById("atcClearance")?.value || "";
+    const squawkValue = normOperationalText(document.getElementById("atcSquawk")?.value);
+    const routeValue = normOperationalText(document.getElementById("atcRoute")?.value);
+    const clearanceValue = normOperationalText(document.getElementById("atcClearance")?.value);
 
     // Active mode: force ACTIVE status and infer missing actual time(s) from system clock
     if (_timingMode === "active") {
@@ -5009,7 +5013,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       arrPlanned: arrPlanned,
       arrActual: arrActual,
       dof: dof,
-      rules: document.getElementById("newRules")?.value || "VFR",
+      rules: normOperationalText(document.getElementById("newRules")?.value) || "VFR",
       flightType: document.getElementById("newFlightType")?.value || flightType,
       isLocal: (document.getElementById("newFlightType")?.value || flightType) === "LOC",
       tngCount: parseInt(tng, 10),
@@ -5017,7 +5021,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       fisCount: fisCountValue,
       egowCode: egowCode,
       egowDesc: "",
-      unitCode: document.getElementById("newUnitCode")?.value || "",
+      unitCode: normOperationalText(document.getElementById("newUnitCode")?.value),
       unitDesc: "",
       captain: document.getElementById("newCaptain")?.value || "",
       pob: parseInt(pob, 10),
@@ -5029,9 +5033,9 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       route: routeValue,
       clearance: clearanceValue,
       durationMinutes: (() => { const v = parseInt(document.getElementById("newDuration")?.value || "", 10); return v > 0 ? v : null; })(),
-      depAdText: document.getElementById("newDepAdText")?.value || "",
-      arrAdText: document.getElementById("newArrAdText")?.value || "",
-      aircraftTypeText: document.getElementById("newAircraftTypeText")?.value || "",
+      depAdText: normOperationalText(document.getElementById("newDepAdText")?.value),
+      arrAdText: normOperationalText(document.getElementById("newArrAdText")?.value),
+      aircraftTypeText: normOperationalText(document.getElementById("newAircraftTypeText")?.value),
       outcomeStatus: 'NORMAL',
       outcomeReason: '',
       actualDestinationAd: '',
@@ -5085,7 +5089,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     const dof = document.getElementById("newDOF")?.value || getTodayDateString();
     let depPlanned = document.getElementById("newDepPlanned")?.value || "";
     let arrPlanned = document.getElementById("newArrPlanned")?.value || "";
-    const callsignCode = document.getElementById("newCallsignCode")?.value || "";
+    const callsignCode = normOperationalText(document.getElementById("newCallsignCode")?.value);
 
     // Run basic validation
     const dofValidation = validateDate(dof);
@@ -5139,30 +5143,30 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     // Get all other form values (same as save handler)
     const pob = document.getElementById("newPob")?.value || "0";
     const tng = document.getElementById("newTng")?.value || "0";
-    const flightNumber = document.getElementById("newFlightNumber")?.value || "";
+    const flightNumber = normOperationalText(document.getElementById("newFlightNumber")?.value);
     const callsign = callsignCode + flightNumber;
-    const regValue = document.getElementById("newReg")?.value || "";
+    const regValue = normalizeEuCivilRegistration(document.getElementById("newReg")?.value || "");
     const regData = lookupRegistration(regValue);
     const operator = regData ? (regData['OPERATOR'] || "") : "";
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
-    const aircraftType = document.getElementById("newType")?.value || "";
+    const aircraftType = normOperationalText(document.getElementById("newType")?.value);
     const selectedFlightType = document.getElementById("newFlightType")?.value || flightType;
     const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
-    const depAd = document.getElementById("newDepAd")?.value || "";
-    const arrAd = document.getElementById("newArrAd")?.value || "";
+    const depAd = normOperationalText(document.getElementById("newDepAd")?.value);
+    const arrAd = normOperationalText(document.getElementById("newArrAd")?.value);
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
     const priorityLetterRaw = document.getElementById("priorityLetter")?.value || "";
     const priorityLetterValue = priorityLetterRaw === "-" ? "" : priorityLetterRaw;
-    const remarksValue = document.getElementById("rwRemarks")?.value || "";
-    const warningsValue = document.getElementById("rwWarnings")?.value || "";
+    const remarksValue = normOperationalText(document.getElementById("rwRemarks")?.value);
+    const warningsValue = normOperationalText(document.getElementById("rwWarnings")?.value);
     const notesValue = regData ? (regData['NOTES'] || "") : "";
     const osCountValue = parseInt(document.getElementById("newOsCount")?.value || "0", 10);
     const fisCountValue = parseInt(document.getElementById("newFisCount")?.value || (selectedFlightType === "OVR" ? "1" : "0"), 10);
-    const squawkValue = document.getElementById("atcSquawk")?.value || "";
-    const routeValue = document.getElementById("atcRoute")?.value || "";
-    const clearanceValue = document.getElementById("atcClearance")?.value || "";
+    const squawkValue = normOperationalText(document.getElementById("atcSquawk")?.value);
+    const routeValue = normOperationalText(document.getElementById("atcRoute")?.value);
+    const clearanceValue = normOperationalText(document.getElementById("atcClearance")?.value);
 
     // Create movement with COMPLETED status and actual times
     let movement = {
@@ -5184,7 +5188,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       arrPlanned: arrPlanned,
       arrActual: scArrActual || arrPlanned || currentTime,
       dof: dof,
-      rules: document.getElementById("newRules")?.value || "VFR",
+      rules: normOperationalText(document.getElementById("newRules")?.value) || "VFR",
       flightType: selectedFlightType,
       isLocal: selectedFlightType === "LOC",
       tngCount: parseInt(tng, 10),
@@ -5192,7 +5196,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       fisCount: fisCountValue,
       egowCode: egowCode,
       egowDesc: "",
-      unitCode: document.getElementById("newUnitCode")?.value || "",
+      unitCode: normOperationalText(document.getElementById("newUnitCode")?.value),
       unitDesc: "",
       captain: "",
       pob: parseInt(pob, 10),
@@ -5826,8 +5830,8 @@ function openNewLocFlightModal() {
     let arrActual  = document.getElementById("newLocEndActual")?.value  || "";
     const pob = document.getElementById("newLocPob")?.value || "0";
     const tng = document.getElementById("newLocTng")?.value || "0";
-    const callsignCode = document.getElementById("newLocCallsignCode")?.value || "";
-    const flightNumber = document.getElementById("newLocFlightNumber")?.value || "";
+    const callsignCode = normOperationalText(document.getElementById("newLocCallsignCode")?.value);
+    const flightNumber = normOperationalText(document.getElementById("newLocFlightNumber")?.value);
     const callsign = callsignCode + flightNumber;
 
     // Determine which field group is active (planned or actual)
@@ -5908,11 +5912,11 @@ function openNewLocFlightModal() {
     const locFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer", locFormationShared, newLocFormationDraft);
     if (locFormation?._error) { showToast(locFormation.message, 'error'); return; }
 
-    const regValue = document.getElementById("newLocReg")?.value || "";
+    const regValue = normalizeEuCivilRegistration(document.getElementById("newLocReg")?.value || "");
     const regData = lookupRegistration(regValue);
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
-    const aircraftType = document.getElementById("newLocType")?.value || "";
+    const aircraftType = normOperationalText(document.getElementById("newLocType")?.value);
     // WTC: manual select override wins; fall back to computed value
     const wtcManual = (document.getElementById("newLocWtc")?.value || "").trim().toUpperCase();
     const wtcComputed = (() => {
@@ -5934,11 +5938,11 @@ function openNewLocFlightModal() {
 
     const priorityLetterRaw = document.getElementById("locPriorityLetter")?.value || "";
     const priorityLetterValue = priorityLetterRaw === "-" ? "" : priorityLetterRaw;
-    const remarksValue = document.getElementById("newLocRemarks")?.value || "";
-    const warningsValue = document.getElementById("newLocWarnings")?.value || "";
-    const squawkValue = document.getElementById("newLocSquawk")?.value || "";
-    const routeValue = document.getElementById("newLocRoute")?.value || "";
-    const clearanceValue = document.getElementById("newLocClearance")?.value || "";
+    const remarksValue = normOperationalText(document.getElementById("newLocRemarks")?.value);
+    const warningsValue = normOperationalText(document.getElementById("newLocWarnings")?.value);
+    const squawkValue = normOperationalText(document.getElementById("newLocSquawk")?.value);
+    const routeValue = normOperationalText(document.getElementById("newLocRoute")?.value);
+    const clearanceValue = normOperationalText(document.getElementById("newLocClearance")?.value);
 
     // Active mode: force ACTIVE status and infer missing actual time(s) from system clock
     if (_locTimingMode === "active") {
@@ -5978,7 +5982,7 @@ function openNewLocFlightModal() {
       arrPlanned: arrPlanned,
       arrActual: arrActual,
       dof: dof,
-      rules: document.getElementById("newLocRules")?.value || "VFR",
+      rules: normOperationalText(document.getElementById("newLocRules")?.value) || "VFR",
       flightType: "LOC",
       isLocal: true,
       tngCount: parseInt(tng, 10),
@@ -5986,7 +5990,7 @@ function openNewLocFlightModal() {
       fisCount: fisCountValue,
       egowCode: egowCode,
       egowDesc: "",
-      unitCode: document.getElementById("newLocUnitCode")?.value || "",
+      unitCode: normOperationalText(document.getElementById("newLocUnitCode")?.value),
       unitDesc: "",
       captain: document.getElementById("newLocCaptain")?.value || "",
       pob: parseInt(pob, 10),
@@ -6023,8 +6027,8 @@ function openNewLocFlightModal() {
     let arrPlanned = document.getElementById("newLocEnd")?.value || "";
     const pob = document.getElementById("newLocPob")?.value || "0";
     const tng = document.getElementById("newLocTng")?.value || "0";
-    const callsignCode = document.getElementById("newLocCallsignCode")?.value || "";
-    const flightNumber = document.getElementById("newLocFlightNumber")?.value || "";
+    const callsignCode = normOperationalText(document.getElementById("newLocCallsignCode")?.value);
+    const flightNumber = normOperationalText(document.getElementById("newLocFlightNumber")?.value);
     const callsign = callsignCode + flightNumber;
 
     const dofValidation = validateDate(dof);
@@ -6080,11 +6084,11 @@ function openNewLocFlightModal() {
     const locCpFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer", locCpFormationShared, newLocFormationDraft);
     if (locCpFormation?._error) { showToast(locCpFormation.message, 'error'); return; }
 
-    const regValue = document.getElementById("newLocReg")?.value || "";
+    const regValue = normalizeEuCivilRegistration(document.getElementById("newLocReg")?.value || "");
     const regData = lookupRegistration(regValue);
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
-    const aircraftType = document.getElementById("newLocType")?.value || "";
+    const aircraftType = normOperationalText(document.getElementById("newLocType")?.value);
     // WTC: manual select override wins; fall back to computed value
     const wtcManual = (document.getElementById("newLocWtc")?.value || "").trim().toUpperCase();
     const wtcComputed = (() => {
@@ -6106,11 +6110,11 @@ function openNewLocFlightModal() {
 
     const locCpPriorityRaw = document.getElementById("locPriorityLetter")?.value || "";
     const priorityLetterValue = locCpPriorityRaw === "-" ? "" : locCpPriorityRaw;
-    const remarksValue = document.getElementById("newLocRemarks")?.value || "";
-    const warningsValue = document.getElementById("newLocWarnings")?.value || "";
-    const squawkValue = document.getElementById("newLocSquawk")?.value || "";
-    const routeValue = document.getElementById("newLocRoute")?.value || "";
-    const clearanceValue = document.getElementById("newLocClearance")?.value || "";
+    const remarksValue = normOperationalText(document.getElementById("newLocRemarks")?.value);
+    const warningsValue = normOperationalText(document.getElementById("newLocWarnings")?.value);
+    const squawkValue = normOperationalText(document.getElementById("newLocSquawk")?.value);
+    const routeValue = normOperationalText(document.getElementById("newLocRoute")?.value);
+    const clearanceValue = normOperationalText(document.getElementById("newLocClearance")?.value);
 
     let movement = {
       status: "COMPLETED",
@@ -6131,7 +6135,7 @@ function openNewLocFlightModal() {
       arrPlanned: arrPlanned,
       arrActual: locScArrActual || arrPlanned || currentTime,
       dof: dof,
-      rules: document.getElementById("newLocRules")?.value || "VFR",
+      rules: normOperationalText(document.getElementById("newLocRules")?.value) || "VFR",
       flightType: "LOC",
       isLocal: true,
       tngCount: parseInt(tng, 10),
@@ -6139,7 +6143,7 @@ function openNewLocFlightModal() {
       fisCount: fisCountValue,
       egowCode: egowCode,
       egowDesc: "",
-      unitCode: document.getElementById("newLocUnitCode")?.value || "",
+      unitCode: normOperationalText(document.getElementById("newLocUnitCode")?.value),
       unitDesc: "",
       captain: document.getElementById("newLocCaptain")?.value || "",
       pob: parseInt(pob, 10),
@@ -6836,8 +6840,8 @@ function openEditMovementModal(m) {
     let arrActual = document.getElementById("editArrActual")?.value || "";
     const pob = document.getElementById("editPob")?.value || "0";
     const tng = document.getElementById("editTng")?.value || "0";
-    const callsignCode = document.getElementById("editCallsignCode")?.value || "";
-    const flightNumber = document.getElementById("editFlightNumber")?.value || "";
+    const callsignCode = normOperationalText(document.getElementById("editCallsignCode")?.value);
+    const flightNumber = normOperationalText(document.getElementById("editFlightNumber")?.value);
     const callsign = callsignCode + flightNumber; // Combine for full callsign
 
     // Validate inputs
@@ -6934,32 +6938,32 @@ function openEditMovementModal(m) {
     }
 
     // Get WTC based on aircraft type and flight type
-    const aircraftType = document.getElementById("editType")?.value || "";
+    const aircraftType = normOperationalText(document.getElementById("editType")?.value);
     const selectedFlightType = document.getElementById("editFlightType")?.value || flightType;
     const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
 
     // Get voice callsign for display
-    const regValue = document.getElementById("editReg")?.value || "";
+    const regValue = normalizeEuCivilRegistration(document.getElementById("editReg")?.value || "");
     const regData = lookupRegistration(regValue);
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
     // Get departure and arrival location names
-    const depAd = document.getElementById("editDepAd")?.value || "";
-    const arrAd = document.getElementById("editArrAd")?.value || "";
+    const depAd = normOperationalText(document.getElementById("editDepAd")?.value);
+    const arrAd = normOperationalText(document.getElementById("editArrAd")?.value);
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
 
     // Get new optional fields
     const editPriorityLetterRaw = document.getElementById("editPriorityLetter")?.value || "";
     const editPriorityLetterValue = editPriorityLetterRaw === "-" ? "" : editPriorityLetterRaw;
-    const editRemarksValue = document.getElementById("editRwRemarks")?.value || "";
-    const editWarningsValue = document.getElementById("editRwWarnings")?.value || "";
+    const editRemarksValue = normOperationalText(document.getElementById("editRwRemarks")?.value);
+    const editWarningsValue = normOperationalText(document.getElementById("editRwWarnings")?.value);
     const editOsCountValue = parseInt(document.getElementById("editOsCount")?.value || "0", 10);
     const editFisCountValue = parseInt(document.getElementById("editFisCount")?.value || "0", 10);
-    const editSquawkValue = document.getElementById("editAtcSquawk")?.value || "";
-    const editRouteValue = document.getElementById("editAtcRoute")?.value || "";
-    const editClearanceValue = document.getElementById("editAtcClearance")?.value || "";
+    const editSquawkValue = normOperationalText(document.getElementById("editAtcSquawk")?.value);
+    const editRouteValue = normOperationalText(document.getElementById("editAtcRoute")?.value);
+    const editClearanceValue = normOperationalText(document.getElementById("editAtcClearance")?.value);
 
     // Auto-activate strip when ATD is entered for PLANNED DEP/LOC flights
     let newStatus = m.status;
@@ -6980,7 +6984,7 @@ function openEditMovementModal(m) {
       popularName: popularName,
       wtc: wtc,
       flightType: selectedFlightType,
-      rules: document.getElementById("editRules")?.value || "VFR",
+      rules: normOperationalText(document.getElementById("editRules")?.value) || "VFR",
       depAd: depAd,
       depName: depName,
       arrAd: arrAd,
@@ -6995,8 +6999,8 @@ function openEditMovementModal(m) {
       pob: parseInt(pob, 10),
       osCount: editOsCountValue,
       fisCount: editFisCountValue,
-      egowCode: document.getElementById("editEgowCode")?.value || "",
-      unitCode: document.getElementById("editUnitCode")?.value || "",
+      egowCode: normOperationalText(document.getElementById("editEgowCode")?.value),
+      unitCode: normOperationalText(document.getElementById("editUnitCode")?.value),
       captain: document.getElementById("editCaptain")?.value || "",
       priorityLetter: editPriorityLetterValue,
       remarks: editRemarksValue,
@@ -7004,13 +7008,13 @@ function openEditMovementModal(m) {
       squawk: editSquawkValue,
       route: editRouteValue,
       clearance: editClearanceValue,
-      depAdText: document.getElementById("editDepAdText")?.value?.trim() || "",
-      arrAdText: document.getElementById("editArrAdText")?.value?.trim() || "",
-      aircraftTypeText: document.getElementById("editAircraftTypeText")?.value?.trim() || "",
+      depAdText: normOperationalText(document.getElementById("editDepAdText")?.value),
+      arrAdText: normOperationalText(document.getElementById("editArrAdText")?.value),
+      aircraftTypeText: normOperationalText(document.getElementById("editAircraftTypeText")?.value),
       outcomeStatus: document.getElementById("editOutcomeStatus")?.value || 'NORMAL',
-      outcomeReason: document.getElementById("editOutcomeReason")?.value || "",
-      actualDestinationAd: document.getElementById("editActualDestAd")?.value || "",
-      actualDestinationText: document.getElementById("editActualDestText")?.value?.trim() || "",
+      outcomeReason: normOperationalText(document.getElementById("editOutcomeReason")?.value),
+      actualDestinationAd: normOperationalText(document.getElementById("editActualDestAd")?.value),
+      actualDestinationText: normOperationalText(document.getElementById("editActualDestText")?.value),
       outcomeTime: document.getElementById("editOutcomeTime")?.value || "",
     };
 
@@ -7109,8 +7113,8 @@ function openEditMovementModal(m) {
     let arrActual = document.getElementById("editArrActual")?.value || "";
     const pob = document.getElementById("editPob")?.value || "0";
     const tng = document.getElementById("editTng")?.value || "0";
-    const callsignCode = document.getElementById("editCallsignCode")?.value || "";
-    const flightNumber = document.getElementById("editFlightNumber")?.value || "";
+    const callsignCode = normOperationalText(document.getElementById("editCallsignCode")?.value);
+    const flightNumber = normOperationalText(document.getElementById("editFlightNumber")?.value);
     const callsign = callsignCode + flightNumber;
 
     // Basic validation
@@ -7156,13 +7160,13 @@ function openEditMovementModal(m) {
 
     // Read outcome fields — these govern whether actual times are required/invented
     const scOutcomeStatus     = document.getElementById("editOutcomeStatus")?.value || 'NORMAL';
-    const scOutcomeReason     = document.getElementById("editOutcomeReason")?.value || "";
-    const scActualDestAd      = document.getElementById("editActualDestAd")?.value || "";
-    const scActualDestText    = document.getElementById("editActualDestText")?.value?.trim() || "";
+    const scOutcomeReason     = normOperationalText(document.getElementById("editOutcomeReason")?.value);
+    const scActualDestAd      = normOperationalText(document.getElementById("editActualDestAd")?.value);
+    const scActualDestText    = normOperationalText(document.getElementById("editActualDestText")?.value);
     const scOutcomeTime       = document.getElementById("editOutcomeTime")?.value || "";
-    const scDepAdText         = document.getElementById("editDepAdText")?.value?.trim() || "";
-    const scArrAdText         = document.getElementById("editArrAdText")?.value?.trim() || "";
-    const scAircraftTypeText  = document.getElementById("editAircraftTypeText")?.value?.trim() || "";
+    const scDepAdText         = normOperationalText(document.getElementById("editDepAdText")?.value);
+    const scArrAdText         = normOperationalText(document.getElementById("editArrAdText")?.value);
+    const scAircraftTypeText  = normOperationalText(document.getElementById("editAircraftTypeText")?.value);
 
     // Abnormal closure rules — only fill in actual times for NORMAL outcome
     // DIVERTED / CHANGED / CANCELLED: do not fabricate EGOW arrival times
@@ -7176,28 +7180,28 @@ function openEditMovementModal(m) {
     // For abnormal outcomes: leave depActual/arrActual as whatever was entered (may be blank)
 
     // Get VKB data
-    const regValue = document.getElementById("editReg")?.value || "";
+    const regValue = normalizeEuCivilRegistration(document.getElementById("editReg")?.value || "");
     const regData = lookupRegistration(regValue);
     const operator = regData ? (regData['OPERATOR'] || "") : "";
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
-    const aircraftType = document.getElementById("editType")?.value || "";
+    const aircraftType = normOperationalText(document.getElementById("editType")?.value);
     const selectedFlightType = document.getElementById("editFlightType")?.value || m.flightType;
     const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
-    const depAd = document.getElementById("editDepAd")?.value || "";
-    const arrAd = document.getElementById("editArrAd")?.value || "";
+    const depAd = normOperationalText(document.getElementById("editDepAd")?.value);
+    const arrAd = normOperationalText(document.getElementById("editArrAd")?.value);
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
 
     const editCpPriorityRaw = document.getElementById("editPriorityLetter")?.value || "";
     const editPriorityLetterValue = editCpPriorityRaw === "-" ? "" : editCpPriorityRaw;
-    const editRemarksValue = document.getElementById("editRwRemarks")?.value || "";
-    const editWarningsValue = document.getElementById("editRwWarnings")?.value || "";
+    const editRemarksValue = normOperationalText(document.getElementById("editRwRemarks")?.value);
+    const editWarningsValue = normOperationalText(document.getElementById("editRwWarnings")?.value);
     const editOsCountValue = parseInt(document.getElementById("editOsCount")?.value || "0", 10);
     const editFisCountValue = parseInt(document.getElementById("editFisCount")?.value || "0", 10);
-    const editSquawkValue = document.getElementById("editAtcSquawk")?.value || "";
-    const editRouteValue = document.getElementById("editAtcRoute")?.value || "";
-    const editClearanceValue = document.getElementById("editAtcClearance")?.value || "";
+    const editSquawkValue = normOperationalText(document.getElementById("editAtcSquawk")?.value);
+    const editRouteValue = normOperationalText(document.getElementById("editAtcRoute")?.value);
+    const editClearanceValue = normOperationalText(document.getElementById("editAtcClearance")?.value);
 
     const saveCpDurationRaw = parseInt(document.getElementById("editDuration")?.value || "", 10);
     const updates = {
@@ -7210,7 +7214,7 @@ function openEditMovementModal(m) {
       popularName: popularName,
       wtc: wtc,
       flightType: selectedFlightType,
-      rules: document.getElementById("editRules")?.value || "VFR",
+      rules: normOperationalText(document.getElementById("editRules")?.value) || "VFR",
       depAd: depAd,
       depName: depName,
       arrAd: arrAd,
@@ -7226,7 +7230,7 @@ function openEditMovementModal(m) {
       osCount: editOsCountValue,
       fisCount: editFisCountValue,
       egowCode: egowCode,
-      unitCode: document.getElementById("editUnitCode")?.value || "",
+      unitCode: normOperationalText(document.getElementById("editUnitCode")?.value),
       captain: document.getElementById("editCaptain")?.value || "",
       priorityLetter: editPriorityLetterValue,
       remarks: editRemarksValue,
@@ -7455,7 +7459,7 @@ function openDuplicateMovementModal(m) {
     let arrActual  = document.getElementById("dupArrActual")?.value  || "";
     const pob = document.getElementById("dupPob")?.value || "0";
     const tng = document.getElementById("dupTng")?.value || "0";
-    const callsign = document.getElementById("dupCallsign")?.value || "";
+    const callsign = normOperationalText(document.getElementById("dupCallsign")?.value);
 
     // Validate inputs
     const dofValidation = validateDate(dof);
@@ -7520,19 +7524,19 @@ function openDuplicateMovementModal(m) {
     }
 
     // Get voice callsign for display (only if different from contraction/registration)
-    const regValue = document.getElementById("dupReg")?.value || "";
+    const regValue = normalizeEuCivilRegistration(document.getElementById("dupReg")?.value || "");
     const regData = lookupRegistration(regValue);
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
     // Get WTC based on aircraft type and flight type
-    const aircraftType = document.getElementById("dupType")?.value || "";
+    const aircraftType = normOperationalText(document.getElementById("dupType")?.value);
     const selectedFlightType = document.getElementById("dupFlightType")?.value || flightType;
     const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
 
     // Get departure and arrival location names
-    const depAd = document.getElementById("dupDepAd")?.value || "";
-    const arrAd = document.getElementById("dupArrAd")?.value || "";
+    const depAd = normOperationalText(document.getElementById("dupDepAd")?.value);
+    const arrAd = normOperationalText(document.getElementById("dupArrAd")?.value);
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
 
@@ -7549,7 +7553,7 @@ function openDuplicateMovementModal(m) {
       callsignCode: callsign,
       callsignLabel: m.callsignLabel || "",
       callsignVoice: voiceCallsign,
-      registration: document.getElementById("dupReg")?.value || "",
+      registration: regValue,
       operator: operator || m.operator || "",
       type: aircraftType,
       popularName: popularName,
@@ -7564,24 +7568,24 @@ function openDuplicateMovementModal(m) {
       arrActual: arrActual,
       dof: dof,
       durationMinutes: Number.isFinite(dupDurationRaw) && dupDurationRaw > 0 ? dupDurationRaw : null,
-      rules: document.getElementById("dupRules")?.value || m.rules || "VFR",
+      rules: normOperationalText(document.getElementById("dupRules")?.value) || normOperationalText(m.rules) || "VFR",
       flightType: selectedFlightType,
       isLocal: (document.getElementById("dupFlightType")?.value || flightType) === "LOC",
       tngCount: parseInt(tng, 10),
       osCount: m.osCount || 0,
       fisCount: (document.getElementById("dupFlightType")?.value || m.flightType) === "OVR" ? 1 : 0,
-      egowCode: m.egowCode || "",
+      egowCode: normOperationalText(m.egowCode),
       egowDesc: m.egowDesc || "",
-      unitCode: m.unitCode || "",
+      unitCode: normOperationalText(m.unitCode),
       unitDesc: m.unitDesc || "",
       captain: m.captain || "",
       pob: parseInt(pob, 10),
-      remarks: document.getElementById("dupRemarks")?.value || "",
-      warnings: warnings || m.warnings || "",
+      remarks: normOperationalText(document.getElementById("dupRemarks")?.value),
+      warnings: normOperationalText(warnings || m.warnings),
       notes: notes || m.notes || "",
-      squawk: m.squawk || "",
-      route: m.route || "",
-      clearance: m.clearance || "",
+      squawk: normOperationalText(m.squawk),
+      route: normOperationalText(m.route),
+      clearance: normOperationalText(m.clearance),
       // Copy formation structure but reset all elements to PLANNED with no actual times
       formation: m.formation && Array.isArray(m.formation.elements) && m.formation.elements.length > 0
         ? (() => {
