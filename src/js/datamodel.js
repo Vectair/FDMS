@@ -90,7 +90,11 @@ const defaultConfig = {
   showDepEstimatedTimesOnStrip: true, // DEP: show ETA/ATA on strip when no actual yet
   showArrEstimatedTimesOnStrip: true, // ARR: show ETD/ETA on strip when no actual yet
   showLocEstimatedTimesOnStrip: true, // LOC: show ETA/ATA on strip when no actual yet
-  showOvrEstimatedTimesOnStrip: true  // OVR: show ELFT on strip when no actual yet
+  showOvrEstimatedTimesOnStrip: true,  // OVR: show ELFT on strip when no actual yet
+  // Historic Strip Board filter configuration (HIST-FILTER-UX-001)
+  historyStripBoardDefaultPeriod: "today",
+  historyStripBoardShowAdditionalFilters: true,
+  historyStripBoardVisibleFilters: ["text", "callsign", "egowCode", "unitCode"],
 };
 
 // Configuration state

@@ -4135,6 +4135,26 @@ tr.strip.ft-ovr > td {
   }
 }
 
+/* HIST-FILTER-UX-001: Compact Historic Strip Board filter panel */
+.history-filter-panel-compact {
+  margin: 8px 0 10px;
+}
+
+.history-filter-grid-compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  align-items: end;
+}
+
+.history-filter-actions,
+.history-strip-filter-admin-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 /* H5: Movement History Search / Table view */
 .history-search-panel {
   margin-bottom: 10px;

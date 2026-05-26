@@ -8315,6 +8315,40 @@ const HISTORY_FILTER_IDS = {
   arrAd:        "historyFilterArrAd",
 };
 
+const HISTORY_STRIP_FILTER_KEYS = [
+  "text", "callsign", "registration", "pilot", "aircraftType",
+  "egowCode", "unitCode", "wtc", "flightType", "depAd", "arrAd"
+];
+
+const DEFAULT_HISTORY_STRIP_FILTERS = ["text", "callsign", "egowCode", "unitCode"];
+
+function getHistoryStripBoardVisibleFilters() {
+  const cfg = getConfig();
+  const configured = Array.isArray(cfg.historyStripBoardVisibleFilters)
+    ? cfg.historyStripBoardVisibleFilters
+    : DEFAULT_HISTORY_STRIP_FILTERS;
+  return configured.filter(k => HISTORY_STRIP_FILTER_KEYS.includes(k));
+}
+
+export function applyHistoryStripBoardFilterVisibility() {
+  const visible = new Set(getHistoryStripBoardVisibleFilters());
+  document.querySelectorAll("[data-history-filter-field]").forEach(el => {
+    const key = el.dataset.historyFilterField;
+    el.hidden = !visible.has(key);
+  });
+  clearHiddenHistoryStripBoardFilters();
+}
+
+function clearHiddenHistoryStripBoardFilters() {
+  const visible = new Set(getHistoryStripBoardVisibleFilters());
+  for (const [key, id] of Object.entries(HISTORY_FILTER_IDS)) {
+    if (!visible.has(key)) {
+      const el = byId(id);
+      if (el) el.value = "";
+    }
+  }
+}
+
 function getHistoryFilterValues() {
   const v = {};
   for (const [key, id] of Object.entries(HISTORY_FILTER_IDS)) {
@@ -8957,6 +8991,16 @@ function initHistoryFilters() {
       }
       renderHistoryBoard();
     });
+  }
+
+  // Apply config-driven filter visibility (HIST-FILTER-UX-001)
+  applyHistoryStripBoardFilterVisibility();
+
+  // Set default time period from config once; do not override operator's in-session choice
+  const periodSelect = byId("historyTimePeriod");
+  if (periodSelect && !periodSelect.dataset.configInitialised) {
+    periodSelect.value = getConfig().historyStripBoardDefaultPeriod || "today";
+    periodSelect.dataset.configInitialised = "true";
   }
 }
 

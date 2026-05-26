@@ -16,7 +16,8 @@ import {
   initCancelledSortiesLog,
   initDeletedStripsLog,
   renderDeletedStripsLog,
-  calculateLiveBoardSummaryStats
+  calculateLiveBoardSummaryStats,
+  applyHistoryStripBoardFilterVisibility
 } from "./ui_liveboard.js";
 
 import {
@@ -1197,6 +1198,10 @@ function initAdminPanelHandlers() {
   const configHistoryShowEmergencyAlerts = document.getElementById("configHistoryShowEmergencyAlerts");
   const configHistoryShowCallsignAlerts = document.getElementById("configHistoryShowCallsignAlerts");
   const configHistoryShowWtcAlerts = document.getElementById("configHistoryShowWtcAlerts");
+  // Historic Strip Board filter settings (HIST-FILTER-UX-001)
+  const configHistoryStripBoardDefaultPeriod = document.getElementById("configHistoryStripBoardDefaultPeriod");
+  const configHistoryStripBoardShowAdditionalFilters = document.getElementById("configHistoryStripBoardShowAdditionalFilters");
+  const historyStripBoardFilterOptions = document.getElementById("historyStripBoardFilterOptions");
   // Timeline settings
   const configTimelineEnabled = document.getElementById("configTimelineEnabled");
   const configTimelineStartHour = document.getElementById("configTimelineStartHour");
@@ -1223,6 +1228,13 @@ function initAdminPanelHandlers() {
     'configAutoActivateLocEnabled', 'configAutoActivateOvrEnabled',
     'configHistoryShowTimeAlerts', 'configHistoryShowEmergencyAlerts',
     'configHistoryShowCallsignAlerts', 'configHistoryShowWtcAlerts',
+    'configHistoryStripBoardShowAdditionalFilters',
+    'configHistoryStripFilter_text', 'configHistoryStripFilter_callsign',
+    'configHistoryStripFilter_egowCode', 'configHistoryStripFilter_unitCode',
+    'configHistoryStripFilter_registration', 'configHistoryStripFilter_pilot',
+    'configHistoryStripFilter_aircraftType', 'configHistoryStripFilter_wtc',
+    'configHistoryStripFilter_flightType', 'configHistoryStripFilter_depAd',
+    'configHistoryStripFilter_arrAd',
     'configTimelineEnabled',
     'configTimelineArrDepShared',
     'configTimelineShowLocalRuler',
@@ -1239,7 +1251,8 @@ function initAdminPanelHandlers() {
     'configTimelineStartHour', 'configTimelineEndHour',
     'configTimelineSharedTokenMinutes', 'configTimelineDepTokenMinutes', 'configTimelineArrTokenMinutes',
     'configDepToArrOffset', 'configArrToDepOffset',
-    'configNewFormUtcTogglePolicy'
+    'configNewFormUtcTogglePolicy',
+    'configHistoryStripBoardDefaultPeriod'
   ];
   // Radio button groups tracked for dirty state and snapshot (separate from checkboxes/values)
   const RADIO_GROUPS = ['tlSharedMode', 'tlDepMode', 'tlArrMode'];
@@ -1334,6 +1347,15 @@ function initAdminPanelHandlers() {
     }
   }
 
+  function syncAdminHistoryStripBoardUi() {
+    if (!historyStripBoardFilterOptions || !configHistoryStripBoardShowAdditionalFilters) return;
+    const show = configHistoryStripBoardShowAdditionalFilters.checked;
+    historyStripBoardFilterOptions.hidden = !show;
+    document.querySelectorAll("[data-history-strip-filter-option]").forEach(cb => {
+      cb.disabled = !show;
+    });
+  }
+
   // Load current config values
   const currentConfig = getConfig();
   if (configDepOffset) configDepOffset.value = currentConfig.depOffsetMinutes;
@@ -1382,6 +1404,25 @@ function initAdminPanelHandlers() {
   if (configHistoryShowEmergencyAlerts) configHistoryShowEmergencyAlerts.checked = currentConfig.historyShowEmergencyAlerts !== false;
   if (configHistoryShowCallsignAlerts) configHistoryShowCallsignAlerts.checked = currentConfig.historyShowCallsignAlerts || false;
   if (configHistoryShowWtcAlerts) configHistoryShowWtcAlerts.checked = currentConfig.historyShowWtcAlerts || false;
+
+  // Load Historic Strip Board settings (HIST-FILTER-UX-001)
+  if (configHistoryStripBoardDefaultPeriod) {
+    configHistoryStripBoardDefaultPeriod.value = currentConfig.historyStripBoardDefaultPeriod || "today";
+  }
+  if (configHistoryStripBoardShowAdditionalFilters) {
+    configHistoryStripBoardShowAdditionalFilters.checked = currentConfig.historyStripBoardShowAdditionalFilters !== false;
+  }
+  {
+    const visibleFilters = new Set(
+      Array.isArray(currentConfig.historyStripBoardVisibleFilters)
+        ? currentConfig.historyStripBoardVisibleFilters
+        : ["text", "callsign", "egowCode", "unitCode"]
+    );
+    document.querySelectorAll("[data-history-strip-filter-option]").forEach(cb => {
+      cb.checked = visibleFilters.has(cb.dataset.historyStripFilterOption);
+    });
+  }
+  syncAdminHistoryStripBoardUi();
 
   // Load Timeline settings
   if (configTimelineEnabled) configTimelineEnabled.checked = currentConfig.timelineEnabled !== false;
@@ -1517,6 +1558,14 @@ function initAdminPanelHandlers() {
     configTimelineArrDepShared.addEventListener('change', () => { syncTimelineUi(); checkDirty(); });
   }
 
+  // Show additional filters checkbox toggles filter checklist
+  if (configHistoryStripBoardShowAdditionalFilters) {
+    configHistoryStripBoardShowAdditionalFilters.addEventListener('change', () => {
+      syncAdminHistoryStripBoardUi();
+      checkDirty();
+    });
+  }
+
   // Initial state
   checkDirty();
 
@@ -1556,6 +1605,20 @@ function initAdminPanelHandlers() {
     const historyShowEmergencyAlerts = configHistoryShowEmergencyAlerts?.checked !== false;
     const historyShowCallsignAlerts = configHistoryShowCallsignAlerts?.checked || false;
     const historyShowWtcAlerts = configHistoryShowWtcAlerts?.checked || false;
+    // Historic Strip Board settings (HIST-FILTER-UX-001)
+    const historyStripBoardDefaultPeriod = configHistoryStripBoardDefaultPeriod?.value || "today";
+    const historyStripBoardShowAdditionalFilters = configHistoryStripBoardShowAdditionalFilters?.checked !== false;
+    const _selectedStripFilters = Array.from(
+      document.querySelectorAll("[data-history-strip-filter-option]:checked")
+    ).map(el => el.dataset.historyStripFilterOption);
+    const _defaultStripFilters = ["text", "callsign", "egowCode", "unitCode"];
+    if (historyStripBoardShowAdditionalFilters && _selectedStripFilters.length === 0) {
+      showToast("Please select at least one Historic Strip Board filter, or disable additional filters.", 'error');
+      return;
+    }
+    const historyStripBoardVisibleFilters = historyStripBoardShowAdditionalFilters
+      ? _selectedStripFilters
+      : _defaultStripFilters;
     // Timeline settings
     const timelineEnabled = configTimelineEnabled?.checked !== false;
     const timelineStartHour = parseInt(configTimelineStartHour?.value || "6", 10);
@@ -1634,6 +1697,9 @@ function initAdminPanelHandlers() {
       historyShowEmergencyAlerts: historyShowEmergencyAlerts,
       historyShowCallsignAlerts: historyShowCallsignAlerts,
       historyShowWtcAlerts: historyShowWtcAlerts,
+      historyStripBoardDefaultPeriod: historyStripBoardDefaultPeriod,
+      historyStripBoardShowAdditionalFilters: historyStripBoardShowAdditionalFilters,
+      historyStripBoardVisibleFilters: historyStripBoardVisibleFilters,
       timelineEnabled: timelineEnabled,
       timelineStartHour: timelineStartHour,
       timelineEndHour: timelineEndHour,
@@ -1655,6 +1721,7 @@ function initAdminPanelHandlers() {
     _configSnapshot = takeSnapshot();
     checkDirty();
     showToast("Configuration saved", 'success');
+    applyHistoryStripBoardFilterVisibility();
     renderTimeline();
   }
 

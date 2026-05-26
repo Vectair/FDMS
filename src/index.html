@@ -510,44 +510,44 @@
                     <button id="btnClearHistoryCalendarFilter" type="button" class="small-btn">Clear date filter</button>
                   </div>
 
-                  <div class="history-filter-panel" id="historyFilterPanel">
+                  <div class="history-filter-panel history-filter-panel-compact" id="historyFilterPanel">
                     <div class="history-filter-header">
                       <span class="history-filter-title">Filter completed movements</span>
                       <button id="btnClearHistoryFilters" type="button" class="small-btn">Clear filters</button>
                     </div>
 
-                    <div class="history-filter-grid">
-                      <label class="history-filter-field">
+                    <div class="history-filter-grid history-filter-grid-compact" id="historyFilterGrid">
+                      <label class="history-filter-field" data-history-filter-field="text">
                         <span>Free text</span>
                         <input id="historyFilterText" type="text" class="control-input" placeholder="Callsign, reg, pilot, route, remarks…" autocomplete="off">
                       </label>
 
-                      <label class="history-filter-field">
+                      <label class="history-filter-field" data-history-filter-field="callsign">
                         <span>Callsign</span>
                         <input id="historyFilterCallsign" type="text" class="control-input" autocomplete="off">
                       </label>
 
-                      <label class="history-filter-field">
+                      <label class="history-filter-field" data-history-filter-field="registration">
                         <span>Registration</span>
                         <input id="historyFilterRegistration" type="text" class="control-input" autocomplete="off">
                       </label>
 
-                      <label class="history-filter-field">
+                      <label class="history-filter-field" data-history-filter-field="pilot">
                         <span>Pilot</span>
                         <input id="historyFilterPilot" type="text" class="control-input" autocomplete="off">
                       </label>
 
-                      <label class="history-filter-field">
+                      <label class="history-filter-field" data-history-filter-field="aircraftType">
                         <span>Aircraft type</span>
                         <input id="historyFilterAircraftType" type="text" class="control-input" autocomplete="off">
                       </label>
 
-                      <label class="history-filter-field">
+                      <label class="history-filter-field" data-history-filter-field="egowCode">
                         <span>EGOW code</span>
                         <input id="historyFilterEgowCode" type="text" class="control-input" autocomplete="off">
                       </label>
 
-                      <label class="history-filter-field">
+                      <label class="history-filter-field" data-history-filter-field="unitCode">
                         <span>EGOW unit code</span>
                         <select id="historyFilterUnitCode" class="control-select">
                           <option value="">No filter</option>
@@ -559,12 +559,12 @@
                         </select>
                       </label>
 
-                      <label class="history-filter-field">
+                      <label class="history-filter-field" data-history-filter-field="wtc">
                         <span>WTC</span>
                         <input id="historyFilterWtc" type="text" class="control-input" autocomplete="off">
                       </label>
 
-                      <label class="history-filter-field">
+                      <label class="history-filter-field" data-history-filter-field="flightType">
                         <span>Flight type</span>
                         <select id="historyFilterFlightType" class="control-select">
                           <option value="">No filter</option>
@@ -576,12 +576,12 @@
                         </select>
                       </label>
 
-                      <label class="history-filter-field">
+                      <label class="history-filter-field" data-history-filter-field="depAd">
                         <span>Departure AD</span>
                         <input id="historyFilterDepAd" type="text" class="control-input" autocomplete="off">
                       </label>
 
-                      <label class="history-filter-field">
+                      <label class="history-filter-field" data-history-filter-field="arrAd">
                         <span>Arrival AD</span>
                         <input id="historyFilterArrAd" type="text" class="control-input" autocomplete="off">
                       </label>
@@ -1500,6 +1500,75 @@
                       </label>
                       <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
                         Highlights aircraft meeting or exceeding the configured WTC threshold
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="panel">
+                  <h3>Historic Strip Board</h3>
+                  <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
+                    Controls the default time period and visible filter fields on the Historic Strip Board. Changes require Save.
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                      <label style="font-size: 12px; font-weight: bold; white-space: nowrap;">Set default time period to:</label>
+                      <select id="configHistoryStripBoardDefaultPeriod" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;">
+                        <option value="today">Today</option>
+                        <option value="24h">Last 24 Hours</option>
+                        <option value="48h">Last 48 Hours</option>
+                        <option value="7d">Last 7 Days</option>
+                        <option value="all">All Time</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configHistoryStripBoardShowAdditionalFilters" style="cursor: pointer;" checked>
+                        <span style="font-size: 12px; font-weight: bold;">Show additional filters?</span>
+                      </label>
+                      <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                        When enabled, choose which filter fields appear on the Historic Strip Board. Disabling shows only the default four (Free Text, Callsign, EGOW Code, EGOW Unit Code).
+                      </div>
+                    </div>
+
+                    <div id="historyStripBoardFilterOptions" style="padding-left: 8px; border-left: 3px solid #ddd;">
+                      <div style="font-size: 12px; font-weight: bold; margin-bottom: 8px;">Choose filters</div>
+                      <div class="history-strip-filter-admin-options">
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; min-width: 140px;">
+                          <input type="checkbox" data-history-strip-filter-option="text" id="configHistoryStripFilter_text" checked> Free Text
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; min-width: 140px;">
+                          <input type="checkbox" data-history-strip-filter-option="callsign" id="configHistoryStripFilter_callsign" checked> Callsign
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; min-width: 140px;">
+                          <input type="checkbox" data-history-strip-filter-option="egowCode" id="configHistoryStripFilter_egowCode" checked> EGOW Code
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; min-width: 140px;">
+                          <input type="checkbox" data-history-strip-filter-option="unitCode" id="configHistoryStripFilter_unitCode" checked> EGOW Unit Code
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; min-width: 140px;">
+                          <input type="checkbox" data-history-strip-filter-option="registration" id="configHistoryStripFilter_registration"> Registration
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; min-width: 140px;">
+                          <input type="checkbox" data-history-strip-filter-option="pilot" id="configHistoryStripFilter_pilot"> Pilot
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; min-width: 140px;">
+                          <input type="checkbox" data-history-strip-filter-option="aircraftType" id="configHistoryStripFilter_aircraftType"> Aircraft Type
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; min-width: 140px;">
+                          <input type="checkbox" data-history-strip-filter-option="wtc" id="configHistoryStripFilter_wtc"> WTC
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; min-width: 140px;">
+                          <input type="checkbox" data-history-strip-filter-option="flightType" id="configHistoryStripFilter_flightType"> Flight Type
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; min-width: 140px;">
+                          <input type="checkbox" data-history-strip-filter-option="depAd" id="configHistoryStripFilter_depAd"> Departure AD
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; min-width: 140px;">
+                          <input type="checkbox" data-history-strip-filter-option="arrAd" id="configHistoryStripFilter_arrAd"> Arrival AD
+                        </label>
                       </div>
                     </div>
                   </div>
