@@ -4123,6 +4123,11 @@ tr.strip.ft-ovr > td {
   width: 100%;
 }
 
+/* HIST-FILTER-UX-001a: honour hidden configurable Historic Strip Board filters */
+.history-filter-panel [data-history-filter-field][hidden] {
+  display: none !important;
+}
+
 @media (max-width: 900px) {
   .history-filter-grid {
     grid-template-columns: repeat(2, minmax(120px, 1fr));

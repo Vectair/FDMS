@@ -8327,7 +8327,9 @@ function getHistoryStripBoardVisibleFilters() {
   const configured = Array.isArray(cfg.historyStripBoardVisibleFilters)
     ? cfg.historyStripBoardVisibleFilters
     : DEFAULT_HISTORY_STRIP_FILTERS;
-  return configured.filter(k => HISTORY_STRIP_FILTER_KEYS.includes(k));
+
+  const valid = configured.filter(k => HISTORY_STRIP_FILTER_KEYS.includes(k));
+  return valid.length ? valid : DEFAULT_HISTORY_STRIP_FILTERS;
 }
 
 export function applyHistoryStripBoardFilterVisibility() {
@@ -8757,6 +8759,7 @@ function activateMovementHistoryView(viewId) {
   });
 
   if (viewId === "hist-view-strip-board") {
+    applyHistoryStripBoardFilterVisibility();
     renderHistoryBoard();
   } else if (viewId === "hist-view-calendar") {
     renderHistoricMovementCalendar();
