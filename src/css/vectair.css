@@ -687,7 +687,7 @@ tr.strip.ft-ovr > td {
 }
 
 /* -------------------------------------------------------
-   History subtab navigation (Ticket 6a)
+   History layout (HIST-LAYOUT-002)
 ------------------------------------------------------- */
 .history-shell {
   display: flex;
@@ -695,6 +695,132 @@ tr.strip.ft-ovr > td {
   min-height: 0;
 }
 
+/* Row 1: view selector buttons (left) + Strip Board actions (right) */
+.history-view-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+/* Keep the view-bar inline within the toolbar */
+.history-view-toolbar .movement-history-view-bar {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+/* Right-aligned Strip Board action buttons */
+.history-view-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.history-view-actions.hidden {
+  display: none;
+}
+
+/* Row 2: collapsible filter row — flex-wrap, full width */
+.history-strip-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: #eef1f3;
+  border: 1px solid var(--va-border);
+  border-radius: 4px;
+}
+
+.history-strip-filter-row.hidden {
+  display: none;
+}
+
+/* Period label in the filter row */
+.history-strip-filter-row .history-period-control {
+  flex: 0 0 auto;
+  min-width: 100px;
+  max-width: 150px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* The configurable filter field container expands to fill remaining width */
+.history-strip-filter-row .history-filter-toolbar-center {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* Clear filters button pushed to the right end of the row */
+.history-filter-clear-btn {
+  align-self: flex-end;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* -------------------------------------------------------
+   Cancelled primary tab (HIST-LAYOUT-002)
+------------------------------------------------------- */
+.cancelled-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.cancelled-subtab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--va-border-dark, #ccc);
+  padding: 0 4px;
+  margin-bottom: 0;
+  background: var(--va-panel-bg, #f7f7f7);
+  flex-shrink: 0;
+}
+
+.cancelled-subtab-btn {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  color: #555;
+  transition: color 0.15s, border-bottom-color 0.15s;
+  white-space: nowrap;
+}
+
+.cancelled-subtab-btn:hover:not(.active) {
+  color: #222;
+  background: rgba(0,0,0,0.04);
+}
+
+.cancelled-subtab-btn.active {
+  color: var(--va-accent-brown, #6d4c30);
+  border-bottom-color: var(--va-accent-brown, #6d4c30);
+  font-weight: 600;
+}
+
+.cancelled-subpage {
+  padding-top: 4px;
+}
+
+.cancelled-subpage.hidden {
+  display: none;
+}
+
+/* -------------------------------------------------------
+   History subtab navigation (kept for reference)
+------------------------------------------------------- */
 .history-subtab-bar {
   display: flex;
   gap: 0;

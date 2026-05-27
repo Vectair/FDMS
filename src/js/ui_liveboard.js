@@ -8758,6 +8758,17 @@ function activateMovementHistoryView(viewId) {
     view.classList.toggle("hidden", view.id !== viewId);
   });
 
+  // Show Strip Board-specific actions only when Strip Board is active
+  const sbActions = byId("historyStripBoardActions");
+  if (sbActions) {
+    sbActions.classList.toggle("hidden", viewId !== "hist-view-strip-board");
+  }
+
+  // Collapse filter row when switching away from Strip Board
+  if (viewId !== "hist-view-strip-board") {
+    setHistoryFilterPanelCollapsed(true);
+  }
+
   if (viewId === "hist-view-strip-board") {
     applyHistoryStripBoardFilterVisibility();
     renderHistoryBoard();
@@ -8951,18 +8962,16 @@ function initHistoricMovementCalendar() {
  * Clear button resets filter values only (does not touch period or calendar date).
  */
 /**
- * Collapse or expand the Historic Strip Board filter field area.
- * Time Period and the action buttons remain visible at all times.
+ * Collapse or expand the Historic Strip Board filter row (Row 2).
+ * The view-selector toolbar (Row 1) including the toggle button remains visible.
  * @param {boolean} collapsed
  */
 function setHistoryFilterPanelCollapsed(collapsed) {
-  const grid = byId("historyFilterGrid");
-  const toggleBtn = byId("btnToggleHistoryFilters");
   const panel = byId("historyFilterPanel");
-  if (!grid || !toggleBtn || !panel) return;
+  const toggleBtn = byId("btnToggleHistoryFilters");
+  if (!panel || !toggleBtn) return;
 
-  grid.hidden = collapsed;
-  panel.classList.toggle("is-collapsed", collapsed);
+  panel.classList.toggle("hidden", collapsed);
   toggleBtn.textContent = collapsed ? "Show filters" : "Hide filters";
   toggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
 }

@@ -402,6 +402,14 @@ function setActiveTab(panelId) {
   if (targetId === 'tab-reports') {
     renderReports();
   }
+
+  // Re-render Deleted Strips when Cancelled tab is opened if that subpage is active
+  if (targetId === 'tab-cancelled') {
+    const activeSubBtn = document.querySelector('.cancelled-subtab-btn.active');
+    if (activeSubBtn && activeSubBtn.dataset.subpage === 'cancelled-subpage-deleted') {
+      renderDeletedStripsLog();
+    }
+  }
 }
 
 function initTabs() {
@@ -605,15 +613,15 @@ function adminConfirm(message, onConfirm, detailsHtml = '', confirmEnabled = tru
 }
 
 /**
- * Initialise History subtab switching (Ticket 6a).
- * Three subpages: Movement History (default), Cancelled Sorties, Deleted Strips.
+ * Initialise Cancelled tab sub-view switching (HIST-LAYOUT-002).
+ * Two subpages: Cancelled Sorties (default), Deleted Strips.
  */
-function initHistorySubtabs() {
-  const bar = document.getElementById('historySubtabBar');
+function initCancelledSubtabs() {
+  const bar = document.getElementById('cancelledSubtabBar');
   if (!bar) return;
 
-  const btns = bar.querySelectorAll('.history-subtab-btn');
-  const subpages = document.querySelectorAll('.history-subpage');
+  const btns = bar.querySelectorAll('.cancelled-subtab-btn');
+  const subpages = document.querySelectorAll('.cancelled-subpage');
 
   function showSubpage(subpageId) {
     btns.forEach(b => b.classList.toggle('active', b.dataset.subpage === subpageId));
@@ -624,11 +632,16 @@ function initHistorySubtabs() {
     btn.addEventListener('click', () => {
       showSubpage(btn.dataset.subpage);
       // Re-render Deleted Strips on tab activation to purge expired entries
-      if (btn.dataset.subpage === 'hist-subpage-deleted') {
+      if (btn.dataset.subpage === 'cancelled-subpage-deleted') {
         renderDeletedStripsLog();
       }
     });
   });
+}
+
+/** @deprecated History no longer has subtabs — delegates to initCancelledSubtabs. */
+function initHistorySubtabs() {
+  initCancelledSubtabs();
 }
 
 function logBootstrapStage(label, status, detail = null) {
@@ -662,7 +675,7 @@ function generateDiagnosticReport() {
   const runtimeMode = location.protocol === 'file:' ? 'desktop-local' : 'browser';
 
   const activeTabBtn    = document.querySelector('.nav-tab.active');
-  const activeHistBtn   = document.querySelector('.history-subtab-btn.active');
+  const activeHistBtn   = document.querySelector('.cancelled-subtab-btn.active');
   const activeAdminBtn  = document.querySelector('.admin-nav-btn.active');
   const visibleModals   = document.querySelectorAll('.modal:not(.hidden), [role="dialog"]:not(.hidden)').length;
 
@@ -784,7 +797,7 @@ function refreshDeveloperSection() {
   const runtimeMode = location.protocol === 'file:' ? 'desktop-local' : 'browser';
 
   const activeTabBtn   = document.querySelector('.nav-tab.active');
-  const activeHistBtn  = document.querySelector('.history-subtab-btn.active');
+  const activeHistBtn  = document.querySelector('.cancelled-subtab-btn.active');
   const activeAdminBtn = document.querySelector('.admin-nav-btn.active');
   const visibleModals  = document.querySelectorAll('.modal:not(.hidden), [role="dialog"]:not(.hidden)').length;
 
