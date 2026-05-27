@@ -4077,41 +4077,78 @@ tr.strip.ft-ovr > td {
   flex: 1;
 }
 
-/* H4: Historic Strip Board structured filter panel */
+/* H4: Historic Strip Board filter panel — toolbar layout (HIST-FILTER-UX-001b) */
 .history-filter-panel {
-  margin-bottom: 10px;
-  padding: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
   background: #eef1f3;
   border: 1px solid var(--va-border);
   border-radius: 4px;
 }
 
-.history-filter-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+.history-filter-panel-compact {
+  margin: 4px 0 8px;
 }
 
-.history-filter-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--va-accent-brown);
-}
-
-.history-filter-grid {
+/* 3-column toolbar: [Time Period] [filter fields…] [action buttons] */
+.history-filter-toolbar {
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
-  gap: 8px;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: start;
 }
 
+.history-filter-toolbar-left {
+  min-width: 130px;
+}
+
+.history-period-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--va-text-soft);
+}
+
+.history-period-control span {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Centre: wrapping flex row of individual filter fields */
+.history-filter-toolbar-center {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* HIST-FILTER-UX-001a: honour hidden attribute on centre panel and individual fields */
+.history-filter-toolbar-center[hidden] {
+  display: none !important;
+}
+
+.history-filter-panel [data-history-filter-field][hidden] {
+  display: none !important;
+}
+
+/* Each filter field is a flex column (label text above input) */
 .history-filter-field {
   display: flex;
   flex-direction: column;
   gap: 3px;
   font-size: 11px;
   color: var(--va-text-soft);
+  flex: 0 1 180px;
+  min-width: 150px;
+}
+
+/* Free-text gets more horizontal room */
+.history-filter-toolbar-center .history-filter-field[data-history-filter-field="text"] {
+  flex: 1 1 260px;
+  min-width: 220px;
 }
 
 .history-filter-field span {
@@ -4123,41 +4160,70 @@ tr.strip.ft-ovr > td {
   width: 100%;
 }
 
-/* HIST-FILTER-UX-001a: honour hidden configurable Historic Strip Board filters */
-.history-filter-panel [data-history-filter-field][hidden] {
-  display: none !important;
+/* Right: stacked action buttons, right-aligned */
+.history-filter-toolbar-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  white-space: nowrap;
 }
 
-@media (max-width: 900px) {
-  .history-filter-grid {
-    grid-template-columns: repeat(2, minmax(120px, 1fr));
-  }
+.history-filter-toolbar-secondary-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
-@media (max-width: 560px) {
-  .history-filter-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* HIST-FILTER-UX-001: Compact Historic Strip Board filter panel */
-.history-filter-panel-compact {
-  margin: 8px 0 10px;
-}
-
-.history-filter-grid-compact {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
-  align-items: end;
-}
-
-.history-filter-actions,
+/* Admin filter checklist (unchanged) */
 .history-strip-filter-admin-options {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+/* Responsive: below 1100px let the toolbar stack left+center before right wraps */
+@media (max-width: 1100px) {
+  .history-filter-toolbar {
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+  }
+  .history-filter-toolbar-right {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    align-self: start;
+  }
+  .history-filter-toolbar-center {
+    grid-column: 1 / 3;
+    grid-row: 2;
+  }
+}
+
+/* Responsive: below 800px stack all three vertically */
+@media (max-width: 800px) {
+  .history-filter-toolbar {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+  .history-filter-toolbar-right {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .history-filter-toolbar-center {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .history-filter-field {
+    flex: 1 1 160px;
+    min-width: 140px;
+  }
 }
 
 /* H5: Movement History Search / Table view */

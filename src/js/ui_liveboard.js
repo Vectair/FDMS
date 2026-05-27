@@ -8950,6 +8950,23 @@ function initHistoricMovementCalendar() {
  * Text inputs re-render on each keystroke; select re-renders on change.
  * Clear button resets filter values only (does not touch period or calendar date).
  */
+/**
+ * Collapse or expand the Historic Strip Board filter field area.
+ * Time Period and the action buttons remain visible at all times.
+ * @param {boolean} collapsed
+ */
+function setHistoryFilterPanelCollapsed(collapsed) {
+  const grid = byId("historyFilterGrid");
+  const toggleBtn = byId("btnToggleHistoryFilters");
+  const panel = byId("historyFilterPanel");
+  if (!grid || !toggleBtn || !panel) return;
+
+  grid.hidden = collapsed;
+  panel.classList.toggle("is-collapsed", collapsed);
+  toggleBtn.textContent = collapsed ? "Show filters" : "Hide filters";
+  toggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+}
+
 function initHistoryFilters() {
   const panel = byId("historyFilterPanel");
   if (!panel || panel.dataset.bound === "true") return;
@@ -8993,6 +9010,15 @@ function initHistoryFilters() {
         el.value = "";
       }
       renderHistoryBoard();
+    });
+  }
+
+  // Show / Hide filters toggle (HIST-FILTER-UX-001b)
+  const toggleBtn = byId("btnToggleHistoryFilters");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+      const collapsed = toggleBtn.getAttribute("aria-expanded") === "true";
+      setHistoryFilterPanelCollapsed(collapsed);
     });
   }
 

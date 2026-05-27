@@ -491,19 +491,6 @@
 
               <div class="movement-history-view" id="hist-view-strip-board">
                 <div class="panel">
-                  <div class="history-actions">
-                    <label class="control-label">Time Period:</label>
-                    <select id="historyTimePeriod" class="control-select">
-                      <option value="today" selected>Today</option>
-                      <option value="24h">Last 24 Hours</option>
-                      <option value="48h">Last 48 Hours</option>
-                      <option value="7d">Last 7 Days</option>
-                      <option value="all">All Time</option>
-                    </select>
-                    <button class="btn btn-secondary" id="btnExportHistoryCsv" type="button">
-                      Export as CSV
-                    </button>
-                  </div>
 
                   <div id="historyCalendarFilterBanner" class="history-calendar-filter-banner hidden">
                     <span id="historyCalendarFilterText"></span>
@@ -511,82 +498,102 @@
                   </div>
 
                   <div class="history-filter-panel history-filter-panel-compact" id="historyFilterPanel">
-                    <div class="history-filter-header">
-                      <span class="history-filter-title">Filter completed movements</span>
-                      <button id="btnClearHistoryFilters" type="button" class="small-btn">Clear filters</button>
-                    </div>
+                    <div class="history-filter-toolbar">
 
-                    <div class="history-filter-grid history-filter-grid-compact" id="historyFilterGrid">
-                      <label class="history-filter-field" data-history-filter-field="text">
-                        <span>Free text</span>
-                        <input id="historyFilterText" type="text" class="control-input" placeholder="Callsign, reg, pilot, route, remarks…" autocomplete="off">
-                      </label>
+                      <div class="history-filter-toolbar-left">
+                        <label class="history-period-control">
+                          <span>Time Period</span>
+                          <select id="historyTimePeriod" class="control-select">
+                            <option value="today" selected>Today</option>
+                            <option value="24h">Last 24 Hours</option>
+                            <option value="48h">Last 48 Hours</option>
+                            <option value="7d">Last 7 Days</option>
+                            <option value="all">All Time</option>
+                          </select>
+                        </label>
+                      </div>
 
-                      <label class="history-filter-field" data-history-filter-field="callsign">
-                        <span>Callsign</span>
-                        <input id="historyFilterCallsign" type="text" class="control-input" autocomplete="off">
-                      </label>
+                      <div class="history-filter-toolbar-center" id="historyFilterGrid">
+                        <label class="history-filter-field" data-history-filter-field="text">
+                          <span>Free text</span>
+                          <input id="historyFilterText" type="text" class="control-input" placeholder="Callsign, reg, pilot, route, remarks…" autocomplete="off">
+                        </label>
 
-                      <label class="history-filter-field" data-history-filter-field="registration">
-                        <span>Registration</span>
-                        <input id="historyFilterRegistration" type="text" class="control-input" autocomplete="off">
-                      </label>
+                        <label class="history-filter-field" data-history-filter-field="callsign">
+                          <span>Callsign</span>
+                          <input id="historyFilterCallsign" type="text" class="control-input" autocomplete="off">
+                        </label>
 
-                      <label class="history-filter-field" data-history-filter-field="pilot">
-                        <span>Pilot</span>
-                        <input id="historyFilterPilot" type="text" class="control-input" autocomplete="off">
-                      </label>
+                        <label class="history-filter-field" data-history-filter-field="registration">
+                          <span>Registration</span>
+                          <input id="historyFilterRegistration" type="text" class="control-input" autocomplete="off">
+                        </label>
 
-                      <label class="history-filter-field" data-history-filter-field="aircraftType">
-                        <span>Aircraft type</span>
-                        <input id="historyFilterAircraftType" type="text" class="control-input" autocomplete="off">
-                      </label>
+                        <label class="history-filter-field" data-history-filter-field="pilot">
+                          <span>Pilot</span>
+                          <input id="historyFilterPilot" type="text" class="control-input" autocomplete="off">
+                        </label>
 
-                      <label class="history-filter-field" data-history-filter-field="egowCode">
-                        <span>EGOW code</span>
-                        <input id="historyFilterEgowCode" type="text" class="control-input" autocomplete="off">
-                      </label>
+                        <label class="history-filter-field" data-history-filter-field="aircraftType">
+                          <span>Aircraft type</span>
+                          <input id="historyFilterAircraftType" type="text" class="control-input" autocomplete="off">
+                        </label>
 
-                      <label class="history-filter-field" data-history-filter-field="unitCode">
-                        <span>EGOW unit code</span>
-                        <select id="historyFilterUnitCode" class="control-select">
-                          <option value="">No filter</option>
-                          <option value="__NONE__">None / blank</option>
-                          <option value="ANY">Any unit code</option>
-                          <option value="L">L</option>
-                          <option value="M">M</option>
-                          <option value="A">A</option>
-                        </select>
-                      </label>
+                        <label class="history-filter-field" data-history-filter-field="egowCode">
+                          <span>EGOW code</span>
+                          <input id="historyFilterEgowCode" type="text" class="control-input" autocomplete="off">
+                        </label>
 
-                      <label class="history-filter-field" data-history-filter-field="wtc">
-                        <span>WTC</span>
-                        <input id="historyFilterWtc" type="text" class="control-input" autocomplete="off">
-                      </label>
+                        <label class="history-filter-field" data-history-filter-field="unitCode">
+                          <span>EGOW unit code</span>
+                          <select id="historyFilterUnitCode" class="control-select">
+                            <option value="">No filter</option>
+                            <option value="__NONE__">None / blank</option>
+                            <option value="ANY">Any unit code</option>
+                            <option value="L">L</option>
+                            <option value="M">M</option>
+                            <option value="A">A</option>
+                          </select>
+                        </label>
 
-                      <label class="history-filter-field" data-history-filter-field="flightType">
-                        <span>Flight type</span>
-                        <select id="historyFilterFlightType" class="control-select">
-                          <option value="">No filter</option>
-                          <option value="__NONE__">None / blank</option>
-                          <option value="DEP">DEP</option>
-                          <option value="ARR">ARR</option>
-                          <option value="LOC">LOC</option>
-                          <option value="OVR">OVR</option>
-                        </select>
-                      </label>
+                        <label class="history-filter-field" data-history-filter-field="wtc">
+                          <span>WTC</span>
+                          <input id="historyFilterWtc" type="text" class="control-input" autocomplete="off">
+                        </label>
 
-                      <label class="history-filter-field" data-history-filter-field="depAd">
-                        <span>Departure AD</span>
-                        <input id="historyFilterDepAd" type="text" class="control-input" autocomplete="off">
-                      </label>
+                        <label class="history-filter-field" data-history-filter-field="flightType">
+                          <span>Flight type</span>
+                          <select id="historyFilterFlightType" class="control-select">
+                            <option value="">No filter</option>
+                            <option value="__NONE__">None / blank</option>
+                            <option value="DEP">DEP</option>
+                            <option value="ARR">ARR</option>
+                            <option value="LOC">LOC</option>
+                            <option value="OVR">OVR</option>
+                          </select>
+                        </label>
 
-                      <label class="history-filter-field" data-history-filter-field="arrAd">
-                        <span>Arrival AD</span>
-                        <input id="historyFilterArrAd" type="text" class="control-input" autocomplete="off">
-                      </label>
-                    </div>
-                  </div>
+                        <label class="history-filter-field" data-history-filter-field="depAd">
+                          <span>Departure AD</span>
+                          <input id="historyFilterDepAd" type="text" class="control-input" autocomplete="off">
+                        </label>
+
+                        <label class="history-filter-field" data-history-filter-field="arrAd">
+                          <span>Arrival AD</span>
+                          <input id="historyFilterArrAd" type="text" class="control-input" autocomplete="off">
+                        </label>
+                      </div><!-- /history-filter-toolbar-center -->
+
+                      <div class="history-filter-toolbar-right">
+                        <button class="small-btn" id="btnExportHistoryCsv" type="button">Export as CSV</button>
+                        <div class="history-filter-toolbar-secondary-actions">
+                          <button id="btnToggleHistoryFilters" type="button" class="small-btn" aria-expanded="true">Hide filters</button>
+                          <button id="btnClearHistoryFilters" type="button" class="small-btn">Clear filters</button>
+                        </div>
+                      </div><!-- /history-filter-toolbar-right -->
+
+                    </div><!-- /history-filter-toolbar -->
+                  </div><!-- /history-filter-panel -->
 
                   <div class="table-container">
                     <table id="historyTable">
