@@ -1735,6 +1735,7 @@ function initAdminPanelHandlers() {
     checkDirty();
     showToast("Configuration saved", 'success');
     applyHistoryStripBoardFilterVisibility();
+    renderHistoryBoard();
     renderTimeline();
   }
 

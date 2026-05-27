@@ -4260,6 +4260,11 @@ tr.strip.ft-ovr > td {
   display: none !important;
 }
 
+/* HIST-LAYOUT-002a: honour Admin-hidden Historic Strip Board filters in rebuilt layout */
+.history-strip-filter-row [data-history-filter-field][hidden] {
+  display: none !important;
+}
+
 /* Each filter field is a flex column (label text above input) */
 .history-filter-field {
   display: flex;

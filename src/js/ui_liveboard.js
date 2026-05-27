@@ -8972,6 +8972,11 @@ function setHistoryFilterPanelCollapsed(collapsed) {
   if (!panel || !toggleBtn) return;
 
   panel.classList.toggle("hidden", collapsed);
+
+  if (!collapsed) {
+    applyHistoryStripBoardFilterVisibility();
+  }
+
   toggleBtn.textContent = collapsed ? "Show filters" : "Hide filters";
   toggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
 }
