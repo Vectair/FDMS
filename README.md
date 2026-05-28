@@ -161,6 +161,33 @@ Native export handling is routed through the existing export utility layer and T
 
 Those package imports are not safe in the current unbundled static frontend architecture.
 
+In-app updates
+
+Vectair Flite includes a manual, operator-initiated update mechanism accessible from Admin → System Status → Updates.
+
+Key policies:
+
+- Update checking is initiated by the operator only. The app never checks for updates at launch or in the background.
+- No update is installed without operator action. There is no auto-install.
+- No update prompt blocks operational use. Live Board and all other features remain fully available during or after an update check.
+- The app remains fully usable offline. A failed or unreachable update check degrades cleanly and shows a status message.
+
+To check for updates:
+
+1. Open Admin → System Status.
+2. In the Updates panel, click Check for updates.
+3. If an update is available, click Download and install update.
+4. After installation, click Restart Flite to apply the update.
+
+It is recommended to take an Admin → Session Management backup before installing a major update.
+
+Release maintainers:
+
+- Signed installer artifacts and a valid latest.json must be published alongside each GitHub Release for the update mechanism to deliver updates.
+- The private signing key (C:\Users\dmshs\.tauri\vectair-flite.key) must not be committed to the repository.
+- The public key is embedded in src-tauri/tauri.conf.json and is safe to commit.
+- The TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD environment variables must be set for release builds that produce signed updater artifacts.
+
 Current project status
 
 Vectair Flite is in Desktop Productization / V1 closeout.

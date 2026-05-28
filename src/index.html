@@ -1083,6 +1083,45 @@
         </tr>
       </table>
     </div>
+
+    <!-- ── Updates panel ── -->
+    <div class="panel" id="updaterPanel">
+      <h3>Updates</h3>
+      <div id="updaterBrowserNotice" style="display:none; padding: 8px; background: #fff8e1; border-left: 4px solid #f9a825; margin-bottom: 12px; font-size: 12px; color: #5d4037;">
+        Updater unavailable in browser harness. Use the installed Tauri app.
+      </div>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;" id="updaterTable">
+        <tr>
+          <td style="padding: 6px; font-weight: bold; width: 200px;">Current version:</td>
+          <td id="updaterCurrentVersion" style="padding: 6px; font-family: monospace;">—</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px; font-weight: bold;">Build / source:</td>
+          <td id="updaterBuildSource" style="padding: 6px; font-family: monospace;">—</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px; font-weight: bold;">Last checked:</td>
+          <td id="updaterLastChecked" style="padding: 6px; font-family: monospace;">Never</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px; font-weight: bold;">Status:</td>
+          <td id="updaterStatus" style="padding: 6px; font-family: monospace;">Not checked</td>
+        </tr>
+        <tr id="updaterAvailableRow" style="display:none;">
+          <td style="padding: 6px; font-weight: bold;">Available version:</td>
+          <td id="updaterAvailableVersion" style="padding: 6px; font-family: monospace;">—</td>
+        </tr>
+        <tr id="updaterNotesRow" style="display:none;">
+          <td style="padding: 6px; font-weight: bold; vertical-align: top;">Release notes:</td>
+          <td id="updaterReleaseNotes" style="padding: 6px; font-size: 12px; white-space: pre-wrap; max-height: 120px; overflow-y: auto;">—</td>
+        </tr>
+      </table>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn btn-secondary" id="btnCheckForUpdate" type="button">Check for updates</button>
+        <button class="btn btn-primary" id="btnDownloadInstallUpdate" type="button" style="display:none;">Download and install update</button>
+        <button class="btn btn-secondary" id="btnRestartFlite" type="button" style="display:none;">Restart Flite</button>
+      </div>
+    </div>
   </div>
 
               <!-- ── SECTION 2: Session ── -->

@@ -1940,6 +1940,132 @@ function initLiveboardCounters() {
   });
 }
 
+// ── Updater panel ─────────────────────────────────────────────────────────────
+
+function initUpdaterPanel() {
+  const invoke = window.__TAURI__?.core?.invoke;
+  const isTauri = typeof invoke === 'function';
+
+  const browserNotice    = document.getElementById('updaterBrowserNotice');
+  const updaterTable     = document.getElementById('updaterTable');
+  const elCurrent        = document.getElementById('updaterCurrentVersion');
+  const elBuild          = document.getElementById('updaterBuildSource');
+  const elLastChecked    = document.getElementById('updaterLastChecked');
+  const elStatus         = document.getElementById('updaterStatus');
+  const elAvailableRow   = document.getElementById('updaterAvailableRow');
+  const elAvailable      = document.getElementById('updaterAvailableVersion');
+  const elNotesRow       = document.getElementById('updaterNotesRow');
+  const elNotes          = document.getElementById('updaterReleaseNotes');
+  const btnCheck         = document.getElementById('btnCheckForUpdate');
+  const btnInstall       = document.getElementById('btnDownloadInstallUpdate');
+  const btnRestart       = document.getElementById('btnRestartFlite');
+
+  if (!browserNotice || !btnCheck) return;
+
+  if (!isTauri) {
+    browserNotice.style.display = 'block';
+    if (updaterTable) updaterTable.style.display = 'none';
+    if (btnCheck) btnCheck.style.display = 'none';
+    return;
+  }
+
+  // Populate version info on load
+  invoke('flite_get_app_version').then(info => {
+    if (elCurrent) elCurrent.textContent = info.version || '—';
+    if (elBuild) elBuild.textContent = info.buildSource || 'unknown';
+  }).catch(() => {
+    if (elCurrent) elCurrent.textContent = 'unknown';
+    if (elBuild) elBuild.textContent = 'unknown';
+  });
+
+  function setStatus(text, colour) {
+    if (!elStatus) return;
+    elStatus.textContent = text;
+    elStatus.style.color = colour || '';
+  }
+
+  function showAvailable(version, notes) {
+    if (elAvailableRow) elAvailableRow.style.display = '';
+    if (elAvailable) elAvailable.textContent = version || '—';
+    if (notes) {
+      if (elNotesRow) elNotesRow.style.display = '';
+      if (elNotes) elNotes.textContent = notes;
+    }
+  }
+
+  function hideAvailable() {
+    if (elAvailableRow) elAvailableRow.style.display = 'none';
+    if (elNotesRow) elNotesRow.style.display = 'none';
+  }
+
+  btnCheck.addEventListener('click', async () => {
+    btnCheck.disabled = true;
+    if (btnInstall) btnInstall.style.display = 'none';
+    if (btnRestart) btnRestart.style.display = 'none';
+    hideAvailable();
+    setStatus('Checking…', '#888');
+
+    try {
+      const result = await invoke('flite_check_for_update');
+      if (elLastChecked && result.lastChecked) {
+        try {
+          elLastChecked.textContent = new Date(result.lastChecked).toLocaleString();
+        } catch (_) {
+          elLastChecked.textContent = result.lastChecked;
+        }
+      }
+
+      if (result.status === 'update_available') {
+        setStatus('Update available', '#1565c0');
+        showAvailable(result.availableVersion, result.body);
+        if (btnInstall) btnInstall.style.display = '';
+      } else if (result.status === 'up_to_date') {
+        setStatus('Up to date', '#2e7d32');
+        hideAvailable();
+      } else if (result.status === 'offline') {
+        setStatus('Offline — unable to reach update server', '#e65100');
+      } else {
+        setStatus(`Unable to check — ${result.message || 'unknown error'}`, '#b71c1c');
+      }
+    } catch (err) {
+      setStatus(`Unable to check — ${err}`, '#b71c1c');
+    } finally {
+      btnCheck.disabled = false;
+    }
+  });
+
+  if (btnInstall) {
+    btnInstall.addEventListener('click', async () => {
+      btnInstall.disabled = true;
+      btnCheck.disabled = true;
+      setStatus('Downloading…', '#1565c0');
+
+      try {
+        const result = await invoke('flite_download_and_install_update');
+        if (result.status === 'installed_restart_required') {
+          setStatus('Restart required', '#6a1b9a');
+          if (btnInstall) btnInstall.style.display = 'none';
+          if (btnRestart) btnRestart.style.display = '';
+        } else {
+          setStatus(`Update failed — ${result.message || 'unknown error'}`, '#b71c1c');
+          btnInstall.disabled = false;
+        }
+      } catch (err) {
+        setStatus(`Update failed — ${err}`, '#b71c1c');
+        btnInstall.disabled = false;
+      } finally {
+        btnCheck.disabled = false;
+      }
+    });
+  }
+
+  if (btnRestart) {
+    btnRestart.addEventListener('click', () => {
+      invoke('flite_restart_app').catch(() => {});
+    });
+  }
+}
+
 let _lastTickDate = null;
 
 async function bootstrap() {
@@ -1980,7 +2106,7 @@ async function bootstrap() {
       initHistorySubtabs();
     });
     runStage('vkb-lookup:init', () => initVkbLookup());
-    runStage('admin:init',      () => { initAdminPanel(); initAdminPanelHandlers(); });
+    runStage('admin:init',      () => { initAdminPanel(); initAdminPanelHandlers(); initUpdaterPanel(); });
     runStage('reports:init',    () => initReports());
     runStage('booking:init',    () => { initBookingPage(); initCalendarPage(); initBookingProfilesAdmin(); });
 
