@@ -97,6 +97,32 @@ src-tauri/target/release/bundle/
 
 The exact installer or package format depends on the target platform and Tauri build configuration.
 
+Local development reinstall
+
+`scripts/install-latest-dev-build.ps1` is a convenience script for Stuart / internal development use only.
+
+It automates the full cycle of pulling the latest `main`, building the NSIS installer, and running it — so you do not have to manually execute each step or hunt for the newest `.exe` in the build output directory.
+
+```powershell
+# From repo root (or any directory — the script resolves the repo root automatically):
+.\scripts\install-latest-dev-build.ps1
+
+# Skip the git checkout/pull if you want to build from an existing working tree:
+.\scripts\install-latest-dev-build.ps1 -SkipGitUpdate
+
+# Allow building from a dirty working tree:
+.\scripts\install-latest-dev-build.ps1 -AllowDirty
+
+# Supply signing credentials interactively (required because createUpdaterArtifacts is enabled):
+.\scripts\install-latest-dev-build.ps1 -PromptForSigningPassword
+```
+
+Important distinctions:
+
+- This script installs from a locally built NSIS installer. It does **not** publish a release and does **not** update the app via GitHub Releases.
+- True in-app updates (the Tauri updater, accessible from Admin → System Status → Updates) require signed release artifacts and a published `latest.json` at the configured updater endpoint. That flow is entirely separate from this script.
+- Because Windows enforces version ordering for installers, downgrading from a previously installed `1.0.x` build (such as `1.0.3`) to `0.9.0` requires a manual uninstall first: `Apps & features → Vectair Flite → Uninstall`.
+
 Offline operation
 
 Vectair Flite V1 is intended to support offline-capable desktop use.

@@ -1,6 +1,6 @@
 [package]
 name = "vectair-flite"
-version = "1.0.3"
+version = "0.9.0"
 description = "Vectair Flite — Flight Data Management System"
 authors = ["Vectair"]
 edition = "2021"
