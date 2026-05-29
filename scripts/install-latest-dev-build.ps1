@@ -91,7 +91,7 @@ try {
     }
 
     if ($GitStatus -and $AllowDirty) {
-        Write-Host "  WARNING: Working tree is dirty (-AllowDirty supplied — continuing)." -ForegroundColor Yellow
+        Write-Host "  WARNING: Working tree is dirty (-AllowDirty supplied - continuing)." -ForegroundColor Yellow
     } else {
         Write-Host "  Working tree is clean." -ForegroundColor Green
     }
@@ -100,7 +100,7 @@ try {
     # [2/6] Pulling main
     # ------------------------------------------------------------------
     if ($SkipGitUpdate) {
-        Write-Host "[2/6] Pulling main  (skipped — -SkipGitUpdate)" -ForegroundColor DarkGray
+        Write-Host "[2/6] Pulling main  (skipped - -SkipGitUpdate)" -ForegroundColor DarkGray
     } else {
         Write-Host "[2/6] Pulling main" -ForegroundColor Cyan
 
