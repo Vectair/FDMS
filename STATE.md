@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-29 (Europe/London, rev 19 — CREATE-FROM-001 complete: flat Duplicate/Arrival/Departure reproduction actions replaced with structured Create From workflow)
+Last updated: 2026-05-29 (Europe/London, rev 20 — CREATE-FROM-001b complete: Create From converted from visible grouped section to true nested submenu)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -2552,6 +2552,13 @@ CREATE-FROM-001 implemented:
 - Preserved existing Duplicate modal timing/reset behaviour.
 - Preserved existing DEP↔ARR reciprocal behaviour.
 - Added general cross-type creation dispatch for LOC/DEP/ARR/OVR.
+
+CREATE-FROM-001b implemented:
+- Converted Create From from a visible grouped section into a true nested submenu.
+- Main Edit menu now remains compact: Details / Create From › / Cancel / Delete.
+- Submenu opens on hover, focus-within, or click/tap (via .is-open toggle).
+- Viewport overflow check adds .open-left when submenu would clip the right edge.
+- Preserved CREATE-FROM-001 ordering, duplicate behaviour, reciprocal behaviour, and cross-type creation logic.
 
 ### 25.1 Menu structure
 

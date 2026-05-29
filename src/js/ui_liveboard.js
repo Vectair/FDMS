@@ -3477,9 +3477,13 @@ export function renderLiveBoard() {
             <button class="small-btn js-edit-dropdown" type="button" aria-label="Edit menu">Edit ▾</button>
             <div class="js-edit-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 9999; min-width: 120px; margin-top: 2px;">
               <button class="js-edit-details flite-menu-item" type="button">Details</button>
-              <div class="flite-menu-group">
-                <div class="flite-menu-heading">Create From</div>
-                ${getCreateFromOptions(ft).map(target => `<button class="js-create-from flite-menu-item" data-target="${target}" type="button">${CREATE_FROM_LABELS[target]}</button>`).join("")}
+              <div class="flite-submenu">
+                <button class="flite-menu-item flite-submenu-trigger js-create-from-submenu-trigger" type="button" aria-haspopup="true" aria-expanded="false">
+                  <span>Create From</span><span class="flite-submenu-arrow">&#x203A;</span>
+                </button>
+                <div class="flite-submenu-menu js-create-from-submenu" role="menu">
+                  ${getCreateFromOptions(ft).map(target => `<button class="js-create-from flite-menu-item" data-target="${target}" type="button" role="menuitem">${CREATE_FROM_LABELS[target]}</button>`).join("")}
+                </div>
               </div>
               ${
                 m.status === "PLANNED" || m.status === "ACTIVE"
@@ -3502,7 +3506,14 @@ export function renderLiveBoard() {
       if (_portalMenu === editMenu) {
         closeDropdownPortal();
       } else {
+        // Reset any lingering open-submenu state before (re-)opening
+        editMenu.querySelectorAll(".flite-submenu.is-open").forEach(s => {
+          s.classList.remove("is-open");
+          const t = s.querySelector(".flite-submenu-trigger");
+          if (t) t.setAttribute("aria-expanded", "false");
+        });
         openDropdownPortal(editMenu, editDropdownBtn);
+        positionCreateFromSubmenus(editMenu);
       }
     });
 
@@ -3512,6 +3523,18 @@ export function renderLiveBoard() {
       e.stopPropagation();
       closeDropdownPortal();
       openEditMovementModal(m);
+    });
+
+    // Bind Create From submenu trigger
+    const createFromTrigger = tr.querySelector(".js-create-from-submenu-trigger");
+    safeOn(createFromTrigger, "click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const submenu = createFromTrigger.closest(".flite-submenu");
+      if (!submenu) return;
+      const isOpen = submenu.classList.toggle("is-open");
+      createFromTrigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      positionCreateFromSubmenus(editMenu);
     });
 
     // Bind Create From options
@@ -7635,6 +7658,19 @@ function getCreateFromOptions(sourceFlightType) {
   const ft = String(sourceFlightType || "").toUpperCase();
   const order = CREATE_FROM_ORDER[ft] || ["DUPLICATE", "LOC", "DEP", "ARR", "OVR"];
   return order.filter(target => target === "DUPLICATE" || target !== ft);
+}
+
+function positionCreateFromSubmenus(menuEl) {
+  menuEl.querySelectorAll(".flite-submenu").forEach(submenu => {
+    submenu.classList.remove("open-left");
+    const submenuMenu = submenu.querySelector(".flite-submenu-menu");
+    if (!submenuMenu) return;
+    const rect = submenu.getBoundingClientRect();
+    const estimatedWidth = submenuMenu.offsetWidth || 140;
+    if (rect.right + estimatedWidth > window.innerWidth - 8) {
+      submenu.classList.add("open-left");
+    }
+  });
 }
 
 function deriveCreateFromRoute(source, targetType) {
