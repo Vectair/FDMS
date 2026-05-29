@@ -4579,3 +4579,156 @@ tr.strip.ft-ovr > td {
   left: auto;
   right: 100%;
 }
+
+/* ── METAR Builder ────────────────────────────────────────────────────────── */
+
+.mb-output-panel {
+  background: #1a2733;
+  border: 1px solid #0d1a24;
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.mb-output-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7aafcc;
+  margin-bottom: 4px;
+}
+
+.mb-output-text {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: #e8f4f8;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.mb-validation {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.mb-validation--errors .mb-error-item {
+  color: #f4a86a;
+}
+
+.mb-validation--ok .mb-ok-item {
+  color: #7dd890;
+}
+
+.mb-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.mb-copy-feedback {
+  font-size: 11px;
+  color: var(--va-link);
+  font-weight: 600;
+}
+
+.mb-form-panel {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.mb-section {
+  border-bottom: 1px solid var(--va-border);
+  padding: 10px 0;
+}
+
+.mb-section:last-child {
+  border-bottom: none;
+}
+
+.mb-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--va-accent-brown);
+  margin-bottom: 8px;
+}
+
+.mb-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-end;
+  margin-bottom: 4px;
+}
+
+.mb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mb-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--va-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mb-hint {
+  font-size: 11px;
+  color: #888;
+  align-self: center;
+}
+
+.mb-radio-label {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.mb-checkbox-label {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.mb-cloud-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.mb-cloud-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mb-cloud-row select,
+.mb-cloud-row input {
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--va-border-dark);
+  border-radius: 3px;
+  background: #fff;
+}
+
+.mb-wind-type-row {
+  gap: 16px;
+  margin-bottom: 8px;
+}
+

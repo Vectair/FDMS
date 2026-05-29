@@ -2579,20 +2579,69 @@ Each strip's Edit dropdown now contains a labelled **Create From** group instead
 
 ---
 
-## 26. Immediate next action
+## 26. METAR-BUILDER-001 — Structured METAR/SPECI Builder
+
+**Status:** Implementation complete.
+
+### 26.1 Files added / edited
+
+| File | Change |
+|---|---|
+| `src/js/metar_builder.js` | New module — builder logic, validation, assembler, localStorage recall |
+| `src/index.html` | Added `Weather` nav tab and full `#tab-metar` panel (12 groups) |
+| `src/js/app.js` | Import `initMetarBuilder`; `runStage('metar-builder:init', ...)` in bootstrap |
+| `src/css/vectair.css` | METAR Builder styles appended (output panel, sections, cloud rows) |
+| `STATE.md` | This section |
+
+### 26.2 localStorage key
+
+```text
+vectair_fdms_metar_builder_last_v1
+```
+
+Stores structured field state (not the final string) on each Copy action.
+
+### 26.3 Manual acceptance test results
+
+| Test | Result |
+|---|---|
+| Tab appears and switches cleanly | Pass |
+| Default output begins with METAR EGOW and current UTC time | Pass |
+| Calm wind produces 00000KT | Pass |
+| Directional wind with gust produces correct KT group | Pass |
+| CAVOK suppresses visibility / weather / cloud contribution | Pass |
+| Two or more cloud layers can be added and removed | Pass |
+| Negative temperature/dew point uses M prefix | Pass |
+| QNH formats as Q1013 style | Pass |
+| Copy disabled when required fields invalid | Pass |
+| Copy includes trailing "=" | Pass |
+| Live Board continues to function after tab change | Pass |
+| Recall Previous restores last copied builder state | Pass |
+
+### 26.4 Explicit exclusions (confirmed not implemented)
+
+- External weather fetch
+- Dew point calculator
+- QNH calculator
+- Convective cloud-base calculator
+- Pressure-reduction method
+- Full ICAO Annex 3 validator
+
+---
+
+## 27. Immediate next action
 
 The next work item is:
 
 ```text
-Resume main roadmap/task list — CREATE-FROM-001 complete.
+Resume main roadmap/task list — METAR Builder complete.
 ```
 
 Recommended next work:
 
 ```text
-1. METAR Builder.
-2. Installation / Update / Backup / Troubleshooting documentation.
-3. Final V1 regression and acceptance sweep.
+1. Installation / Update / Backup / Troubleshooting documentation.
+2. Final V1 regression and acceptance sweep.
 ```
 
 Do not treat DP-09c Windows manual smoke test as the current next item.

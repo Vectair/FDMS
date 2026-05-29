@@ -35,6 +35,7 @@
           <button class="nav-tab" data-tab="tab-reports">Reports</button>
           <button class="nav-tab" data-tab="tab-cancelled">Cancelled</button>
           <button class="nav-tab" data-tab="tab-vkb">VKB Lookup</button>
+          <button class="nav-tab" data-tab="tab-metar">Weather</button>
           <button class="nav-tab" data-tab="tab-admin">Admin</button>
         </div>
       </nav>
@@ -1010,6 +1011,279 @@
               </div>
             </div>
           </div>
+        </section>
+
+        <!-- WEATHER / METAR BUILDER -->
+        <section id="tab-metar" class="tab-panel hidden">
+          <div class="page-title">METAR Builder</div>
+          <div class="page-subtitle">Compose a METAR or SPECI from structured inputs. Copy the completed report with trailing "=".</div>
+
+          <!-- Live output preview -->
+          <div class="mb-output-panel">
+            <div class="mb-output-label">Output</div>
+            <div id="mbOutput" class="mb-output-text">METAR EGOW — —</div>
+            <div id="mbValidation" class="mb-validation mb-validation--ok"></div>
+          </div>
+
+          <!-- Action toolbar -->
+          <div class="mb-toolbar">
+            <button type="button" class="btn btn-primary" id="mbCopyBtn" disabled>Copy report</button>
+            <span id="mbCopyFeedback" class="mb-copy-feedback" style="visibility:hidden;"></span>
+            <div style="flex:1;"></div>
+            <button type="button" class="btn btn-secondary" id="mbRecallBtn">Recall Previous</button>
+            <button type="button" class="btn btn-secondary" id="mbResetBtn">Reset</button>
+          </div>
+
+          <!-- Builder form -->
+          <div class="panel mb-form-panel">
+
+            <!-- ── 1. Report type / station / time ── -->
+            <div class="mb-section">
+              <div class="mb-section-title">Report</div>
+              <div class="mb-field-row">
+                <div class="mb-field">
+                  <label class="mb-label">Type</label>
+                  <select id="mbReportType" class="field">
+                    <option value="METAR" selected>METAR</option>
+                    <option value="SPECI">SPECI</option>
+                  </select>
+                </div>
+                <div class="mb-field">
+                  <label class="mb-label">Station ICAO</label>
+                  <input type="text" id="mbStation" class="field" maxlength="4" style="width:70px;text-transform:uppercase;" value="EGOW" />
+                </div>
+                <div class="mb-field">
+                  <label class="mb-label">Time (DDHHMMZ)</label>
+                  <div style="display:flex;gap:4px;align-items:center;">
+                    <input type="text" id="mbTime" class="field" maxlength="7" style="width:90px;font-family:monospace;" placeholder="011530Z" />
+                    <button type="button" class="btn btn-secondary btn-small" id="mbTimeNow" title="Insert current UTC time">Now</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── 2. Wind ── -->
+            <div class="mb-section">
+              <div class="mb-section-title">Wind</div>
+              <div class="mb-field-row mb-wind-type-row">
+                <label class="mb-radio-label"><input type="radio" name="mbWindType" value="calm" checked /> Calm (00000KT)</label>
+                <label class="mb-radio-label"><input type="radio" name="mbWindType" value="vrb" /> Variable (VRB)</label>
+                <label class="mb-radio-label"><input type="radio" name="mbWindType" value="dir" /> Directional</label>
+              </div>
+
+              <div id="mbWindDirRow" class="mb-field-row" style="display:none;">
+                <div class="mb-field">
+                  <label class="mb-label">Direction (°)</label>
+                  <input type="text" id="mbWindDir" class="field" maxlength="3" style="width:60px;font-family:monospace;" placeholder="270" />
+                </div>
+                <div class="mb-field">
+                  <label class="mb-label">Speed</label>
+                  <input type="text" id="mbWindSpeed" class="field" maxlength="3" style="width:55px;font-family:monospace;" placeholder="10" />
+                </div>
+                <div class="mb-field">
+                  <label class="mb-label">Gust (opt)</label>
+                  <input type="text" id="mbWindGust" class="field" maxlength="3" style="width:55px;font-family:monospace;" placeholder="—" />
+                </div>
+                <div class="mb-field">
+                  <label class="mb-label">Unit</label>
+                  <select id="mbWindUnit" class="field" style="width:70px;">
+                    <option value="KT" selected>KT</option>
+                    <option value="MPS">MPS</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="mbWindVrbNote" class="mb-field-row" style="display:none;">
+                <div class="mb-field">
+                  <label class="mb-label">Speed (VRB)</label>
+                  <input type="text" id="mbWindSpeedVrb" class="field" maxlength="3" style="width:55px;font-family:monospace;" placeholder="05" />
+                </div>
+                <span class="mb-hint">Speed required; direction omitted</span>
+              </div>
+
+              <div id="mbWindVarRow" class="mb-field-row" style="display:none;">
+                <div class="mb-field">
+                  <label class="mb-label">Var sector FROM (°)</label>
+                  <input type="text" id="mbWindVarFrom" class="field" maxlength="3" style="width:60px;font-family:monospace;" placeholder="250" />
+                </div>
+                <div class="mb-field">
+                  <label class="mb-label">Var sector TO (°)</label>
+                  <input type="text" id="mbWindVarTo" class="field" maxlength="3" style="width:60px;font-family:monospace;" placeholder="290" />
+                </div>
+                <span class="mb-hint">Leave blank to omit variable sector group</span>
+              </div>
+            </div>
+
+            <!-- ── 3. Visibility / CAVOK ── -->
+            <div class="mb-section">
+              <div class="mb-section-title">Visibility</div>
+              <div class="mb-field-row">
+                <label class="mb-checkbox-label">
+                  <input type="checkbox" id="mbCavok" />
+                  <span>CAVOK</span>
+                </label>
+                <span class="mb-hint">Suppresses visibility, weather, and cloud groups</span>
+              </div>
+              <div id="mbVisSection" class="mb-field-row">
+                <div class="mb-field">
+                  <label class="mb-label">Visibility (m)</label>
+                  <input type="text" id="mbVis" class="field" maxlength="4" style="width:70px;font-family:monospace;" placeholder="9999" value="9999" />
+                </div>
+              </div>
+            </div>
+
+            <!-- ── 4. RVR ── -->
+            <div class="mb-section">
+              <div class="mb-section-title">
+                <label class="mb-checkbox-label">
+                  <input type="checkbox" id="mbRvrEnabled" />
+                  <span>RVR</span>
+                </label>
+              </div>
+              <div class="mb-field-row">
+                <div class="mb-field">
+                  <label class="mb-label">RVR group</label>
+                  <input type="text" id="mbRvr" class="field" style="width:160px;font-family:monospace;" placeholder="R28/0800" />
+                </div>
+                <span class="mb-hint">Enter full RVR group, e.g. R28/0800 or R28/M0050</span>
+              </div>
+            </div>
+
+            <!-- ── 5. Present weather ── -->
+            <div id="mbWxSection" class="mb-section">
+              <div class="mb-section-title">
+                <label class="mb-checkbox-label">
+                  <input type="checkbox" id="mbWxEnabled" />
+                  <span>Present Weather</span>
+                </label>
+              </div>
+              <div class="mb-field-row">
+                <div class="mb-field">
+                  <label class="mb-label">WX group</label>
+                  <input type="text" id="mbWx" class="field" style="width:160px;font-family:monospace;" placeholder="-RA" />
+                </div>
+                <span class="mb-hint">e.g. -RA, TSRA, FG, BR, -SN</span>
+              </div>
+            </div>
+
+            <!-- ── 6. Cloud ── -->
+            <div id="mbCloudSection" class="mb-section">
+              <div class="mb-section-title">
+                <label class="mb-checkbox-label">
+                  <input type="checkbox" id="mbCloudsEnabled" checked />
+                  <span>Cloud</span>
+                </label>
+              </div>
+              <div id="mbCloudList" class="mb-cloud-list"></div>
+              <button type="button" class="btn btn-secondary btn-small" id="mbAddCloud" style="margin-top:6px;">+ Add layer</button>
+              <span class="mb-hint" style="margin-left:8px;">Height in hundreds of feet, e.g. 030 = 3000 ft</span>
+            </div>
+
+            <!-- ── 7. Temperature / Dew point ── -->
+            <div class="mb-section">
+              <div class="mb-section-title">Temperature / Dew Point</div>
+              <div class="mb-field-row">
+                <div class="mb-field">
+                  <label class="mb-label">Temp (°C)</label>
+                  <input type="number" id="mbTemp" class="field" style="width:70px;" value="10" />
+                </div>
+                <div class="mb-field">
+                  <label class="mb-label">Dew Point (°C)</label>
+                  <input type="number" id="mbDew" class="field" style="width:70px;" value="08" />
+                </div>
+                <span class="mb-hint">Negative values output with M prefix (M05)</span>
+              </div>
+            </div>
+
+            <!-- ── 8. QNH ── -->
+            <div class="mb-section">
+              <div class="mb-section-title">QNH</div>
+              <div class="mb-field-row">
+                <div class="mb-field">
+                  <label class="mb-label">QNH (hPa)</label>
+                  <input type="number" id="mbQnh" class="field" style="width:80px;" min="900" max="1080" value="1013" />
+                </div>
+                <span class="mb-hint">Output as Q1013 format</span>
+              </div>
+            </div>
+
+            <!-- ── 9. Recent weather ── -->
+            <div class="mb-section">
+              <div class="mb-section-title">
+                <label class="mb-checkbox-label">
+                  <input type="checkbox" id="mbRecentWxEnabled" />
+                  <span>Recent Weather</span>
+                </label>
+              </div>
+              <div class="mb-field-row">
+                <div class="mb-field">
+                  <label class="mb-label">RE group</label>
+                  <input type="text" id="mbRecentWx" class="field" style="width:100px;font-family:monospace;" placeholder="RERA" />
+                </div>
+                <span class="mb-hint">RE prefix added automatically, e.g. type RERA → RERERA</span>
+              </div>
+            </div>
+
+            <!-- ── 10. Wind shear ── -->
+            <div class="mb-section">
+              <div class="mb-section-title">
+                <label class="mb-checkbox-label">
+                  <input type="checkbox" id="mbWindShearEnabled" />
+                  <span>Wind Shear</span>
+                </label>
+              </div>
+              <div class="mb-field-row">
+                <div class="mb-field">
+                  <label class="mb-label">WS group</label>
+                  <input type="text" id="mbWindShear" class="field" style="width:180px;font-family:monospace;" placeholder="ALL RWY" />
+                </div>
+                <span class="mb-hint">WS prefix added automatically</span>
+              </div>
+            </div>
+
+            <!-- ── 11. Colour state ── -->
+            <div class="mb-section">
+              <div class="mb-section-title">
+                <label class="mb-checkbox-label">
+                  <input type="checkbox" id="mbColourEnabled" />
+                  <span>Colour State</span>
+                </label>
+              </div>
+              <div class="mb-field-row">
+                <div class="mb-field">
+                  <label class="mb-label">State</label>
+                  <select id="mbColour" class="field">
+                    <option value="">—</option>
+                    <option value="BLU">BLU</option>
+                    <option value="WHT">WHT</option>
+                    <option value="GRN">GRN</option>
+                    <option value="YLO1">YLO1</option>
+                    <option value="YLO2">YLO2</option>
+                    <option value="AMB">AMB</option>
+                    <option value="RED">RED</option>
+                    <option value="BLACKOUT">BLACKOUT</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── 12. Runway state ── -->
+            <div class="mb-section">
+              <div class="mb-section-title">
+                <label class="mb-checkbox-label">
+                  <input type="checkbox" id="mbRwyEnabled" />
+                  <span>Runway State</span>
+                </label>
+              </div>
+              <div class="mb-field-row">
+                <div class="mb-field">
+                  <label class="mb-label">SNOWTAM / state group</label>
+                  <input type="text" id="mbRwyState" class="field" style="width:200px;font-family:monospace;" placeholder="SNOCLO" />
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /mb-form-panel -->
         </section>
 
         <!-- ADMIN -->

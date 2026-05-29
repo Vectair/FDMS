@@ -57,6 +57,8 @@ import {
 
 import { saveTextFileWithDialogOrDownload } from "./export_utils.js";
 
+import { initMetarBuilder } from "./metar_builder.js";
+
 /* -----------------------------
    Toast Notification System
 ------------------------------ */
@@ -2109,6 +2111,7 @@ async function bootstrap() {
     runStage('admin:init',      () => { initAdminPanel(); initAdminPanelHandlers(); initUpdaterPanel(); });
     runStage('reports:init',    () => initReports());
     runStage('booking:init',    () => { initBookingPage(); initCalendarPage(); initBookingProfilesAdmin(); });
+    runStage('metar-builder:init', () => initMetarBuilder());
 
     logBootstrapStage('reconcile:run', 'started');
     const reconcileSummary = reconcileLinks();
