@@ -3477,14 +3477,10 @@ export function renderLiveBoard() {
             <button class="small-btn js-edit-dropdown" type="button" aria-label="Edit menu">Edit ▾</button>
             <div class="js-edit-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 9999; min-width: 120px; margin-top: 2px;">
               <button class="js-edit-details flite-menu-item" type="button">Details</button>
-              <button class="js-duplicate flite-menu-item" type="button">Duplicate</button>
-              ${
-                ft === "DEP"
-                  ? '<button class="js-produce-arr flite-menu-item" type="button">Arrival</button>'
-                  : ft === "ARR"
-                    ? '<button class="js-produce-dep flite-menu-item" type="button">Departure</button>'
-                    : ""
-              }
+              <div class="flite-menu-group">
+                <div class="flite-menu-heading">Create From</div>
+                ${getCreateFromOptions(ft).map(target => `<button class="js-create-from flite-menu-item" data-target="${target}" type="button">${CREATE_FROM_LABELS[target]}</button>`).join("")}
+              </div>
               ${
                 m.status === "PLANNED" || m.status === "ACTIVE"
                   ? '<button class="js-cancel flite-menu-item flite-menu-item-danger" type="button">Cancel</button>'
@@ -3518,28 +3514,13 @@ export function renderLiveBoard() {
       openEditMovementModal(m);
     });
 
-    // Bind Duplicate option
-    const duplicateBtn = tr.querySelector(".js-duplicate");
-    safeOn(duplicateBtn, "click", (e) => {
-      e.stopPropagation();
-      closeDropdownPortal();
-      openDuplicateMovementModal(m);
-    });
-
-    // Bind Produce Arrival option (for DEP strips)
-    const produceArrBtn = tr.querySelector(".js-produce-arr");
-    safeOn(produceArrBtn, "click", (e) => {
-      e.stopPropagation();
-      closeDropdownPortal();
-      openReciprocalStripModal(m, "ARR");
-    });
-
-    // Bind Produce Departure option (for ARR strips)
-    const produceDepBtn = tr.querySelector(".js-produce-dep");
-    safeOn(produceDepBtn, "click", (e) => {
-      e.stopPropagation();
-      closeDropdownPortal();
-      openReciprocalStripModal(m, "DEP");
+    // Bind Create From options
+    tr.querySelectorAll(".js-create-from").forEach(btn => {
+      safeOn(btn, "click", (e) => {
+        e.stopPropagation();
+        closeDropdownPortal();
+        openCreateFromMovementModal(m, btn.dataset.target);
+      });
     });
 
     // Bind Cancel option
@@ -7632,6 +7613,133 @@ function openDuplicateMovementModal(m) {
     closeActiveModal();
   });
 }
+
+// ─── Create From workflow ─────────────────────────────────────────────────────
+
+const CREATE_FROM_ORDER = {
+  LOC: ["DUPLICATE", "DEP", "OVR", "ARR"],
+  DEP: ["ARR", "OVR", "LOC", "DUPLICATE"],
+  ARR: ["DEP", "LOC", "OVR", "DUPLICATE"],
+  OVR: ["DUPLICATE", "ARR", "DEP", "LOC"]
+};
+
+const CREATE_FROM_LABELS = {
+  DUPLICATE: "Duplicate",
+  LOC:       "Local",
+  DEP:       "Departure",
+  ARR:       "Arrival",
+  OVR:       "Overflight"
+};
+
+function getCreateFromOptions(sourceFlightType) {
+  const ft = String(sourceFlightType || "").toUpperCase();
+  const order = CREATE_FROM_ORDER[ft] || ["DUPLICATE", "LOC", "DEP", "ARR", "OVR"];
+  return order.filter(target => target === "DUPLICATE" || target !== ft);
+}
+
+function deriveCreateFromRoute(source, targetType) {
+  const sourceDep = source.depAd || "";
+  const sourceArr = source.arrAd || "";
+
+  if (targetType === "LOC") {
+    return { depAd: "EGOW", arrAd: "EGOW" };
+  }
+  if (targetType === "DEP") {
+    return {
+      depAd: "EGOW",
+      arrAd: sourceArr && sourceArr !== "EGOW" ? sourceArr : ""
+    };
+  }
+  if (targetType === "ARR") {
+    return {
+      depAd: sourceDep && sourceDep !== "EGOW" ? sourceDep : "",
+      arrAd: "EGOW"
+    };
+  }
+  if (targetType === "OVR") {
+    return { depAd: sourceDep || "", arrAd: sourceArr || "" };
+  }
+  return { depAd: sourceDep, arrAd: sourceArr };
+}
+
+function openCreateFromTypedMovementModal(sourceMovement, targetType) {
+  const config   = getConfig();
+  const sourceFT = (sourceMovement.flightType || "").toUpperCase();
+  const source   = sourceMovement;
+
+  const rawCallsign  = source.callsignCode || "";
+  const csMatch      = rawCallsign.match(/^([A-Z]+)(\d+.*)?$/);
+  const callsignCode = csMatch ? csMatch[1] : rawCallsign;
+  const flightNumber = (csMatch && csMatch[2]) ? csMatch[2] : "";
+
+  const wtcRaw   = getWTC(source.type || "", targetType, config.wtcSystem || "ICAO");
+  const wtcToken = String(wtcRaw || "").trim().toUpperCase().match(/^[A-Z]+/)?.[0] || "";
+
+  const { depAd, arrAd } = deriveCreateFromRoute(source, targetType);
+
+  const ref = source.arrActual || source.arrPlanned || source.depActual || source.depPlanned || "";
+  let depPlanned = "";
+  let arrPlanned = "";
+
+  if (ref) {
+    if (targetType === "DEP") {
+      depPlanned = addMinutesToTime(ref, config.depOffsetMinutes ?? 10);
+      arrPlanned = addMinutesToTime(depPlanned, getDefaultFlightDuration("DEP"));
+    } else if (targetType === "LOC") {
+      depPlanned = addMinutesToTime(ref, config.locOffsetMinutes ?? 10);
+      arrPlanned = addMinutesToTime(depPlanned, getDefaultFlightDuration("LOC"));
+    } else if (targetType === "ARR") {
+      arrPlanned = addMinutesToTime(ref, config.arrOffsetMinutes ?? 90);
+    } else if (targetType === "OVR") {
+      depPlanned = addMinutesToTime(ref, config.ovrOffsetMinutes ?? 0);
+      arrPlanned = addMinutesToTime(depPlanned, getDefaultFlightDuration("OVR"));
+    }
+  }
+
+  const prefill = {
+    callsignCode,
+    flightNumber,
+    registration: source.registration || "",
+    type:         source.type         || "",
+    wtc:          wtcToken,
+    rules:        source.rules        || "VFR",
+    depAd,
+    arrAd,
+    dof:          getTodayDateString(),
+    depPlanned,
+    arrPlanned,
+    pob:          source.pob          || 0,
+    captain:      source.captain      || "",
+    egowCode:     source.egowCode     || "",
+    unitCode:     source.unitCode     || "",
+    remarks:      `Created from ${rawCallsign} ${sourceFT}`
+  };
+
+  openNewFlightModal(targetType, prefill);
+}
+
+function openCreateFromMovementModal(sourceMovement, target) {
+  const targetType = String(target || "").toUpperCase();
+
+  if (targetType === "DUPLICATE") {
+    openDuplicateMovementModal(sourceMovement);
+    return;
+  }
+
+  const sourceFT = (sourceMovement.flightType || "").toUpperCase();
+  if (sourceFT === "DEP" && targetType === "ARR") {
+    openReciprocalStripModal(sourceMovement, "ARR");
+    return;
+  }
+  if (sourceFT === "ARR" && targetType === "DEP") {
+    openReciprocalStripModal(sourceMovement, "DEP");
+    return;
+  }
+
+  openCreateFromTypedMovementModal(sourceMovement, targetType);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Open reciprocal strip creation - create ARR from DEP or DEP from ARR

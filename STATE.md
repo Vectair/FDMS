@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-28 (Europe/London, rev 18 — VERSION-RESET-001 complete: pre-launch versioning reset to 0.9.0; DEV-INSTALL-001 complete: local dev reinstall script added)
+Last updated: 2026-05-29 (Europe/London, rev 19 — CREATE-FROM-001 complete: flat Duplicate/Arrival/Departure reproduction actions replaced with structured Create From workflow)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -2542,21 +2542,50 @@ Full end-to-end "download and install" cannot be proven until a signed newer rel
 
 ---
 
-## 25. Immediate next action
+## 25. CREATE-FROM-001 — Contextual Create From strip workflow
+
+**Status:** Implementation complete.
+
+CREATE-FROM-001 implemented:
+- Replaced flat Duplicate/Arrival/Departure reproduction actions with grouped Create From workflow.
+- Create From options are context ordered and omit the source strip's own movement type because Duplicate covers same-type reproduction.
+- Preserved existing Duplicate modal timing/reset behaviour.
+- Preserved existing DEP↔ARR reciprocal behaviour.
+- Added general cross-type creation dispatch for LOC/DEP/ARR/OVR.
+
+### 25.1 Menu structure
+
+Each strip's Edit dropdown now contains a labelled **Create From** group instead of flat Duplicate/Arrival/Departure items. Order per source type:
+
+| Source | Create From order |
+|--------|-------------------|
+| LOC    | Duplicate, Departure, Overflight, Arrival |
+| DEP    | Arrival, Overflight, Local, Duplicate |
+| ARR    | Departure, Local, Overflight, Duplicate |
+| OVR    | Duplicate, Arrival, Departure, Local |
+
+### 25.2 Dispatch logic
+
+- **Duplicate** → `openDuplicateMovementModal()` (unchanged, preserves timing/reset).
+- **DEP→ARR** and **ARR→DEP** → `openReciprocalStripModal()` (unchanged, preserves aerodrome swap and configured offsets).
+- All other cross-type pairs → `openCreateFromTypedMovementModal()` which prefills identity, route, and timing and opens `openNewFlightModal()`. No movement is created until Save.
+
+---
+
+## 26. Immediate next action
 
 The next work item is:
 
 ```text
-Resume main roadmap/task list — UPDATER-001 complete.
+Resume main roadmap/task list — CREATE-FROM-001 complete.
 ```
 
 Recommended next work:
 
 ```text
-1. Create From workflow.
-2. METAR Builder.
-3. Installation / Update / Backup / Troubleshooting documentation.
-4. Final V1 regression and acceptance sweep.
+1. METAR Builder.
+2. Installation / Update / Backup / Troubleshooting documentation.
+3. Final V1 regression and acceptance sweep.
 ```
 
 Do not treat DP-09c Windows manual smoke test as the current next item.
