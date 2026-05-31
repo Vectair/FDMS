@@ -8,61 +8,83 @@ const DEFAULT_STATION = 'EGOW';
 
 // ── Temperature helpers ───────────────────────────────────────────────────────
 
-function parseTempInput(v) {
+function isValidMetarTempInput(v) {
   const s = String(v ?? '').trim().toUpperCase();
-  if (!s) return NaN;
+  return /^-?\d{1,2}$/.test(s) || /^M\d{1,2}$/.test(s);
+}
+
+function parseMetarTempInput(v) {
+  const s = String(v ?? '').trim().toUpperCase();
+  if (!isValidMetarTempInput(s)) return NaN;
   if (s.startsWith('M')) return -parseInt(s.slice(1), 10);
   return parseInt(s, 10);
 }
 
-function formatTemp(v) {
-  const n = parseTempInput(v);
+function formatMetarTemp(v) {
+  const n = parseMetarTempInput(v);
   if (isNaN(n)) return '//';
-  const abs = String(Math.abs(n)).padStart(2, '0');
-  return n < 0 ? `M${abs}` : abs;
+  return (n < 0 ? 'M' : '') + String(Math.abs(n)).padStart(2, '0');
+}
+
+// ── Recent weather token normaliser ──────────────────────────────────────────
+
+function normalizeRecentWeatherToken(raw) {
+  const token = String(raw || '').trim().toUpperCase();
+  if (!token) return '';
+  return token.startsWith('RE') ? token : `RE${token}`;
 }
 
 // ── Observation schedule ──────────────────────────────────────────────────────
 
+function formatDateAsMetarTime(d) {
+  return `${String(d.getUTCDate()).padStart(2,'0')}${String(d.getUTCHours()).padStart(2,'0')}${String(d.getUTCMinutes()).padStart(2,'0')}Z`;
+}
+
+function getScheduledMins(schedule) {
+  if (schedule.pattern === 'H53') return [53];
+  if (schedule.rate === 'hourly') {
+    const m = parseInt(schedule.hourlyMinute, 10);
+    if (!isNaN(m)) return [m];
+    return schedule.pattern === 'H00_H30' ? [0] : [50];
+  }
+  return schedule.pattern === 'H00_H30' ? [0, 30] : [20, 50];
+}
+
 function getScheduledMETARTime() {
   const cfg = getConfig();
-  const schedule = (cfg.metarObservationSchedule) || { pattern: 'H20_H50' };
+  const schedule = cfg.metarObservationSchedule || { pattern: 'H20_H50', rate: 'bi-hourly', hourlyMinute: '50' };
+  const scheduledMins = getScheduledMins(schedule);
   const now = new Date();
-  const currentHour = now.getUTCHours();
-  const currentMin  = now.getUTCMinutes();
+  const WINDOW_MS = 5 * 60 * 1000; // 5-minute window, inclusive
 
-  let scheduledMins;
-  if (schedule.pattern === 'H00_H30') {
-    scheduledMins = [0, 30];
-  } else if (schedule.pattern === 'H53') {
-    scheduledMins = [53];
-  } else {
-    scheduledMins = [20, 50];
-  }
-
-  // Most recent past scheduled minute in current or previous hour
-  let targetHour = currentHour;
-  let targetMin  = null;
-  for (let i = scheduledMins.length - 1; i >= 0; i--) {
-    if (currentMin >= scheduledMins[i]) {
-      targetMin = scheduledMins[i];
-      break;
+  // Build candidate Date objects spanning current hour ±2 hours (handles all rollovers)
+  const candidates = [];
+  for (let hourOffset = -2; hourOffset <= 2; hourOffset++) {
+    for (const min of scheduledMins) {
+      const cand = new Date(now);
+      cand.setUTCHours(now.getUTCHours() + hourOffset, min, 0, 0);
+      candidates.push(cand);
     }
   }
-  if (targetMin === null) {
-    targetHour = (currentHour - 1 + 24) % 24;
-    targetMin  = scheduledMins[scheduledMins.length - 1];
+  candidates.sort((a, b) => a - b);
+
+  // If now is within an issue window [issueTime, issueTime+5min], use that issue time
+  for (const cand of candidates) {
+    if (now >= cand && now <= new Date(cand.getTime() + WINDOW_MS)) {
+      return formatDateAsMetarTime(cand);
+    }
   }
 
-  const dd = String(now.getUTCDate()).padStart(2, '0');
-  const hh = String(targetHour).padStart(2, '0');
-  const mm = String(targetMin).padStart(2, '0');
-  return `${dd}${hh}${mm}Z`;
+  // Otherwise roll forward to the next scheduled issue time
+  for (const cand of candidates) {
+    if (cand > now) return formatDateAsMetarTime(cand);
+  }
+
+  return formatDateAsMetarTime(candidates[candidates.length - 1]);
 }
 
 function currentUtcTimeStr() {
-  const now = new Date();
-  return `${String(now.getUTCDate()).padStart(2,'0')}${String(now.getUTCHours()).padStart(2,'0')}${String(now.getUTCMinutes()).padStart(2,'0')}Z`;
+  return formatDateAsMetarTime(new Date());
 }
 
 // ── Colour state derivation (UK thresholds) ───────────────────────────────────
@@ -76,17 +98,20 @@ const COLOUR_THRESHOLDS = [
   { state: 'AMB',  visM:  800, ceilFt:  200 },
 ];
 
+// SCT, BKN, OVC are all significant for V1 colour-state derivation
+const SIGNIFICANT_CLOUD = new Set(['SCT', 'BKN', 'OVC']);
+
 function deriveColourState(vis, clouds, cavok) {
   if (cavok) return 'BLU';
   const visM = parseInt(vis, 10) || 0;
-  let lowestBrokenFt = Infinity;
+  let lowestSignificantFt = Infinity;
   (clouds || []).forEach(c => {
-    if (['BKN', 'OVC'].includes(c.amount) && c.height) {
+    if (SIGNIFICANT_CLOUD.has(c.amount) && c.height) {
       const ft = parseInt(c.height, 10) * 100;
-      if (ft < lowestBrokenFt) lowestBrokenFt = ft;
+      if (ft < lowestSignificantFt) lowestSignificantFt = ft;
     }
   });
-  const ceilFt = isFinite(lowestBrokenFt) ? lowestBrokenFt : Infinity;
+  const ceilFt = isFinite(lowestSignificantFt) ? lowestSignificantFt : Infinity;
   for (const t of COLOUR_THRESHOLDS) {
     if (visM >= t.visM && ceilFt >= t.ceilFt) return t.state;
   }
@@ -160,7 +185,7 @@ function validateState(s) {
         const gust  = parseInt(s.windGust,  10);
         const speed = parseInt(s.windSpeed, 10);
         if (!isNaN(gust) && !isNaN(speed) && gust < speed + 10) {
-          errors.push(`Wind gust: gust (${gust} kt) must be at least 10 kt greater than mean wind (${speed} kt).`);
+          errors.push('Wind gust: gust must be at least 10 kt greater than the mean wind speed.');
         }
       }
     }
@@ -180,32 +205,47 @@ function validateState(s) {
     }
     if (s.cloudsEnabled) {
       s.clouds.forEach((c, i) => {
-        if (!['FEW', 'SCT', 'BKN', 'OVC', 'NSC', 'SKC', 'NCD'].includes(c.amount)) {
+        if (!['FEW','SCT','BKN','OVC','NSC','SKC','NCD'].includes(c.amount)) {
           errors.push(`Cloud layer ${i + 1}: invalid amount.`);
         }
-        if (!['NSC', 'SKC', 'NCD'].includes(c.amount) && !/^\d{3}$/.test(c.height)) {
+        if (!['NSC','SKC','NCD'].includes(c.amount) && !/^\d{3}$/.test(c.height)) {
           errors.push(`Cloud layer ${i + 1}: height must be three digits (e.g. 030).`);
         }
       });
     }
   }
 
-  if (isNaN(parseTempInput(s.tempC)) || String(s.tempC).trim() === '') {
-    errors.push('Temperature: must be an integer (e.g. 10, -5, M05).');
+  // Present weather: require phenomenon (structured) or non-empty text (manual)
+  if (s.wxEnabled) {
+    if (s.wxMode === 'structured') {
+      if (!s.wxPhenomenon) {
+        errors.push('Present Weather: select a phenomenon or disable the section.');
+      }
+    } else {
+      if (!s.wxManualText.trim()) {
+        errors.push('Present Weather: enter a manual weather group or disable the section.');
+      }
+    }
   }
-  if (isNaN(parseTempInput(s.dewC)) || String(s.dewC).trim() === '') {
-    errors.push('Dew point: must be an integer (e.g. 08, -3, M03).');
+
+  // Recent weather: same requirement
+  if (s.recentWxEnabled) {
+    if (s.recentWxMode === 'structured') {
+      if (!s.recentWxPhenomenon) {
+        errors.push('Recent Weather: select a phenomenon or disable the section.');
+      }
+    } else {
+      if (!s.recentWxManualText.trim()) {
+        errors.push('Recent Weather: enter a manual recent-weather group or disable the section.');
+      }
+    }
   }
-  if (!/^\d{3,4}$/.test(s.qnh)) errors.push('QNH: must be 3–4 digits (e.g. 1013).');
+
+  if (!isValidMetarTempInput(s.tempC)) errors.push('Temperature: must be an integer (e.g. 10, -5, M05).');
+  if (!isValidMetarTempInput(s.dewC))  errors.push('Dew point: must be an integer (e.g. 08, -3, M03).');
+  if (!/^\d{3,4}$/.test(s.qnh))       errors.push('QNH: must be 3–4 digits (e.g. 1013).');
 
   return errors;
-}
-
-// ── WX group assembler ────────────────────────────────────────────────────────
-
-function assembleWxGroup(mode, intensity, descriptor, phenomenon, manualText) {
-  if (mode === 'manual') return (manualText || '').trim().toUpperCase();
-  return (intensity || '') + (descriptor || '') + (phenomenon || '');
 }
 
 // ── METAR assembler ───────────────────────────────────────────────────────────
@@ -241,14 +281,21 @@ function buildReport(s) {
     groups.push(s.vis || '9999');
     if (s.rvrEnabled && s.rvr.trim()) groups.push(s.rvr.trim().toUpperCase());
 
+    // Present weather
     if (s.wxEnabled) {
-      const wxGroup = assembleWxGroup(s.wxMode, s.wxIntensity, s.wxDescriptor, s.wxPhenomenon, s.wxManualText);
+      let wxGroup;
+      if (s.wxMode === 'manual') {
+        wxGroup = s.wxManualText.trim().toUpperCase();
+      } else {
+        wxGroup = (s.wxIntensity || '') + (s.wxDescriptor || '') + (s.wxPhenomenon || '');
+      }
       if (wxGroup) groups.push(wxGroup);
     }
 
+    // Cloud
     if (s.cloudsEnabled && s.clouds.length) {
       s.clouds.forEach(c => {
-        if (['NSC', 'SKC', 'NCD'].includes(c.amount)) {
+        if (['NSC','SKC','NCD'].includes(c.amount)) {
           groups.push(c.amount);
         } else {
           groups.push(`${c.amount}${String(c.height).padStart(3,'0')}${c.qualifier || ''}`);
@@ -257,17 +304,19 @@ function buildReport(s) {
     }
   }
 
-  groups.push(`${formatTemp(s.tempC)}/${formatTemp(s.dewC)}`);
+  groups.push(`${formatMetarTemp(s.tempC)}/${formatMetarTemp(s.dewC)}`);
   groups.push(`Q${String(s.qnh).padStart(4,'0')}`);
 
   // Recent weather
   if (s.recentWxEnabled) {
-    const code = assembleWxGroup(s.recentWxMode, s.recentWxIntensity, s.recentWxDescriptor, s.recentWxPhenomenon, s.recentWxManualText);
-    if (code) {
-      // In manual mode, strip leading RE to avoid double prefix, then re-add
-      const stripped = s.recentWxMode === 'manual' && code.startsWith('RE') ? code.slice(2) : code;
-      groups.push(`RE${stripped}`);
+    let reCode;
+    if (s.recentWxMode === 'manual') {
+      reCode = normalizeRecentWeatherToken(s.recentWxManualText);
+    } else {
+      const assembled = (s.recentWxIntensity || '') + (s.recentWxDescriptor || '') + (s.recentWxPhenomenon || '');
+      reCode = assembled ? `RE${assembled}` : '';
     }
+    if (reCode) groups.push(reCode);
   }
 
   if (s.windShearEnabled && s.windShear.trim())  groups.push(`WS ${s.windShear.trim().toUpperCase()}`);
@@ -284,7 +333,7 @@ function loadSaved() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    // Migrate legacy plain-text wx fields from v1
+    // Migrate legacy plain-text wx fields from builder v1
     if (parsed.wx !== undefined && parsed.wxMode === undefined) {
       parsed.wxMode = 'manual';
       parsed.wxManualText = parsed.wx || '';
@@ -307,8 +356,8 @@ function saveState(s) {
 
 // ── DOM helpers ───────────────────────────────────────────────────────────────
 
-function el(id)         { return document.getElementById(id); }
-function setVal(id, v)  { const e = el(id); if (e) e.value = v; }
+function el(id)            { return document.getElementById(id); }
+function setVal(id, v)     { const e = el(id); if (e) e.value = v; }
 function setChecked(id, v) { const e = el(id); if (e) e.checked = !!v; }
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -317,18 +366,18 @@ function escHtml(s) {
 // ── Cloud row builder ─────────────────────────────────────────────────────────
 
 function buildCloudRow(idx, cloud) {
-  const amounts   = ['FEW','SCT','BKN','OVC','NSC','SKC','NCD'];
-  const amtOpts   = amounts.map(a =>
+  const amounts  = ['FEW','SCT','BKN','OVC','NSC','SKC','NCD'];
+  const amtOpts  = amounts.map(a =>
     `<option value="${a}"${a === cloud.amount ? ' selected' : ''}>${a}</option>`
   ).join('');
-  const noHeight  = ['NSC','SKC','NCD'].includes(cloud.amount);
+  const noHeight = ['NSC','SKC','NCD'].includes(cloud.amount);
   const heightHtml = noHeight
     ? `<input type="text" class="mb-cloud-height" style="width:56px;opacity:0.4;pointer-events:none;" value="" disabled placeholder="---" />`
     : `<input type="text" class="mb-cloud-height" maxlength="3" style="width:56px;" value="${cloud.height || '030'}" placeholder="030" />`;
-  const qualOpts  = ['','TCU','CB'].map(q =>
+  const qualOpts = ['','TCU','CB'].map(q =>
     `<option value="${q}"${q === (cloud.qualifier||'') ? ' selected' : ''}>${q||'—'}</option>`
   ).join('');
-  const qualHtml  = noHeight
+  const qualHtml = noHeight
     ? `<select class="mb-cloud-qualifier" disabled style="opacity:0.4;">${qualOpts}</select>`
     : `<select class="mb-cloud-qualifier">${qualOpts}</select>`;
   return `
@@ -344,12 +393,12 @@ function buildCloudRow(idx, cloud) {
 // ── Wind section sync ─────────────────────────────────────────────────────────
 
 function syncWindUi(windType) {
-  const dirRow  = el('mbWindDirRow');
-  const vrbRow  = el('mbWindVrbNote');
-  const varRow  = el('mbWindVarRow');
-  if (dirRow)  dirRow.style.display  = windType === 'dir' ? '' : 'none';
-  if (vrbRow)  vrbRow.style.display  = windType === 'vrb' ? '' : 'none';
-  if (varRow)  varRow.style.display  = windType === 'dir' ? '' : 'none';
+  const dirRow = el('mbWindDirRow');
+  const vrbRow = el('mbWindVrbNote');
+  const varRow = el('mbWindVarRow');
+  if (dirRow) dirRow.style.display = windType === 'dir' ? '' : 'none';
+  if (vrbRow) vrbRow.style.display = windType === 'vrb' ? '' : 'none';
+  if (varRow) varRow.style.display = windType === 'dir' ? '' : 'none';
 }
 
 function syncCavokUi(cavok) {
@@ -380,8 +429,8 @@ function updateColourAutoIndicator(isManual) {
 // ── Read form state ────────────────────────────────────────────────────────────
 
 function readFormState() {
-  const windType = document.querySelector('input[name="mbWindType"]:checked')?.value   || 'dir';
-  const wxMode   = document.querySelector('input[name="mbWxMode"]:checked')?.value     || 'structured';
+  const windType = document.querySelector('input[name="mbWindType"]:checked')?.value     || 'dir';
+  const wxMode   = document.querySelector('input[name="mbWxMode"]:checked')?.value       || 'structured';
   const rwxMode  = document.querySelector('input[name="mbRecentWxMode"]:checked')?.value || 'structured';
   const colourManualOverride = el('mbColour')?.dataset.manualOverride === 'true';
 
@@ -422,12 +471,12 @@ function readFormState() {
     tempC:                el('mbTemp')?.value         || '10',
     dewC:                 el('mbDew')?.value          || '08',
     qnh:                  el('mbQnh')?.value          || '1013',
-    recentWxEnabled:      el('mbRecentWxEnabled')?.checked   || false,
+    recentWxEnabled:      el('mbRecentWxEnabled')?.checked    || false,
     recentWxMode:         rwxMode,
-    recentWxIntensity:    el('mbRecentWxIntensity')?.value   || '',
-    recentWxDescriptor:   el('mbRecentWxDescriptor')?.value  || '',
-    recentWxPhenomenon:   el('mbRecentWxPhenomenon')?.value  || '',
-    recentWxManualText:   el('mbRecentWxManualText')?.value  || '',
+    recentWxIntensity:    el('mbRecentWxIntensity')?.value    || '',
+    recentWxDescriptor:   el('mbRecentWxDescriptor')?.value   || '',
+    recentWxPhenomenon:   el('mbRecentWxPhenomenon')?.value   || '',
+    recentWxManualText:   el('mbRecentWxManualText')?.value   || '',
     windShear:            el('mbWindShear')?.value    || '',
     windShearEnabled:     el('mbWindShearEnabled')?.checked || false,
     colourState:          el('mbColour')?.value       || '',
@@ -714,6 +763,31 @@ export function initMetarBuilder() {
 
 // ── Admin Weather section ─────────────────────────────────────────────────────
 
+function syncAdminWeatherUi(pattern, rate) {
+  const rateRow   = el('adminWeatherRateRow');
+  const minuteRow = el('adminWeatherMinuteRow');
+  if (pattern === 'H53') {
+    if (rateRow)   rateRow.style.display   = 'none';
+    if (minuteRow) minuteRow.style.display = 'none';
+  } else {
+    if (rateRow)   rateRow.style.display   = '';
+    if (minuteRow) minuteRow.style.display = rate === 'hourly' ? '' : 'none';
+  }
+}
+
+function rebuildMinuteOptions(pattern, selectedMinute) {
+  const minuteEl = el('adminWeatherHourlyMinute');
+  if (!minuteEl) return;
+  const opts = pattern === 'H00_H30'
+    ? [['00', '+00 (top of hour)'], ['30', '+30 minutes']]
+    : [['20', '+20 minutes'],       ['50', '+50 minutes']];
+  minuteEl.innerHTML = opts.map(([v, label]) =>
+    `<option value="${v}"${v === String(selectedMinute) ? ' selected' : ''}>${label}</option>`
+  ).join('');
+  // If saved minute not valid for new pattern, pick first option
+  if (!opts.some(([v]) => v === minuteEl.value)) minuteEl.value = opts[0][0];
+}
+
 export function initAdminWeather() {
   const saveBtn   = el('adminWeatherSave');
   const patternEl = el('adminWeatherPattern');
@@ -721,15 +795,27 @@ export function initAdminWeather() {
   if (!saveBtn || !patternEl || !rateEl) return;
 
   const cfg      = getConfig();
-  const schedule = cfg.metarObservationSchedule || { pattern: 'H20_H50', rate: 'bi-hourly' };
+  const schedule = cfg.metarObservationSchedule || { pattern: 'H20_H50', rate: 'bi-hourly', hourlyMinute: '50' };
   setVal('adminWeatherPattern', schedule.pattern || 'H20_H50');
   setVal('adminWeatherRate',    schedule.rate    || 'bi-hourly');
+  rebuildMinuteOptions(schedule.pattern || 'H20_H50', schedule.hourlyMinute || '50');
+  syncAdminWeatherUi(schedule.pattern || 'H20_H50', schedule.rate || 'bi-hourly');
+
+  patternEl.addEventListener('change', () => {
+    rebuildMinuteOptions(patternEl.value, el('adminWeatherHourlyMinute')?.value || '50');
+    syncAdminWeatherUi(patternEl.value, rateEl.value);
+  });
+  rateEl.addEventListener('change', () => {
+    syncAdminWeatherUi(patternEl.value, rateEl.value);
+  });
 
   saveBtn.addEventListener('click', () => {
+    const minuteEl = el('adminWeatherHourlyMinute');
     updateConfig({
       metarObservationSchedule: {
-        pattern: patternEl.value,
-        rate:    rateEl.value,
+        pattern:       patternEl.value,
+        rate:          rateEl.value,
+        hourlyMinute:  minuteEl ? minuteEl.value : '50',
       },
     });
     const st = el('adminWeatherStatus');

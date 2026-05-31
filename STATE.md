@@ -2684,6 +2684,57 @@ Stored in `vectair_fdms_config` via `updateConfig()`. Default values used if abs
 
 ---
 
-## 28. Immediate next action
+## 28. METAR-BUILDER-002a — Correction Pass
 
-METAR-BUILDER-002 implementation complete. Resume main roadmap/task list.
+**Status:** Implementation complete. Correction pass over METAR-BUILDER-002.
+
+**Branch:** `claude/friendly-bohr-YFGLP`
+
+### 28.1 Corrections applied
+
+| # | Item | Detail |
+|---|---|---|
+| 1 | Scheduled issue-time window logic | `getScheduledMETARTime()` now builds candidate Date objects for ±2 hours and checks if now is within `[issueStart, issueStart+5min]` (inclusive). If in window → use that issueStart. Otherwise roll forward to next issueStart. Uses real Date objects so hour/day/month rollover is correct. |
+| 2 | Admin > Weather hourlyMinute selector | Added `adminWeatherHourlyMinute` select (options driven by pattern). Shows when rate=hourly; hides for H53 along with the rate row. Options update dynamically when pattern changes. Config saves `hourlyMinute`. |
+| 3 | Admin Weather description text | Replaced "most recent scheduled observation" wording with the correct 5-minute window description. |
+| 4 | Recent Weather manual hint | Fixed "entering RERA outputs RERERA correctly" → "Enter RA or RERA; both output RERA." |
+| 5 | Present Weather enabled validation | Structured mode requires phenomenon; manual mode requires non-empty text. |
+| 6 | Recent Weather enabled validation | Same requirements as present weather. |
+| 7 | Recent weather normalisation | `normalizeRecentWeatherToken()` helper used. Input with leading RE is kept; without RE has it prepended. No double-prefix possible. |
+| 8 | Colour-state SCT inclusion | `deriveColourState()` now treats SCT, BKN, OVC as significant. FEW, NSC, SKC, NCD ignored. |
+| 9 | Temperature/dewpoint strict validation | `isValidMetarTempInput()` uses explicit regex (`/^-?\d{1,2}$/` or `/^M\d{1,2}$/`). Rejects `M5X`, `-5X`, `ABC`, bare `M`, etc. |
+| 10 | Gust validation message | Simplified to "Wind gust: gust must be at least 10 kt greater than the mean wind speed." |
+| 12 | STATE.md | This section. |
+
+### 28.2 Config shape (current)
+
+```json
+{
+  "metarObservationSchedule": {
+    "pattern": "H20_H50",
+    "rate": "bi-hourly",
+    "hourlyMinute": "50"
+  }
+}
+```
+
+Stored in `vectair_fdms_config` via `updateConfig()`. All three keys present from 002a onwards; earlier saves without `hourlyMinute` fall back to `"50"` in `getScheduledMins()`.
+
+### 28.3 Known limitations (not in scope)
+
+- Single weather phenomenon per structured group only. Multiple simultaneous phenomena (e.g. RASN) require manual override.
+- Runway-state group is free-text only; no structured SNOWTAM encoding.
+
+### 28.4 Explicit exclusions (unchanged)
+
+- External weather fetch
+- Dew point calculator / QNH calculator / convective cloud-base calculator
+- Email transmission
+- Full ICAO Annex 3 validator
+- General unit conversion framework
+
+---
+
+## 29. Immediate next action
+
+METAR-BUILDER-002a implementation complete. Stuart acceptance required before further METAR work. Resume main roadmap/task list.

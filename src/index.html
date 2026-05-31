@@ -1352,7 +1352,7 @@
                     <label class="mb-label">RE group (manual)</label>
                     <input type="text" id="mbRecentWxManualText" class="field" style="width:120px;font-family:monospace;" placeholder="RERA" />
                   </div>
-                  <span class="mb-hint">RE prefix added automatically; entering RERA outputs RERERA correctly.</span>
+                  <span class="mb-hint">RE prefix is added automatically. Enter RA or RERA; both output RERA.</span>
                 </div>
               </div>
             </div>
@@ -2251,7 +2251,7 @@
               <div class="admin-section hidden" id="admin-sec-weather">
                 <div class="panel">
                   <h3>Weather / METAR Settings</h3>
-                  <p style="font-size:12px;color:#555;margin:0 0 14px;">Configure the scheduled observation times for METAR reports at your station. The METAR time field is auto-set to the most recent scheduled observation when the builder loads or when report type is changed to METAR.</p>
+                  <p style="font-size:12px;color:#555;margin:0 0 14px;">Configure the scheduled observation times for METAR reports at your station. METAR time is auto-set to the configured scheduled issue time. Each issue time remains valid until issue time +5 minutes; after that the builder rolls forward to the next configured issue time. SPECI uses the current UTC time.</p>
                   <div style="display:flex;flex-direction:column;gap:14px;max-width:420px;">
                     <div>
                       <label style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;">Observation schedule</label>
@@ -2262,12 +2262,20 @@
                       </select>
                       <div style="font-size:11px;color:#888;margin-top:3px;">Minutes past the hour when routine METARs are issued.</div>
                     </div>
-                    <div>
+                    <div id="adminWeatherRateRow">
                       <label style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;">Observation rate</label>
                       <select id="adminWeatherRate" class="field" style="width:230px;">
                         <option value="bi-hourly">Bi-hourly (2 per hour)</option>
                         <option value="hourly">Hourly (1 per hour)</option>
                       </select>
+                    </div>
+                    <div id="adminWeatherMinuteRow" style="display:none;">
+                      <label style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;">Issue minute (hourly)</label>
+                      <select id="adminWeatherHourlyMinute" class="field" style="width:230px;">
+                        <option value="20">+20 minutes</option>
+                        <option value="50" selected>+50 minutes</option>
+                      </select>
+                      <div style="font-size:11px;color:#888;margin-top:3px;">Which scheduled minute to use when rate is hourly.</div>
                     </div>
                     <div style="display:flex;align-items:center;gap:10px;">
                       <button type="button" class="btn btn-primary" id="adminWeatherSave">Save</button>
