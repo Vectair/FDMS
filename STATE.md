@@ -2870,3 +2870,39 @@ Stuart generated `METAR EGOW 010920Z 20014KT 9999 RA SN GR SCT023 17/12 Q1010 RM
 - TS alone (no phenom1) remains valid
 - Automatic ordering is NOT enforced — observer places dominant type first manually
 - `loadSaved()` migrates old `phenomenon` key to `phenom1`; also migrates legacy plain-text and single-structured-group saves
+
+---
+
+## 32. METAR-BUILDER-003c — TS Requires CB Cloud (Blocking)
+
+**Branch:** `claude/friendly-bohr-YFGLP`
+**Commit:** Require CB cloud for thunderstorm weather
+**Status:** Complete — Stuart acceptance required
+
+### 32.1 Problem
+
+TS present weather was accepted with BKN023TCU. CAP 746 requires CB to be reported whenever TS is present weather — TCU is not sufficient.
+
+### 32.2 Change
+
+In `validateState()`, the cross-check between structured WX groups and cloud layers:
+
+**Before:** TS without CB → advisory warning only  
+**After:** TS without CB → blocking error — Copy disabled
+
+**Blocking message:** "Present Weather: TS requires a CB cloud group in the cloud section (CAP 746)."
+
+Applies to TS, TSRA, TSRASN, TSRAGR, or any group where `descriptor === 'TS'`. TCU does not satisfy the check.
+
+### 32.3 Acceptance
+
+| Scenario | Result |
+|----------|--------|
+| TS + BKN023TCU | Blocked |
+| TS + BKN023CB | Allowed |
+| TSRA + BKN023TCU | Blocked |
+| TSRA + BKN023CB | Allowed |
+| TSRAGR + BKN023TCU | Blocked |
+| TSRAGR + BKN023CB | Allowed |
+| SHRA + BKN023TCU | Allowed |
+| RASN + BKN023TCU | Allowed |

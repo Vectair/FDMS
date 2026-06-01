@@ -378,7 +378,7 @@ function validateState(s) {
         const hasTS = groups.some(g => g.descriptor === 'TS');
         const hasCB = (s.clouds || []).some(c => c.qualifier === 'CB');
         if (hasTS && !hasCB) {
-          warnings.push('TS in present weather without a CB cloud qualifier — consider adding CB to the relevant cloud layer (CAP 746).');
+          errors.push('Present Weather: TS requires a CB cloud group in the cloud section (CAP 746).');
         }
       }
     } else {
