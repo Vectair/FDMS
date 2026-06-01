@@ -1,9 +1,9 @@
 // metar_builder.js
-// Structured METAR/SPECI builder for Vectair Flite.
+// Structured METAR/SPECI builder for Vectair Flite — CAP 746 Issue 6 compliant.
 
 import { getConfig, updateConfig } from './datamodel.js';
 
-const STORAGE_KEY = 'vectair_fdms_metar_builder_last_v1';
+const STORAGE_KEY    = 'vectair_fdms_metar_builder_last_v1';
 const DEFAULT_STATION = 'EGOW';
 
 // ── Temperature helpers ───────────────────────────────────────────────────────
@@ -55,9 +55,8 @@ function getScheduledMETARTime() {
   const schedule = cfg.metarObservationSchedule || { pattern: 'H20_H50', rate: 'bi-hourly', hourlyMinute: '50' };
   const scheduledMins = getScheduledMins(schedule);
   const now = new Date();
-  const WINDOW_MS = 5 * 60 * 1000; // 5-minute window, inclusive
+  const WINDOW_MS = 5 * 60 * 1000;
 
-  // Build candidate Date objects spanning current hour ±2 hours (handles all rollovers)
   const candidates = [];
   for (let hourOffset = -2; hourOffset <= 2; hourOffset++) {
     for (const min of scheduledMins) {
@@ -68,18 +67,14 @@ function getScheduledMETARTime() {
   }
   candidates.sort((a, b) => a - b);
 
-  // If now is within an issue window [issueTime, issueTime+5min], use that issue time
   for (const cand of candidates) {
     if (now >= cand && now <= new Date(cand.getTime() + WINDOW_MS)) {
       return formatDateAsMetarTime(cand);
     }
   }
-
-  // Otherwise roll forward to the next scheduled issue time
   for (const cand of candidates) {
     if (cand > now) return formatDateAsMetarTime(cand);
   }
-
   return formatDateAsMetarTime(candidates[candidates.length - 1]);
 }
 
@@ -98,7 +93,6 @@ const COLOUR_THRESHOLDS = [
   { state: 'AMB',  visM:  800, ceilFt:  200 },
 ];
 
-// SCT, BKN, OVC are all significant for V1 colour-state derivation
 const SIGNIFICANT_CLOUD = new Set(['SCT', 'BKN', 'OVC']);
 
 function deriveColourState(vis, clouds, cavok) {
@@ -118,7 +112,68 @@ function deriveColourState(vis, clouds, cavok) {
   return 'RED';
 }
 
-// ── Defaults ──────────────────────────────────────────────────────────────────
+// ── CAP 746 WX compatibility warnings ────────────────────────────────────────
+
+const PRECIP_PHENOM = new Set(['RA','DZ','SN','SG','IC','PL','GR','GS','UP']);
+
+function validateWxCompatibility(intensity, descriptor, phenomenon, vis) {
+  const w = [];
+
+  if ((intensity === '+' || intensity === '-') && phenomenon) {
+    if (!PRECIP_PHENOM.has(phenomenon)) {
+      w.push(`Intensity '${intensity}' applies only to precipitation phenomena (CAP 746).`);
+    }
+  }
+
+  if (intensity === 'VC') {
+    const VC_PHENOM = new Set(['TS','FG','DS','SS','PO','FC']);
+    const VC_DESC   = new Set(['SH']);
+    if (phenomenon && !VC_PHENOM.has(phenomenon) && !VC_DESC.has(descriptor)) {
+      w.push('VC (in vicinity) is applicable only with TS, FG, SH, PO, FC, DS, SS (CAP 746).');
+    }
+  }
+
+  if (descriptor === 'MI' || descriptor === 'BC' || descriptor === 'PR') {
+    if (phenomenon !== 'FG') {
+      w.push(`Descriptor '${descriptor}' requires FG as phenomenon (CAP 746).`);
+    }
+  }
+  if (descriptor === 'DR' || descriptor === 'BL') {
+    if (!['DU','SA','SN'].includes(phenomenon)) {
+      w.push(`Descriptor '${descriptor}' requires DU, SA, or SN as phenomenon (CAP 746).`);
+    }
+  }
+  if (descriptor === 'SH') {
+    if (!PRECIP_PHENOM.has(phenomenon)) {
+      w.push('Descriptor SH (shower) requires a precipitation phenomenon (CAP 746).');
+    }
+  }
+  if (descriptor === 'FZ') {
+    if (!['DZ','RA','FG','UP'].includes(phenomenon)) {
+      w.push('Descriptor FZ (freezing) requires DZ, RA, FG, or UP as phenomenon (CAP 746).');
+    }
+  }
+
+  const visM = parseInt(vis, 10);
+  if (phenomenon === 'FG' && descriptor !== 'FZ') {
+    if (!isNaN(visM) && visM > 1000) {
+      w.push('FG (fog): visibility should be ≤ 1000 m. Consider BR (mist) for 1000–5000 m.');
+    }
+  }
+  if (phenomenon === 'BR') {
+    if (!isNaN(visM)) {
+      if (visM < 1000) w.push('BR (mist): visibility should be ≥ 1000 m. Consider FG for < 1000 m.');
+      if (visM > 5000) w.push('BR (mist): visibility should be ≤ 5000 m. Consider HZ for > 5000 m.');
+    }
+  }
+  if (phenomenon === 'HZ' && !isNaN(visM) && visM < 1000) {
+    w.push('HZ (haze): visibility should be ≥ 1000 m (CAP 746).');
+  }
+
+  return w;
+}
+
+// ── Defaults (no operational values — all blank) ──────────────────────────────
 
 function getDefaultState() {
   return {
@@ -126,27 +181,25 @@ function getDefaultState() {
     station:              DEFAULT_STATION,
     time:                 getScheduledMETARTime(),
     windType:             'dir',
-    windDir:              '360',
-    windSpeed:            '10',
+    windDir:              '',
+    windSpeed:            '',
     windUnit:             'KT',
     windGust:             '',
     windVarFrom:          '',
     windVarTo:            '',
     cavok:                false,
-    vis:                  '9999',
+    vis:                  '',
     rvr:                  '',
     rvrEnabled:           false,
     wxEnabled:            false,
     wxMode:               'structured',
-    wxIntensity:          '',
-    wxDescriptor:         '',
-    wxPhenomenon:         '',
+    wxGroups:             [],
     wxManualText:         '',
-    clouds:               [{ amount: 'FEW', height: '030', qualifier: '' }],
+    clouds:               [],
     cloudsEnabled:        true,
-    tempC:                '10',
-    dewC:                 '08',
-    qnh:                  '1013',
+    tempC:                '',
+    dewC:                 '',
+    qnh:                  '',
     recentWxEnabled:      false,
     recentWxMode:         'structured',
     recentWxIntensity:    '',
@@ -166,7 +219,8 @@ function getDefaultState() {
 // ── Validation ────────────────────────────────────────────────────────────────
 
 function validateState(s) {
-  const errors = [];
+  const errors   = [];  // blocks Copy
+  const warnings = [];  // informational only
 
   if (!/^[A-Z]{4}$/.test(s.station)) {
     errors.push('Station: must be four uppercase letters (e.g. EGOW).');
@@ -176,8 +230,21 @@ function validateState(s) {
   }
 
   if (s.windType === 'dir') {
-    if (!/^\d{3}$/.test(s.windDir)) errors.push('Wind direction: must be three digits (e.g. 270).');
-    if (!/^\d{2,3}$/.test(s.windSpeed)) errors.push('Wind speed: must be 2–3 digits.');
+    if (!s.windDir.trim()) {
+      errors.push('Wind direction: required (010–360).');
+    } else if (!/^\d{3}$/.test(s.windDir)) {
+      errors.push('Wind direction: must be exactly three digits (e.g. 270).');
+    } else {
+      const d = parseInt(s.windDir, 10);
+      if (d < 1 || d > 360) {
+        errors.push('Wind direction: must be 010–360. Use Calm (00000KT) for still air.');
+      }
+    }
+    if (!s.windSpeed.trim()) {
+      errors.push('Wind speed: required.');
+    } else if (!/^\d{2,3}$/.test(s.windSpeed)) {
+      errors.push('Wind speed: must be 2–3 digits.');
+    }
     if (s.windGust) {
       if (!/^\d{2,3}$/.test(s.windGust)) {
         errors.push('Wind gust: must be 2–3 digits if provided.');
@@ -196,30 +263,57 @@ function validateState(s) {
     }
   }
   if (s.windType === 'vrb') {
-    if (!/^\d{2,3}$/.test(s.windSpeed)) errors.push('Wind speed (VRB): must be 2–3 digits.');
+    if (!s.windSpeed.trim()) {
+      errors.push('Wind speed (VRB): required.');
+    } else if (!/^\d{2,3}$/.test(s.windSpeed)) {
+      errors.push('Wind speed (VRB): must be 2–3 digits.');
+    }
   }
 
   if (!s.cavok) {
-    if (!/^\d{4}$/.test(s.vis)) {
+    if (!s.vis.trim()) {
+      errors.push('Visibility: required when CAVOK is not set.');
+    } else if (!/^\d{4}$/.test(s.vis)) {
       errors.push('Visibility: must be a four-digit value (e.g. 9999).');
     }
-    if (s.cloudsEnabled) {
+
+    if (s.rvrEnabled) {
+      if (!s.rvr.trim()) {
+        errors.push('RVR: enabled but no group entered (e.g. R28/0800).');
+      }
+    }
+
+    if (!s.cloudsEnabled || !s.clouds.length) {
+      errors.push('Cloud: at least one layer required when CAVOK is not set. Use NSC if no significant cloud.');
+    } else {
       s.clouds.forEach((c, i) => {
-        if (!['FEW','SCT','BKN','OVC','NSC','SKC','NCD'].includes(c.amount)) {
+        if (!['FEW','SCT','BKN','OVC','NSC','SKC'].includes(c.amount)) {
           errors.push(`Cloud layer ${i + 1}: invalid amount.`);
         }
-        if (!['NSC','SKC','NCD'].includes(c.amount) && !/^\d{3}$/.test(c.height)) {
+        if (!['NSC','SKC'].includes(c.amount) && !/^\d{3}$/.test(c.height)) {
           errors.push(`Cloud layer ${i + 1}: height must be three digits (e.g. 030).`);
         }
       });
     }
+  } else {
+    warnings.push('CAVOK: use only when visibility is 10 km or more, no cloud below 5000 ft or MSA, and no significant weather (CAP 746).');
   }
 
-  // Present weather: require phenomenon (structured) or non-empty text (manual)
   if (s.wxEnabled) {
     if (s.wxMode === 'structured') {
-      if (!s.wxPhenomenon) {
-        errors.push('Present Weather: select a phenomenon or disable the section.');
+      const groups = s.wxGroups || [];
+      if (!groups.length || !groups.some(g => g.phenomenon)) {
+        errors.push('Present Weather: select at least one phenomenon or disable the section.');
+      } else {
+        groups.forEach((g, i) => {
+          validateWxCompatibility(g.intensity, g.descriptor, g.phenomenon, s.vis)
+            .forEach(msg => warnings.push(`WX group ${i + 1}: ${msg}`));
+        });
+        const hasTS = groups.some(g => g.descriptor === 'TS');
+        const hasCB = (s.clouds || []).some(c => c.qualifier === 'CB');
+        if (hasTS && !hasCB) {
+          warnings.push('TS in present weather without a CB cloud qualifier — consider adding CB to the relevant cloud layer (CAP 746).');
+        }
       }
     } else {
       if (!s.wxManualText.trim()) {
@@ -228,7 +322,6 @@ function validateState(s) {
     }
   }
 
-  // Recent weather: same requirement
   if (s.recentWxEnabled) {
     if (s.recentWxMode === 'structured') {
       if (!s.recentWxPhenomenon) {
@@ -241,71 +334,105 @@ function validateState(s) {
     }
   }
 
-  if (!isValidMetarTempInput(s.tempC)) errors.push('Temperature: must be an integer (e.g. 10, -5, M05).');
-  if (!isValidMetarTempInput(s.dewC))  errors.push('Dew point: must be an integer (e.g. 08, -3, M03).');
-  if (!/^\d{3,4}$/.test(s.qnh))       errors.push('QNH: must be 3–4 digits (e.g. 1013).');
+  if (!s.tempC.trim()) {
+    errors.push('Temperature: required.');
+  } else if (!isValidMetarTempInput(s.tempC)) {
+    errors.push('Temperature: must be an integer (e.g. 10, -5, M05).');
+  }
+  if (!s.dewC.trim()) {
+    errors.push('Dew point: required.');
+  } else if (!isValidMetarTempInput(s.dewC)) {
+    errors.push('Dew point: must be an integer (e.g. 08, -3, M03).');
+  }
+  if (isValidMetarTempInput(s.tempC) && isValidMetarTempInput(s.dewC)) {
+    const tNum = parseMetarTempInput(s.tempC);
+    const dNum = parseMetarTempInput(s.dewC);
+    if (!isNaN(tNum) && !isNaN(dNum) && tNum < dNum) {
+      errors.push('Temperature cannot be colder than dew point.');
+    }
+  }
 
-  return errors;
+  if (!s.qnh.trim()) {
+    errors.push('QNH: required.');
+  } else if (!/^\d{3,4}$/.test(s.qnh)) {
+    errors.push('QNH: must be 3–4 digits (e.g. 1013).');
+  }
+
+  return { errors, warnings };
 }
 
-// ── METAR assembler ───────────────────────────────────────────────────────────
+// ── METAR assembler — placeholder tokens for missing mandatory data ────────────
 
 function buildReport(s) {
   const groups = [];
 
   groups.push(s.reportType);
-  groups.push(s.station);
-  groups.push(s.time);
+  groups.push(/^[A-Z]{4}$/.test(s.station) ? s.station : '[STATION]');
+  groups.push(/^\d{6}Z$/.test(s.time) ? s.time : '[TIME]');
 
   // Wind
   if (s.windType === 'calm') {
     groups.push('00000KT');
   } else if (s.windType === 'vrb') {
-    groups.push(`VRB${String(s.windSpeed).padStart(2,'0')}${s.windUnit}`);
+    const spdOk = /^\d{2,3}$/.test(s.windSpeed);
+    groups.push(spdOk ? `VRB${String(s.windSpeed).padStart(2,'0')}${s.windUnit}` : '[WIND]');
   } else {
-    const dir = String(s.windDir).padStart(3, '0');
-    const spd = String(s.windSpeed).padStart(2, '0');
-    let w = `${dir}${spd}`;
-    if (s.windGust) w += `G${String(s.windGust).padStart(2, '0')}`;
-    w += s.windUnit;
-    groups.push(w);
-    if (s.windVarFrom && s.windVarTo) {
-      groups.push(`${String(s.windVarFrom).padStart(3,'0')}V${String(s.windVarTo).padStart(3,'0')}`);
+    const dirNum = parseInt(s.windDir, 10);
+    const dirOk  = /^\d{3}$/.test(s.windDir) && dirNum >= 1 && dirNum <= 360;
+    const spdOk  = /^\d{2,3}$/.test(s.windSpeed);
+    if (!dirOk || !spdOk) {
+      groups.push('[WIND]');
+    } else {
+      let w = `${String(s.windDir).padStart(3,'0')}${String(s.windSpeed).padStart(2,'0')}`;
+      if (s.windGust) w += `G${String(s.windGust).padStart(2,'0')}`;
+      w += s.windUnit;
+      groups.push(w);
+      if (s.windVarFrom && s.windVarTo) {
+        groups.push(`${String(s.windVarFrom).padStart(3,'0')}V${String(s.windVarTo).padStart(3,'0')}`);
+      }
     }
   }
 
-  // Visibility / CAVOK
+  // CAVOK or vis/wx/cloud
   if (s.cavok) {
     groups.push('CAVOK');
   } else {
-    groups.push(s.vis || '9999');
+    groups.push(/^\d{4}$/.test(s.vis) ? s.vis : '[VIS]');
+
     if (s.rvrEnabled && s.rvr.trim()) groups.push(s.rvr.trim().toUpperCase());
 
-    // Present weather
     if (s.wxEnabled) {
-      let wxGroup;
       if (s.wxMode === 'manual') {
-        wxGroup = s.wxManualText.trim().toUpperCase();
+        const t = s.wxManualText.trim().toUpperCase();
+        if (t) groups.push(t);
       } else {
-        wxGroup = (s.wxIntensity || '') + (s.wxDescriptor || '') + (s.wxPhenomenon || '');
+        (s.wxGroups || []).forEach(g => {
+          const code = (g.intensity || '') + (g.descriptor || '') + (g.phenomenon || '');
+          if (code) groups.push(code);
+        });
       }
-      if (wxGroup) groups.push(wxGroup);
     }
 
-    // Cloud
     if (s.cloudsEnabled && s.clouds.length) {
       s.clouds.forEach(c => {
-        if (['NSC','SKC','NCD'].includes(c.amount)) {
+        if (['NSC','SKC'].includes(c.amount)) {
           groups.push(c.amount);
         } else {
-          groups.push(`${c.amount}${String(c.height).padStart(3,'0')}${c.qualifier || ''}`);
+          groups.push(`${c.amount}${String(c.height || '').padStart(3,'0')}${c.qualifier || ''}`);
         }
       });
     }
   }
 
-  groups.push(`${formatMetarTemp(s.tempC)}/${formatMetarTemp(s.dewC)}`);
-  groups.push(`Q${String(s.qnh).padStart(4,'0')}`);
+  // Temp/dew — show values if entered (even if temp < dew sanity fails)
+  if (isValidMetarTempInput(s.tempC) && isValidMetarTempInput(s.dewC)) {
+    groups.push(`${formatMetarTemp(s.tempC)}/${formatMetarTemp(s.dewC)}`);
+  } else {
+    groups.push('[TEMP/DEW]');
+  }
+
+  // QNH
+  groups.push(/^\d{3,4}$/.test(s.qnh) ? `Q${String(s.qnh).padStart(4,'0')}` : '[QNH]');
 
   // Recent weather
   if (s.recentWxEnabled) {
@@ -320,7 +447,8 @@ function buildReport(s) {
   }
 
   if (s.windShearEnabled && s.windShear.trim())  groups.push(`WS ${s.windShear.trim().toUpperCase()}`);
-  if (s.colourEnabled    && s.colourState.trim()) groups.push(s.colourState.trim().toUpperCase());
+  // CAP 746: colour state goes in remarks
+  if (s.colourEnabled    && s.colourState.trim()) groups.push(`RMK ${s.colourState.trim().toUpperCase()}`);
   if (s.rwyEnabled       && s.rwyState.trim())    groups.push(s.rwyState.trim().toUpperCase());
 
   return groups.join(' ') + '=';
@@ -333,7 +461,7 @@ function loadSaved() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    // Migrate legacy plain-text wx fields from builder v1
+    // Migrate legacy plain-text wx
     if (parsed.wx !== undefined && parsed.wxMode === undefined) {
       parsed.wxMode = 'manual';
       parsed.wxManualText = parsed.wx || '';
@@ -343,6 +471,21 @@ function loadSaved() {
       parsed.recentWxMode = 'manual';
       parsed.recentWxManualText = parsed.recentWx || '';
       delete parsed.recentWx;
+    }
+    // Migrate legacy single structured WX group to wxGroups array
+    if (parsed.wxIntensity !== undefined && parsed.wxGroups === undefined) {
+      if (parsed.wxIntensity || parsed.wxDescriptor || parsed.wxPhenomenon) {
+        parsed.wxGroups = [{
+          intensity:  parsed.wxIntensity  || '',
+          descriptor: parsed.wxDescriptor || '',
+          phenomenon: parsed.wxPhenomenon || '',
+        }];
+      } else {
+        parsed.wxGroups = [];
+      }
+      delete parsed.wxIntensity;
+      delete parsed.wxDescriptor;
+      delete parsed.wxPhenomenon;
     }
     return parsed;
   } catch (_) {
@@ -363,17 +506,17 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Cloud row builder ─────────────────────────────────────────────────────────
+// ── Cloud row builder (NCD removed — human-observed stations only) ─────────────
 
 function buildCloudRow(idx, cloud) {
-  const amounts  = ['FEW','SCT','BKN','OVC','NSC','SKC','NCD'];
-  const amtOpts  = amounts.map(a =>
+  const amounts = ['FEW','SCT','BKN','OVC','NSC','SKC'];
+  const amtOpts = amounts.map(a =>
     `<option value="${a}"${a === cloud.amount ? ' selected' : ''}>${a}</option>`
   ).join('');
-  const noHeight = ['NSC','SKC','NCD'].includes(cloud.amount);
+  const noHeight = ['NSC','SKC'].includes(cloud.amount);
   const heightHtml = noHeight
     ? `<input type="text" class="mb-cloud-height" style="width:56px;opacity:0.4;pointer-events:none;" value="" disabled placeholder="---" />`
-    : `<input type="text" class="mb-cloud-height" maxlength="3" style="width:56px;" value="${cloud.height || '030'}" placeholder="030" />`;
+    : `<input type="text" class="mb-cloud-height" maxlength="3" style="width:56px;" value="${cloud.height || ''}" placeholder="030" />`;
   const qualOpts = ['','TCU','CB'].map(q =>
     `<option value="${q}"${q === (cloud.qualifier||'') ? ' selected' : ''}>${q||'—'}</option>`
   ).join('');
@@ -390,6 +533,78 @@ function buildCloudRow(idx, cloud) {
     </div>`;
 }
 
+// ── WX group row builder ──────────────────────────────────────────────────────
+
+function buildWxGroupRow(idx, group) {
+  const intOpts = [
+    ['', 'Moderate'],
+    ['-', '– Light'],
+    ['+', '+ Heavy'],
+    ['VC', 'VC In vicinity'],
+  ].map(([v, l]) =>
+    `<option value="${v}"${v === (group.intensity||'') ? ' selected' : ''}>${l}</option>`
+  ).join('');
+
+  const descOpts = [
+    ['', 'None'],
+    ['TS', 'TS Thunderstorm'],
+    ['SH', 'SH Shower'],
+    ['FZ', 'FZ Freezing'],
+    ['MI', 'MI Shallow'],
+    ['BC', 'BC Patches'],
+    ['DR', 'DR Low drifting'],
+    ['BL', 'BL Blowing'],
+    ['PR', 'PR Partial'],
+  ].map(([v, l]) =>
+    `<option value="${v}"${v === (group.descriptor||'') ? ' selected' : ''}>${l}</option>`
+  ).join('');
+
+  const phenomData = [
+    ['RA','Rain','Precipitation'],
+    ['DZ','Drizzle','Precipitation'],
+    ['SN','Snow','Precipitation'],
+    ['SG','Snow grains','Precipitation'],
+    ['IC','Ice crystals','Precipitation'],
+    ['PL','Ice pellets','Precipitation'],
+    ['GR','Hail','Precipitation'],
+    ['GS','Small hail','Precipitation'],
+    ['UP','Unknown precip','Precipitation'],
+    ['FG','Fog','Obscuration'],
+    ['BR','Mist','Obscuration'],
+    ['HZ','Haze','Obscuration'],
+    ['FU','Smoke','Obscuration'],
+    ['VA','Volcanic ash','Obscuration'],
+    ['DU','Dust','Obscuration'],
+    ['SA','Sand','Obscuration'],
+    ['SQ','Squall','Other'],
+    ['PO','Dust whirl','Other'],
+    ['DS','Dust storm','Other'],
+    ['SS','Sandstorm','Other'],
+    ['FC','Funnel cloud','Other'],
+  ];
+  let phenomHtml = `<option value="">— none —</option>`;
+  let curGrp = '';
+  for (const [v, label, grp] of phenomData) {
+    if (grp !== curGrp) {
+      if (curGrp) phenomHtml += '</optgroup>';
+      phenomHtml += `<optgroup label="${grp}">`;
+      curGrp = grp;
+    }
+    phenomHtml += `<option value="${v}"${v === (group.phenomenon||'') ? ' selected' : ''}>${v} ${label}</option>`;
+  }
+  if (curGrp) phenomHtml += '</optgroup>';
+
+  return `
+    <div class="mb-wx-group-row" data-wx-idx="${idx}">
+      <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:2px;">
+        <select class="mb-wx-intensity field" style="width:140px;">${intOpts}</select>
+        <select class="mb-wx-descriptor field" style="width:155px;">${descOpts}</select>
+        <select class="mb-wx-phenomenon field" style="width:170px;">${phenomHtml}</select>
+        <button type="button" class="btn btn-ghost btn-small mb-wx-remove" title="Remove WX group">×</button>
+      </div>
+    </div>`;
+}
+
 // ── Wind section sync ─────────────────────────────────────────────────────────
 
 function syncWindUi(windType) {
@@ -402,10 +617,15 @@ function syncWindUi(windType) {
 }
 
 function syncCavokUi(cavok) {
-  ['mbVisSection','mbWxSection','mbCloudSection'].forEach(id => {
+  ['mbVisSection','mbWxSection','mbCloudSection','mbRvrSection'].forEach(id => {
     const e = el(id);
     if (e) e.style.display = cavok ? 'none' : '';
   });
+  // Conditional mandatory asterisks
+  const visReq   = el('mbVisRequired');
+  const cloudReq = el('mbCloudRequired');
+  if (visReq)   visReq.style.display   = cavok ? 'none' : '';
+  if (cloudReq) cloudReq.style.display = cavok ? 'none' : '';
 }
 
 function syncWxMode(mode, prefix) {
@@ -426,6 +646,37 @@ function updateColourAutoIndicator(isManual) {
     : 'mb-colour-indicator mb-colour-indicator--auto';
 }
 
+// ── WX group list ─────────────────────────────────────────────────────────────
+
+function renderWxGroups(groups) {
+  const list = el('mbWxGroupList');
+  if (!list) return;
+  list.innerHTML = (groups || []).map((g, i) => buildWxGroupRow(i, g)).join('');
+  bindWxGroupRows();
+  updateAddWxGroupButton();
+}
+
+function bindWxGroupRows() {
+  document.querySelectorAll('.mb-wx-group-row').forEach(row => {
+    row.querySelector('.mb-wx-remove')?.addEventListener('click', () => {
+      row.remove();
+      updateAddWxGroupButton();
+      handleChange();
+    });
+    row.querySelector('.mb-wx-intensity')?.addEventListener('change', handleChange);
+    row.querySelector('.mb-wx-descriptor')?.addEventListener('change', handleChange);
+    row.querySelector('.mb-wx-phenomenon')?.addEventListener('change', handleChange);
+  });
+}
+
+function updateAddWxGroupButton() {
+  const list   = el('mbWxGroupList');
+  const addBtn = el('mbAddWxGroup');
+  if (!list || !addBtn) return;
+  const count = list.querySelectorAll('.mb-wx-group-row').length;
+  addBtn.style.display = count >= 3 ? 'none' : '';
+}
+
 // ── Read form state ────────────────────────────────────────────────────────────
 
 function readFormState() {
@@ -438,8 +689,17 @@ function readFormState() {
   document.querySelectorAll('.mb-cloud-row').forEach(row => {
     clouds.push({
       amount:    row.querySelector('.mb-cloud-amount')?.value    || 'FEW',
-      height:    row.querySelector('.mb-cloud-height')?.value    || '030',
+      height:    row.querySelector('.mb-cloud-height')?.value    || '',
       qualifier: row.querySelector('.mb-cloud-qualifier')?.value || '',
+    });
+  });
+
+  const wxGroups = [];
+  document.querySelectorAll('.mb-wx-group-row').forEach(row => {
+    wxGroups.push({
+      intensity:  row.querySelector('.mb-wx-intensity')?.value  || '',
+      descriptor: row.querySelector('.mb-wx-descriptor')?.value || '',
+      phenomenon: row.querySelector('.mb-wx-phenomenon')?.value || '',
     });
   });
 
@@ -448,29 +708,27 @@ function readFormState() {
     station:              (el('mbStation')?.value   || DEFAULT_STATION).toUpperCase().trim(),
     time:                 (el('mbTime')?.value       || '').toUpperCase().trim(),
     windType,
-    windDir:              el('mbWindDir')?.value      || '360',
+    windDir:              el('mbWindDir')?.value      || '',
     windSpeed:            windType === 'vrb'
-                            ? (el('mbWindSpeedVrb')?.value || '05')
-                            : (el('mbWindSpeed')?.value    || '10'),
+                            ? (el('mbWindSpeedVrb')?.value || '')
+                            : (el('mbWindSpeed')?.value    || ''),
     windUnit:             el('mbWindUnit')?.value     || 'KT',
     windGust:             el('mbWindGust')?.value     || '',
     windVarFrom:          el('mbWindVarFrom')?.value  || '',
     windVarTo:            el('mbWindVarTo')?.value    || '',
     cavok:                el('mbCavok')?.checked      || false,
-    vis:                  el('mbVis')?.value          || '9999',
+    vis:                  el('mbVis')?.value          || '',
     rvr:                  el('mbRvr')?.value          || '',
     rvrEnabled:           el('mbRvrEnabled')?.checked || false,
     wxEnabled:            el('mbWxEnabled')?.checked  || false,
     wxMode,
-    wxIntensity:          el('mbWxIntensity')?.value  || '',
-    wxDescriptor:         el('mbWxDescriptor')?.value || '',
-    wxPhenomenon:         el('mbWxPhenomenon')?.value || '',
+    wxGroups,
     wxManualText:         el('mbWxManualText')?.value || '',
     clouds,
     cloudsEnabled:        el('mbCloudsEnabled')?.checked !== false,
-    tempC:                el('mbTemp')?.value         || '10',
-    dewC:                 el('mbDew')?.value          || '08',
-    qnh:                  el('mbQnh')?.value          || '1013',
+    tempC:                el('mbTemp')?.value         || '',
+    dewC:                 el('mbDew')?.value          || '',
+    qnh:                  el('mbQnh')?.value          || '',
     recentWxEnabled:      el('mbRecentWxEnabled')?.checked    || false,
     recentWxMode:         rwxMode,
     recentWxIntensity:    el('mbRecentWxIntensity')?.value    || '',
@@ -497,7 +755,7 @@ function applyStateToForm(s) {
   const windRadio = document.querySelector(`input[name="mbWindType"][value="${s.windType}"]`);
   if (windRadio) windRadio.checked = true;
   setVal('mbWindDir',      s.windDir);
-  setVal('mbWindSpeed',    s.windType !== 'vrb' ? s.windSpeed : '10');
+  setVal('mbWindSpeed',    s.windType !== 'vrb' ? s.windSpeed : '');
   setVal('mbWindSpeedVrb', s.windType === 'vrb' ? s.windSpeed : '');
   setVal('mbWindUnit',     s.windUnit);
   setVal('mbWindGust',     s.windGust);
@@ -511,14 +769,11 @@ function applyStateToForm(s) {
   setChecked('mbWxEnabled', s.wxEnabled);
   const wxModeRadio = document.querySelector(`input[name="mbWxMode"][value="${s.wxMode || 'structured'}"]`);
   if (wxModeRadio) wxModeRadio.checked = true;
-  setVal('mbWxIntensity',  s.wxIntensity  || '');
-  setVal('mbWxDescriptor', s.wxDescriptor || '');
-  setVal('mbWxPhenomenon', s.wxPhenomenon || '');
+  renderWxGroups(s.wxGroups || []);
   setVal('mbWxManualText', s.wxManualText || '');
   syncWxMode(s.wxMode || 'structured', '');
 
   setChecked('mbCloudsEnabled', s.cloudsEnabled);
-
   setVal('mbTemp', s.tempC);
   setVal('mbDew',  s.dewC);
   setVal('mbQnh',  s.qnh);
@@ -562,7 +817,7 @@ function bindCloudRows() {
     const amountSel = row.querySelector('.mb-cloud-amount');
     const qualSel   = row.querySelector('.mb-cloud-qualifier');
     amountSel?.addEventListener('change', () => {
-      const noHeight = ['NSC','SKC','NCD'].includes(amountSel.value);
+      const noHeight = ['NSC','SKC'].includes(amountSel.value);
       const hEl = row.querySelector('.mb-cloud-height');
       if (hEl) {
         hEl.disabled = noHeight;
@@ -598,24 +853,43 @@ function handleChange() {
     s.colourState = auto;
   }
 
-  const errors   = validateState(s);
+  // Auto-expand RVR when vis drops below 1500 m (advisory — user can uncheck)
+  if (!s.cavok && /^\d{4}$/.test(s.vis) && parseInt(s.vis, 10) < 1500) {
+    const rvrEl = el('mbRvrEnabled');
+    if (rvrEl && !rvrEl.checked) {
+      rvrEl.checked = true;
+      s.rvrEnabled = true;
+    }
+  }
+
+  const { errors, warnings } = validateState(s);
   const outputEl = el('mbOutput');
   const validEl  = el('mbValidation');
   const copyBtn  = el('mbCopyBtn');
+  const incMsg   = el('mbIncompleteMsg');
 
   if (outputEl) outputEl.textContent = buildReport(s);
 
   if (validEl) {
-    if (errors.length) {
-      validEl.innerHTML = errors.map(e => `<div class="mb-error-item">⚠ ${escHtml(e)}</div>`).join('');
-      validEl.className = 'mb-validation mb-validation--errors';
+    const parts = [];
+    errors.forEach(e   => parts.push(`<div class="mb-error-item">⚠ ${escHtml(e)}</div>`));
+    warnings.forEach(w => parts.push(`<div class="mb-warning-item">ℹ ${escHtml(w)}</div>`));
+    if (parts.length) {
+      validEl.innerHTML = parts.join('');
+      validEl.className = errors.length
+        ? 'mb-validation mb-validation--errors'
+        : 'mb-validation mb-validation--warnings';
     } else {
       validEl.innerHTML = '<div class="mb-ok-item">✓ All enabled groups valid.</div>';
       validEl.className = 'mb-validation mb-validation--ok';
     }
   }
 
-  if (copyBtn) copyBtn.disabled = errors.length > 0;
+  if (copyBtn) {
+    copyBtn.disabled = errors.length > 0;
+    copyBtn.classList.toggle('mb-copy-blocked', errors.length > 0);
+  }
+  if (incMsg) incMsg.style.display = errors.length > 0 ? '' : 'none';
 }
 
 function showCopyFeedback(msg) {
@@ -634,7 +908,6 @@ export function initMetarBuilder() {
   applyStateToForm(getDefaultState());
   handleChange();
 
-  // Report type — auto-set time on switch
   el('mbReportType')?.addEventListener('change', () => {
     const type = el('mbReportType').value;
     setVal('mbTime', type === 'METAR' ? getScheduledMETARTime() : currentUtcTimeStr());
@@ -672,9 +945,19 @@ export function initMetarBuilder() {
   document.querySelectorAll('input[name="mbWxMode"]').forEach(r =>
     r.addEventListener('change', () => { syncWxMode(r.value, ''); handleChange(); })
   );
-  ['mbWxEnabled','mbWxIntensity','mbWxDescriptor','mbWxPhenomenon'].forEach(id =>
-    el(id)?.addEventListener('change', handleChange)
-  );
+  el('mbWxEnabled')?.addEventListener('change', handleChange);
+  el('mbAddWxGroup')?.addEventListener('click', () => {
+    const list = el('mbWxGroupList');
+    if (!list) return;
+    if (list.querySelectorAll('.mb-wx-group-row').length >= 3) return;
+    const count = list.querySelectorAll('.mb-wx-group-row').length;
+    const div = document.createElement('div');
+    div.innerHTML = buildWxGroupRow(count, { intensity: '', descriptor: '', phenomenon: '' });
+    list.appendChild(div.firstElementChild);
+    bindWxGroupRows();
+    updateAddWxGroupButton();
+    handleChange();
+  });
   el('mbWxManualText')?.addEventListener('input', handleChange);
 
   // Cloud
@@ -684,7 +967,7 @@ export function initMetarBuilder() {
     if (!list) return;
     const idx = list.querySelectorAll('.mb-cloud-row').length;
     const div = document.createElement('div');
-    div.innerHTML = buildCloudRow(idx, { amount: 'SCT', height: '030', qualifier: '' });
+    div.innerHTML = buildCloudRow(idx, { amount: 'FEW', height: '', qualifier: '' });
     list.appendChild(div.firstElementChild);
     bindCloudRows();
     handleChange();
@@ -704,7 +987,7 @@ export function initMetarBuilder() {
   el('mbWindShear')?.addEventListener('input', handleChange);
   el('mbWindShearEnabled')?.addEventListener('change', handleChange);
 
-  // Colour state — manual override tracking
+  // Colour state
   el('mbColourEnabled')?.addEventListener('change', handleChange);
   el('mbColour')?.addEventListener('change', () => {
     if (el('mbColour')) {
@@ -784,7 +1067,6 @@ function rebuildMinuteOptions(pattern, selectedMinute) {
   minuteEl.innerHTML = opts.map(([v, label]) =>
     `<option value="${v}"${v === String(selectedMinute) ? ' selected' : ''}>${label}</option>`
   ).join('');
-  // If saved minute not valid for new pattern, pick first option
   if (!opts.some(([v]) => v === minuteEl.value)) minuteEl.value = opts[0][0];
 }
 

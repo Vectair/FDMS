@@ -2735,6 +2735,52 @@ Stored in `vectair_fdms_config` via `updateConfig()`. All three keys present fro
 
 ---
 
-## 29. Immediate next action
+## 29. METAR-BUILDER-003 — CAP 746 Compliance and UX Hardening
 
-METAR-BUILDER-002a implementation complete. Stuart acceptance required before further METAR work. Resume main roadmap/task list.
+**Status:** Implementation complete.
+
+**Branch:** `claude/friendly-bohr-YFGLP`
+
+**Reference:** CAP 746 Issue 6
+
+### 29.1 Changes applied
+
+| # | Item | Detail |
+|---|---|---|
+| 1 | Invalid Copy state | Copy button gains `mb-copy-blocked` class (opacity 0.5, not-allowed cursor) when errors exist. `#mbIncompleteMsg` span ("Report incomplete") appears alongside it. |
+| 2 | Mandatory-field asterisks | Red `*` on: Station, Time, Wind section title, Temp, Dew Point, QNH. Conditional `*` (id `mbVisRequired`, `mbCloudRequired`) shown/hidden by `syncCavokUi()` based on CAVOK state. |
+| 3 | Remove operational defaults | `windDir`, `windSpeed`, `vis`, `tempC`, `dewC`, `qnh`, and `clouds` array all default to blank/empty. No user-data is silently pre-filled. |
+| 4 | Wind direction 010–360 | Directional wind validates `parseInt(dir) >= 1 && <= 360`. 000 is rejected with message "Use Calm (00000KT) for still air." Both dir and speed are required. |
+| 5 | Visibility required | Empty vis blocks Copy when CAVOK is not set. Must be exactly 4 digits. |
+| 6 | RVR suppressed by CAVOK | `#mbRvrSection` added to the hide-list in `syncCavokUi()`. Auto-expands (checks the RVR checkbox) when vis drops below 1500 m. RVR enabled-but-empty is a validation error. |
+| 7 | Multiple WX groups | Present weather structured mode now supports 1–3 groups via a dynamic list (`#mbWxGroupList`). Each row: intensity / descriptor / phenomenon selects + remove button. Add WX group button hidden when 3 already exist. State serialised as `wxGroups: [{intensity,descriptor,phenomenon}]`. Old single-field saves migrated in `loadSaved()`. |
+| 8 | CAP 746 WX compatibility | `validateWxCompatibility()` produces non-blocking warnings for: intensity on non-precip, VC with invalid phenomena, descriptor/phenomenon matrix (MI/BC/PR+FG, DR/BL+DU/SA/SN, SH+precip, FZ+DZ/RA/FG/UP), FG vis > 1000 m, BR vis range, HZ vis < 1000 m. |
+| 9 | Cloud hardening | NCD removed from cloud amount options (human-observed stations). `clouds: []` default (user must explicitly add layers). Cloud section required unless CAVOK — empty list is a blocking error. TS without CB qualifier generates a non-blocking warning. |
+| 10 | CAVOK warning | Non-blocking warning: "use only when visibility is 10 km or more, no cloud below 5000 ft or MSA, and no significant weather (CAP 746)." Also surfaced in CAVOK checkbox hint text. |
+| 11 | Temp/dew sanity | Blocking error if `parseMetarTempInput(tempC) < parseMetarTempInput(dewC)`. Preview still shows entered values when this fires. |
+| 12 | QNH text input | Changed from `type="number"` to `type="text"` with `maxlength="4"`. Default blank. 3–4 digit validation. Output as `Q0987` / `Q1013`. |
+| 13 | Colour state RMK prefix | `buildReport()` now outputs `RMK BLU` etc. instead of bare `BLU` immediately after QNH. |
+| 14 | Preview placeholder tokens | `buildReport()` substitutes `[WIND]`, `[VIS]`, `[TEMP/DEW]`, `[QNH]` when the corresponding mandatory field is absent or invalid. |
+| 15 | STATE.md | This section. |
+
+### 29.2 Validation return shape (from 003)
+
+`validateState()` now returns `{ errors, warnings }`. `errors` blocks Copy; `warnings` are displayed informationally. `handleChange()` renders both, using `mb-error-item` (orange) and `mb-warning-item` (amber) CSS classes.
+
+### 29.3 Product rule (unchanged)
+
+> The builder may guide, validate, derive, and format. It must not silently create plausible operational data. Operational values must only appear when: derived from locked Report/Admin logic; entered by the user; explicitly selected by the user; derived from a user-entered value.
+
+### 29.4 Explicit exclusions (unchanged from prior tickets)
+
+- External weather fetch
+- Dew point / QNH / convective cloud-base calculators
+- Email transmission
+- Full ICAO Annex 3 validator
+- NCD option (removed as not applicable to human-observed stations)
+
+---
+
+## 30. Immediate next action
+
+METAR-BUILDER-003 implementation complete. Stuart acceptance required before further METAR work.

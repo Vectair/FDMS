@@ -4761,3 +4761,39 @@ tr.strip.ft-ovr > td {
   white-space: nowrap;
 }
 
+.mb-required {
+  color: #c0392b;
+  font-weight: 700;
+}
+
+.mb-incomplete-msg {
+  font-size: 11px;
+  font-weight: 600;
+  color: #c0392b;
+}
+
+.mb-copy-blocked {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mb-validation--warnings .mb-warning-item {
+  color: #d4870a;
+}
+
+.mb-wx-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.mb-wx-group-row select,
+.mb-wx-group-row input {
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--va-border-dark);
+  border-radius: 3px;
+  background: #fff;
+}
+
