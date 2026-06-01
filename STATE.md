@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-06-01 (Europe/London, rev 21 — DOCS-FLITE-001 complete: Weather/METAR Builder documentation added; Quick Start, User Guide, and Install/Update/Backup/Troubleshooting guides created)
+Last updated: 2026-06-01 (Europe/London, rev 22 — UX-V1-001 complete: desktop app shell expanded to full window width; artificial 1280px centred constraint removed)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -50,6 +50,7 @@ Recently closed / consolidated:
 - **DEV-INSTALL-001** — `scripts/install-latest-dev-build.ps1` added: pulls `main`, runs `npm run tauri:build`, locates the newest NSIS installer, and launches it. For Stuart / internal development use only. Does not publish a release or update via GitHub Releases.
 - **METAR-BUILDER-001 through METAR-BUILDER-004a** — Weather / METAR Builder implemented and complete. Structured METAR/SPECI builder with CAP 746-guided validation, Civilian/Military reporting mode, Admin-configurable section visibility, colour state auto-population, and mixed-precipitation grouping. See sections 26–34.
 - **DOCS-FLITE-001** — Weather/METAR Builder documentation complete. No app code changed. `docs/quick-start.md`, `docs/user-guide.md`, and `docs/install-update-backup-troubleshooting.md` created. README updated with key features list including Weather/METAR Builder. STATE.md updated.
+- **UX-V1-001** — Expanded desktop app shell to use available window width; removed artificial 1280px centred shell constraint.
 
 ### Pre-launch versioning policy
 
@@ -476,6 +477,7 @@ The following workstreams should be treated as merged and complete for current p
 | METAR-BUILDER-004 — Compact Form, Reporting Mode, Section Visibility | Complete — merged. 2-column grid layout, Military/Civilian mode, per-section Admin visibility controls, accordion sections. |
 | METAR-BUILDER-004a — Immediate Admin Settings Application | Complete — merged. Admin > Weather settings apply immediately to Weather tab on Save. |
 | DOCS-FLITE-001 — Weather/METAR Builder documentation | Complete. `docs/quick-start.md`, `docs/user-guide.md`, `docs/install-update-backup-troubleshooting.md` created. README key features added. STATE.md updated. No app code changed. |
+| UX-V1-001 — Expand desktop app shell width | Complete — merged. Removed `max-width: 1280px` and `margin: 0 auto` from `.app-shell`; shell now uses full available window width. |
 
 ## 6. Current active engineering priority
 

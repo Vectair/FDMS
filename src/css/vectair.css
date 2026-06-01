@@ -49,11 +49,12 @@ body {
 
 /* Shell */
 .app-shell {
-  max-width: 1280px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   height: 100%;
   background: #ffffff;
-  box-shadow: 0 0 12px rgba(0, 0, 0, 0.18);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
 }
