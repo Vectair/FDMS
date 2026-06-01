@@ -52,7 +52,7 @@ Optional sections (RVR, Recent Weather, Wind Shear, Runway State) may be hidden,
 1. **Open the Weather tab** from the navigation bar.
 
 2. **Confirm Report type, station, and time.**
-   - Select **METAR** or **SPECI**. METAR auto-sets the time to the most recent scheduled observation within the +5 min submission window. SPECI uses current UTC.
+   - Select **METAR** or **SPECI**. METAR auto-sets the time to the configured scheduled issue time. If the current UTC time is within a scheduled issue time's +5 minute submission window, that issue time is used; otherwise the builder rolls forward to the next configured issue time. SPECI uses current UTC.
    - Confirm or edit the station identifier (default `EGOW`).
    - Confirm or adjust the observation time if needed.
 

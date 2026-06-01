@@ -56,7 +56,7 @@ The output is a formatted METAR/SPECI string for manual copying into an email, l
 
 ### B. Report section
 
-- **METAR** uses the configured scheduled issue time. When the current time is within the +5 minute submission window of a scheduled observation time, that scheduled time is used. Otherwise, the next scheduled time is shown.
+- **METAR** uses the configured scheduled issue time. If the current UTC time is within a scheduled issue time's +5 minute submission window, that issue time is used; otherwise the builder rolls forward to the next configured issue time.
 - **SPECI** uses the current UTC time at the moment of selection.
 - The **station** identifier defaults to `EGOW` unless changed or configured.
 - Both the station and the time fields remain manually editable after auto-population.
@@ -182,7 +182,7 @@ When a section accordion is open and contains data, it contributes to the output
 **Military reporting mode** (configured in Admin > Weather):
 
 - The Colour State section is available and auto-populated.
-- Colour state is derived automatically from visibility and the lowest BKN or OVC cloud layer.
+- Colour state is derived automatically from visibility and the lowest significant cloud layer used by the builder's V1 rule: SCT, BKN, or OVC.
 - A manual override can be applied; a **Recalculate** button clears the override and re-derives the state.
 - Colour state appears in the report output as `RMK BLU`, `RMK WHT`, `RMK GRN`, etc.
 
@@ -269,13 +269,13 @@ Controls which scheduled observation time is used when report type is METAR.
 
 | Pattern | Description |
 |---|---|
-| H+20 / H+50 | Observations at 20 and 50 minutes past each hour (bi-hourly) |
-| H+00 / H+30 | Observations at the hour and 30 minutes past (bi-hourly) |
+| H+20 / H+50 | Two observations per hour: at 20 and 50 minutes past each hour |
+| H+00 / H+30 | Two observations per hour: at the hour and 30 minutes past |
 | H+53 | Single observation at 53 minutes past each hour |
 
-The **+5 submission window** means that when the current time is within 5 minutes after a scheduled observation time, the builder uses that scheduled time. Outside the window, the next scheduled time is shown.
+The **+5 submission window** means that when the current UTC time is within 5 minutes after a scheduled issue time, the builder uses that issue time. Outside the window, the builder rolls forward to the next scheduled issue time.
 
-For bi-hourly patterns, a **rate** selector (bi-hourly / hourly) and an **hourly minute** selector are available for sites that observe only once per hour.
+For twice-hourly patterns (H+20/H+50 or H+00/H+30), a **rate** selector lets you choose whether both issue times are active each hour or only one. When set to hourly, an **hourly minute** selector specifies which of the two issue times is in use.
 
 #### Reporting Mode
 

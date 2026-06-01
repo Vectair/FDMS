@@ -3022,6 +3022,14 @@ The Weather / METAR Builder documentation now covers:
 - **CAP 746-guided validation** — blocking errors for illegal WX combinations, mixed precipitation, TS without CB, FG/BR visibility rules, blocked Copy with placeholder tokens while incomplete.
 - **Copy behaviour** — trailing `=`, blocked until valid, Recall Previous.
 
-### 35.5 Next recommended action
+### 35.5 DOCS-FLITE-001a — Correction pass
+
+Documentation-only correction pass. No app code changed.
+
+- **Quick Start:** METAR timing wording corrected — no longer says "most recent scheduled observation"; now reflects the actual rule (scheduled issue time, +5 window, roll-forward).
+- **User Guide section I:** Colour state derivation corrected from "lowest BKN or OVC" to "lowest significant cloud layer: SCT, BKN, or OVC".
+- **User Guide Admin > Weather:** "bi-hourly" wording replaced with "two observations per hour" / "twice-hourly"; hourly rate selector and hourly minute selector described accurately.
+
+### 35.6 Next recommended action
 
 Final V1 regression and acceptance sweep (section 21.8).
