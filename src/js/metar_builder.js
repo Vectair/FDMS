@@ -1360,5 +1360,8 @@ export function initAdminWeather() {
       st.style.visibility = 'visible';
       setTimeout(() => { st.style.visibility = 'hidden'; }, 2000);
     }
+    // Apply new settings to the live Weather tab immediately
+    applySectionVisibility();
+    handleChange();
   });
 }

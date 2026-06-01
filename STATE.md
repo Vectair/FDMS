@@ -2957,3 +2957,13 @@ Hidden = not shown, not validated, not output. Persisted in `vectair_fdms_config
 - CAVOK advisory warning unchanged
 - Admin schedule settings unchanged
 - `loadSaved()` migration chain unchanged (saved states load cleanly; old `cloudsEnabled` key silently ignored)
+
+---
+
+## 34. METAR-BUILDER-004a — Immediate Admin Settings Application
+
+**Branch:** `claude/friendly-bohr-YFGLP`
+**Commit:** Apply METAR admin visibility settings immediately
+**Status:** Complete — Stuart acceptance required
+
+In `initAdminWeather()`, after `updateConfig()` in the Save handler, added calls to `applySectionVisibility()` and `handleChange()`. Admin > Weather settings (reporting mode, section visibility) now take effect on the live Weather tab immediately after Save without requiring a page reload.
