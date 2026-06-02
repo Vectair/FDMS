@@ -52,6 +52,7 @@ Recently closed / consolidated:
 - **DOCS-FLITE-001** — Weather/METAR Builder documentation complete. No app code changed. `docs/quick-start.md`, `docs/user-guide.md`, and `docs/install-update-backup-troubleshooting.md` created. README updated with key features list including Weather/METAR Builder. STATE.md updated.
 - **UX-V1-001** — Expanded desktop app shell to use available window width; removed artificial 1280px centred shell constraint.
 - **BRAND-V1-001** — Replaced placeholder VA header mark with existing VF branding asset.
+- **BRAND-V1-002** — Repointed header and Tauri icons to dual asset set. Header uses `flite-logo-vf-transparent-full-128.png`. Standard Tauri icon filenames (`32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.ico`, `icon.png`) replaced with background variants. Dual transparent/background assets retained alongside.
 
 ### Pre-launch versioning policy
 
