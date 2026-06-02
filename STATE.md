@@ -51,6 +51,7 @@ Recently closed / consolidated:
 - **METAR-BUILDER-001 through METAR-BUILDER-004a** — Weather / METAR Builder implemented and complete. Structured METAR/SPECI builder with CAP 746-guided validation, Civilian/Military reporting mode, Admin-configurable section visibility, colour state auto-population, and mixed-precipitation grouping. See sections 26–34.
 - **DOCS-FLITE-001** — Weather/METAR Builder documentation complete. No app code changed. `docs/quick-start.md`, `docs/user-guide.md`, and `docs/install-update-backup-troubleshooting.md` created. README updated with key features list including Weather/METAR Builder. STATE.md updated.
 - **UX-V1-001** — Expanded desktop app shell to use available window width; removed artificial 1280px centred shell constraint.
+- **BRAND-V1-001** — Replaced placeholder VA header mark with existing VF branding asset.
 
 ### Pre-launch versioning policy
 
