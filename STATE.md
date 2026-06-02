@@ -53,6 +53,7 @@ Recently closed / consolidated:
 - **UX-V1-001** — Expanded desktop app shell to use available window width; removed artificial 1280px centred shell constraint.
 - **BRAND-V1-001** — Replaced placeholder VA header mark with existing VF branding asset.
 - **BRAND-V1-002** — Repointed header and Tauri icons to dual asset set. Header uses `flite-logo-vf-transparent-full-128.png`. Standard Tauri icon filenames (`32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.ico`, `icon.png`) replaced with background variants. Dual transparent/background assets retained alongside.
+- **BRAND-V1-003** — Increased displayed header logo scale within existing header height. `.va-logo-box` widened from 40×32 to 48×40; header height unchanged.
 - **UX-V1-002** — Moved read-only movement/FIS totals to nav/status row, relocated Manual FIS editor to Live Board action row, and added FIS Total Military/Civilian hover breakdown.
 - **UX-V1-003** — Removed redundant page title/subtitle blocks from primary tabs; strengthened active nav tab with white background, brown top accent, and content-attached appearance.
 - **UX-V1-003A** — Refined active nav tab to fully merge into page content area. Nav bar bottom border moved to `::after` pseudo-element (z-index 0); active tab uses `position: relative; z-index: 1` with white background and visible left/right border (`var(--va-border)`), covering the pseudo-element line so the tab visually opens into the page. Inactive tabs remain flat with transparent borders.
