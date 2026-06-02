@@ -25,6 +25,8 @@ import {
   renderReports
 } from "./ui_reports.js";
 
+import { classifyMovement } from "./reporting.js";
+
 import {
   initBookingPage,
   initCalendarPage,
@@ -1821,6 +1823,31 @@ function calculateStripFisCount() {
 }
 
 /**
+ * Build a tooltip string for the FIS TOTAL nav counter showing Military/Civilian breakdown.
+ * Manual FIS has no movement-level classification and contributes to Unclassified.
+ * @param {number} manualFisCount
+ * @returns {string}
+ */
+function _fisTotalTooltip(manualFisCount) {
+  const today = getTodayDateString();
+  const movements = getMovements()
+    .filter(m => m.dof === today && (m.status === 'ACTIVE' || m.status === 'COMPLETED'));
+  let military = 0, civilian = 0, unclassified = 0;
+  for (const m of movements) {
+    const fis = m.fisCount || 0;
+    if (!fis) continue;
+    const c = classifyMovement(m);
+    if (c.isMilitary)   military   += fis;
+    else if (c.isCivil) civilian   += fis;
+    else                unclassified += fis;
+  }
+  unclassified += manualFisCount;
+  const parts = [`Military: ${military}`, `Civilian: ${civilian}`];
+  if (unclassified > 0) parts.push(`Unclassified: ${unclassified}`);
+  return parts.join('\n');
+}
+
+/**
  * Update all FIS counter displays
  */
 function updateFisCounters() {
@@ -1835,7 +1862,11 @@ function updateFisCounters() {
 
   if (genericDisplay) genericDisplay.textContent = genericCount;
   if (stripFisDisplay) stripFisDisplay.textContent = stripFisCount;
-  if (totalFisDisplay) totalFisDisplay.textContent = totalFis;
+  if (totalFisDisplay) {
+    totalFisDisplay.textContent = totalFis;
+    const fisItem = totalFisDisplay.closest(".stat-item");
+    if (fisItem) fisItem.title = _fisTotalTooltip(genericCount);
+  }
 }
 
 // Export for use in other modules

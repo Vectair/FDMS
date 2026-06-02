@@ -122,12 +122,42 @@ body {
   background: #f0f3f4;
   border-bottom: 1px solid var(--va-border);
   padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 .nav-tabs {
   display: flex;
   gap: 12px;
   padding: 8px 0;
   overflow-x: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.nav-status-counters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.nav-status-counters .stat-item {
+  min-width: 24px;
+}
+.nav-status-counters .stat-label {
+  font-size: 8px;
+}
+.nav-status-counters .stat-value {
+  font-size: 13px;
+}
+.nav-stats-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--va-border-dark);
+  margin: 0 2px;
 }
 .nav-tab {
   border: none;
@@ -272,6 +302,29 @@ body {
   width: 1px;
   height: 36px;
   background: var(--va-border-dark);
+}
+
+.manual-fis-editor {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--va-border-dark);
+}
+.manual-fis-label {
+  font-size: 12px;
+  color: var(--va-text-soft);
+  font-weight: 500;
+  white-space: nowrap;
+  margin-right: 2px;
+}
+.manual-fis-count {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--va-text-main);
+  min-width: 16px;
+  text-align: center;
 }
 
 .panel {

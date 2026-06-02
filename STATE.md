@@ -53,6 +53,7 @@ Recently closed / consolidated:
 - **UX-V1-001** — Expanded desktop app shell to use available window width; removed artificial 1280px centred shell constraint.
 - **BRAND-V1-001** — Replaced placeholder VA header mark with existing VF branding asset.
 - **BRAND-V1-002** — Repointed header and Tauri icons to dual asset set. Header uses `flite-logo-vf-transparent-full-128.png`. Standard Tauri icon filenames (`32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.ico`, `icon.png`) replaced with background variants. Dual transparent/background assets retained alongside.
+- **UX-V1-002** — Moved read-only movement/FIS totals to nav/status row, relocated Manual FIS editor to Live Board action row, and added FIS Total Military/Civilian hover breakdown.
 
 ### Pre-launch versioning policy
 

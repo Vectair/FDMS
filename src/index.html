@@ -44,6 +44,37 @@
           <button class="nav-tab" data-tab="tab-vkb">VKB Lookup</button>
           <button class="nav-tab" data-tab="tab-admin">Admin</button>
         </div>
+        <div class="nav-status-counters" aria-label="Daily movement totals">
+          <div class="stat-item" id="navStatBM">
+            <span class="stat-label">BM</span>
+            <span class="stat-value" id="statBookedMvmts">0</span>
+          </div>
+          <div class="stat-item" id="navStatBC">
+            <span class="stat-label">BC</span>
+            <span class="stat-value" id="statBookedComp">0</span>
+          </div>
+          <div class="stat-item" id="navStatVM">
+            <span class="stat-label">VM</span>
+            <span class="stat-value" id="statVfrMvmts">0</span>
+          </div>
+          <div class="stat-item" id="navStatVC">
+            <span class="stat-label">VC</span>
+            <span class="stat-value" id="statVfrComp">0</span>
+          </div>
+          <div class="stat-item" id="navStatOvr">
+            <span class="stat-label">OVR</span>
+            <span class="stat-value" id="statOvrToday">0</span>
+          </div>
+          <div class="stat-item stat-total" id="navStatTotal">
+            <span class="stat-label">Total</span>
+            <span class="stat-value" id="statTotalToday">0</span>
+          </div>
+          <div class="nav-stats-divider"></div>
+          <div class="stat-item stat-fis-total" id="navStatFis">
+            <span class="stat-label">FIS Total</span>
+            <span class="stat-value fis-total" id="totalFisCount">0</span>
+          </div>
+        </div>
       </nav>
 
       <main class="page-body">
@@ -54,59 +85,6 @@
               <div>
                 <div class="page-title">Live Board</div>
                 <div class="page-subtitle">Administrative strip-style movement list (not a controlling system).</div>
-              </div>
-              <div class="liveboard-stats-bar">
-                <!-- Daily Movement Counters -->
-                <div class="daily-stats-section">
-                  <div class="stats-row">
-                    <div class="stat-item">
-                      <span class="stat-label">BM</span>
-                      <span class="stat-value" id="statBookedMvmts">0</span>
-                    </div>
-                    <div class="stat-item">
-                      <span class="stat-label">BC</span>
-                      <span class="stat-value" id="statBookedComp">0</span>
-                    </div>
-                    <div class="stat-item">
-                      <span class="stat-label">VM</span>
-                      <span class="stat-value" id="statVfrMvmts">0</span>
-                    </div>
-                    <div class="stat-item">
-                      <span class="stat-label">VC</span>
-                      <span class="stat-value" id="statVfrComp">0</span>
-                    </div>
-                    <div class="stat-item">
-                      <span class="stat-label">OVR</span>
-                      <span class="stat-value" id="statOvrToday">0</span>
-                    </div>
-                    <div class="stat-item stat-total">
-                      <span class="stat-label">Total</span>
-                      <span class="stat-value" id="statTotalToday">0</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="stats-divider"></div>
-                <!-- FIS Counter Section -->
-                <div class="fis-stats-section" title="FIS (Flight Information Service) statistics">
-                  <div class="stats-row">
-                    <div class="stat-item" title="Manual FIS (non-strip counted)">
-                      <span class="stat-label">Manual FIS</span>
-                      <div class="stat-counter">
-                        <button class="counter-btn-sm" id="btnDecGenericOvr" type="button" aria-label="Decrease generic FIS">−</button>
-                        <span class="stat-value" id="genericOvrCount">0</span>
-                        <button class="counter-btn-sm" id="btnIncGenericOvr" type="button" aria-label="Increase generic FIS">+</button>
-                      </div>
-                    </div>
-                    <div class="stat-item" title="Strip FIS count">
-                      <span class="stat-label">Strip FIS</span>
-                      <span class="stat-value" id="stripFisCount">0</span>
-                    </div>
-                    <div class="stat-item stat-fis-total" title="Total FIS count">
-                      <span class="stat-label">TOTAL FIS</span>
-                      <span class="stat-value fis-total" id="totalFisCount">0</span>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -141,6 +119,12 @@
                 <button class="btn btn-ft btn-ft-dep" id="btnNewDep" type="button" aria-label="Create new departure">New DEP</button>
                 <button class="btn btn-ft btn-ft-arr" id="btnNewArr" type="button" aria-label="Create new arrival">New ARR</button>
                 <button class="btn btn-ft btn-ft-ovr" id="btnNewOvr" type="button" aria-label="Create new planned overflight">New OVR</button>
+                <div class="manual-fis-editor" title="Manual FIS (non-strip counted)">
+                  <span class="manual-fis-label">Manual FIS</span>
+                  <button class="counter-btn-sm" id="btnDecGenericOvr" type="button" aria-label="Decrease generic FIS">−</button>
+                  <span class="manual-fis-count" id="genericOvrCount">0</span>
+                  <button class="counter-btn-sm" id="btnIncGenericOvr" type="button" aria-label="Increase generic FIS">+</button>
+                </div>
               </div>
             </div>
 
