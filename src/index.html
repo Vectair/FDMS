@@ -80,14 +80,6 @@
       <main class="page-body">
         <!-- LIVE -->
         <section id="tab-live" class="tab-panel">
-          <div class="liveboard-header">
-            <div class="liveboard-title-row">
-              <div>
-                <div class="page-title">Live Board</div>
-                <div class="page-subtitle">Administrative strip-style movement list (not a controlling system).</div>
-              </div>
-            </div>
-          </div>
 
           <div class="panel">
             <div class="toolbar">
@@ -171,9 +163,6 @@
 
         <!-- CALENDAR -->
         <section id="tab-calendar" class="tab-panel hidden">
-          <div class="page-title">Calendar</div>
-          <div class="page-subtitle">View bookings and daily operations. Click a booking to see full details.</div>
-
           <div class="calendar-toolbar">
             <div class="calendar-nav">
               <button type="button" class="btn btn-secondary" id="btnCalendarPrev" title="Previous">&lt;</button>
@@ -211,9 +200,6 @@
 
         <!-- BOOKING -->
         <section id="tab-booking" class="tab-panel hidden">
-          <div class="page-title">Booking</div>
-          <div class="page-subtitle">Collect visitor details, auto-calculate charges, then create a planned strip on the Live Board.</div>
-
           <div class="booking-layout">
             <!-- Left: Booking Form -->
             <div class="booking-form-panel panel">
@@ -823,9 +809,6 @@
 
         <!-- REPORTS -->
         <section id="tab-reports" class="tab-panel hidden">
-          <div class="page-title">Reports</div>
-          <div class="page-subtitle">Official monthly returns, dashboard analytics, and insights.</div>
-
           <!-- Reports Toolbar -->
           <div class="reports-toolbar">
             <div class="reports-controls">
@@ -891,9 +874,6 @@
 
         <!-- VKB -->
         <section id="tab-vkb" class="tab-panel hidden">
-          <div class="page-title">VKB Lookup</div>
-          <div class="page-subtitle">Search across aircraft types, callsigns, locations, and registrations.</div>
-
           <div class="panel">
             <div class="lookup-toolbar">
               <input class="field field-search-global" id="vkbSearch" type="search" placeholder="Search across all VKB data…" />
@@ -1006,7 +986,6 @@
         <!-- WEATHER / METAR BUILDER -->
         <section id="tab-metar" class="tab-panel hidden">
           <div class="page-title">METAR Builder</div>
-          <div class="page-subtitle">Compose a METAR or SPECI from structured inputs. Copy the completed report with trailing "=".</div>
 
           <!-- Live output preview — do not alter -->
           <div class="mb-output-panel">
@@ -1390,11 +1369,6 @@
 
   <!-- ── SECTION 1: System Status ── -->
   <div class="admin-section" id="admin-sec-status">
-    <div class="page-title">Admin</div>
-    <div class="page-subtitle">
-      Status and high-level diagnostics for this local FDMS instance. All data is stored in browser LocalStorage.
-    </div>
-
     <div class="panel">
       <h3>System Status</h3>
       <div id="initStatus" style="padding: 8px; background: #e8f5e9; border-left: 4px solid #4caf50; margin-bottom: 12px;">
