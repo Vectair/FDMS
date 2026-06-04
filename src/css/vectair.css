@@ -4988,3 +4988,100 @@ tr.strip.ft-ovr > td {
   margin-top: 0;
 }
 
+/* ── VKB Admin Editor ──────────────────────────────────────────────────────── */
+
+.vkb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.vkb-table th,
+.vkb-table td {
+  border: 1px solid #ddd;
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.vkb-table th {
+  background: #f0f0f0;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.vkb-row-hidden td {
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.vkb-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.vkb-badge-bundled {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.vkb-badge-edited {
+  background: #fff8e1;
+  color: #e65100;
+}
+
+.vkb-badge-added {
+  background: #e3f2fd;
+  color: #0277bd;
+}
+
+.vkb-badge-hidden {
+  background: #fce4ec;
+  color: #880e4f;
+}
+
+.vkb-actions {
+  white-space: nowrap;
+}
+
+.btn-xs {
+  padding: 2px 7px;
+  font-size: 10px;
+  line-height: 1.4;
+  border-radius: 3px;
+}
+
+.vkb-form-row {
+  margin-bottom: 7px;
+}
+
+.vkb-form-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 2px;
+  color: #444;
+}
+
+.vkb-form-input {
+  width: 100%;
+  padding: 4px 7px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+#vkbEditModal.hidden {
+  display: none !important;
+}
+
+/* ── End VKB Admin Editor ──────────────────────────────────────────────────── */
+

@@ -18,6 +18,15 @@ const vkbData = {
   loadError: null
 };
 
+// Baseline (bundled CSV) data — read-only after CSV load
+const vkbBaselineData = {
+  registrations: [],
+  egowCodes: []
+};
+
+// localStorage key for local VKB overrides
+export const VKB_OVERRIDES_KEY = "vectair_fdms_vkb_overrides_v1";
+
 /**
  * Parse CSV text into array of objects
  * @param {string} csvText - Raw CSV text
@@ -142,10 +151,15 @@ export async function loadVKBData() {
     vkbData.callsignsStandard = callsignsStandard;
     vkbData.callsignsNonstandard = callsignsNonstandard;
     vkbData.locations = locations;
-    vkbData.registrations = registrations;
-    vkbData.egowCodes = egowCodes;
     vkbData.callsignKey = callsignKey;
     vkbData.aircraftPilots = aircraftPilots;
+
+    // Store bundled baselines, then apply any local overrides
+    vkbBaselineData.registrations = registrations;
+    vkbBaselineData.egowCodes = egowCodes;
+    vkbData.registrations = applyDatasetOverrides('registrations', registrations);
+    vkbData.egowCodes = applyDatasetOverrides('egowCodes', egowCodes);
+
     vkbData.loaded = true;
     vkbData.loadError = null;
 
@@ -986,6 +1000,228 @@ export function lookupOperatorFromCallsign(callsignCode, acftType = '') {
   // Return first match or best guess
   return (ssrMatches[0]['FORCE'] || '').trim() || '-';
 }
+
+// ── VKB Local Override Layer ───────────────────────────────────────────────
+
+/**
+ * Build the composite key for an EGOW code row.
+ * Format: CALLSIGN_BASE|APPROVED_CONTRACTION|FLIGHT_NUMBER
+ * FLIGHT_NUMBER preserves leading zeroes — do not normalise to integer.
+ */
+export function buildEgowCodeKey(row) {
+  const base = (row['CALLSIGN_BASE'] || '').toUpperCase().trim();
+  const contraction = (row['APPROVED_CONTRACTION'] || row['APPROVED_CONTRATION'] || '').toUpperCase().trim();
+  const flightNum = (row['FLIGHT_NUMBER'] || '').trim();
+  return `${base}|${contraction}|${flightNum}`;
+}
+
+/**
+ * Build the storage key for a registration row or registration string.
+ * Uppercase, trim, remove hyphens and spaces.
+ */
+export function buildRegistrationKey(rowOrRegistration) {
+  const reg = typeof rowOrRegistration === 'string'
+    ? rowOrRegistration
+    : (rowOrRegistration['REGISTRATION'] || '');
+  return reg.toUpperCase().trim().replace(/[-\s]/g, '');
+}
+
+/**
+ * Read local VKB overrides from localStorage.
+ */
+export function getVKBOverrides() {
+  try {
+    const raw = window.localStorage.getItem(VKB_OVERRIDES_KEY);
+    if (!raw) return _emptyOverrides();
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return _emptyOverrides();
+    if (!parsed.datasets) parsed.datasets = {};
+    if (!parsed.datasets.egowCodes) parsed.datasets.egowCodes = {};
+    if (!parsed.datasets.registrations) parsed.datasets.registrations = {};
+    return parsed;
+  } catch (_) {
+    return _emptyOverrides();
+  }
+}
+
+function _emptyOverrides() {
+  return { version: 1, updatedAt: null, datasets: { egowCodes: {}, registrations: {} } };
+}
+
+/**
+ * Persist local VKB overrides to localStorage and recompute effective arrays.
+ */
+export function saveVKBOverrides(overrides) {
+  overrides.updatedAt = new Date().toISOString();
+  window.localStorage.setItem(VKB_OVERRIDES_KEY, JSON.stringify(overrides));
+}
+
+/** Count of override entries by dataset and total. */
+export function getVKBOverrideSummary() {
+  const overrides = getVKBOverrides();
+  const egowCount = Object.keys(overrides.datasets.egowCodes || {}).length;
+  const regCount = Object.keys(overrides.datasets.registrations || {}).length;
+  return { egowCodes: egowCount, registrations: regCount, total: egowCount + regCount };
+}
+
+export function getBaselineEgowCodes() { return vkbBaselineData.egowCodes; }
+export function getBaselineRegistrations() { return vkbBaselineData.registrations; }
+export function getEffectiveEgowCodes() { return vkbData.egowCodes; }
+export function getEffectiveRegistrations() { return vkbData.registrations; }
+
+/**
+ * Return provenance status for a record key in a dataset.
+ * Returns 'bundled' | 'locally-edited' | 'locally-added' | 'locally-hidden'
+ */
+export function getVKBRecordStatus(datasetName, key) {
+  const overrides = getVKBOverrides();
+  const entry = (overrides.datasets[datasetName] || {})[key];
+  if (!entry) return 'bundled';
+  if (entry.action === 'add') return 'locally-added';
+  if (entry.action === 'edit') return 'locally-edited';
+  if (entry.action === 'hide') return 'locally-hidden';
+  return 'bundled';
+}
+
+/**
+ * Save an edit or add override for a record.
+ * Determines action by checking whether the key exists in the bundled baseline.
+ */
+export function upsertVKBOverride(datasetName, key, fields, note = '') {
+  const overrides = getVKBOverrides();
+  if (!overrides.datasets[datasetName]) overrides.datasets[datasetName] = {};
+
+  const existing = overrides.datasets[datasetName][key];
+  const now = new Date().toISOString();
+
+  let action;
+  if (existing && existing.action === 'add') {
+    action = 'add';
+  } else {
+    const baselineArray = datasetName === 'egowCodes' ? vkbBaselineData.egowCodes : vkbBaselineData.registrations;
+    const keyFn = datasetName === 'egowCodes' ? buildEgowCodeKey : buildRegistrationKey;
+    const inBaseline = baselineArray.some(row => keyFn(row) === key);
+    action = inBaseline ? 'edit' : 'add';
+  }
+
+  overrides.datasets[datasetName][key] = {
+    action,
+    key,
+    fields,
+    createdAt: existing ? existing.createdAt : now,
+    updatedAt: now,
+    createdFrom: 'admin-vkb-editor',
+    note,
+    submitStatus: 'local-only'
+  };
+
+  saveVKBOverrides(overrides);
+  _reapplyOverrides();
+}
+
+/**
+ * Hide a bundled record from active lookup, or remove a locally-added record.
+ */
+export function hideVKBRecord(datasetName, key, note = '') {
+  const overrides = getVKBOverrides();
+  if (!overrides.datasets[datasetName]) overrides.datasets[datasetName] = {};
+
+  const existing = overrides.datasets[datasetName][key];
+  if (existing && existing.action === 'add') {
+    delete overrides.datasets[datasetName][key];
+    saveVKBOverrides(overrides);
+    _reapplyOverrides();
+    return;
+  }
+
+  const now = new Date().toISOString();
+  overrides.datasets[datasetName][key] = {
+    action: 'hide',
+    key,
+    fields: existing ? existing.fields : {},
+    createdAt: existing ? existing.createdAt : now,
+    updatedAt: now,
+    createdFrom: 'admin-vkb-editor',
+    note,
+    submitStatus: 'local-only'
+  };
+
+  saveVKBOverrides(overrides);
+  _reapplyOverrides();
+}
+
+/**
+ * Remove a local override, restoring the record to bundled baseline.
+ */
+export function resetVKBOverride(datasetName, key) {
+  const overrides = getVKBOverrides();
+  if (overrides.datasets[datasetName]) {
+    delete overrides.datasets[datasetName][key];
+    saveVKBOverrides(overrides);
+    _reapplyOverrides();
+  }
+}
+
+/**
+ * Apply stored overrides to a baseline array.
+ * - edit: merges fields over the baseline row (shallow copy, no mutation)
+ * - add: appends new rows after baseline, sorted by key
+ * - hide: excludes the row from the result
+ * - malformed entries: silently ignored
+ * Never mutates the original baseline array.
+ */
+function applyDatasetOverrides(datasetName, baselineRows) {
+  let overrides;
+  try {
+    overrides = getVKBOverrides();
+  } catch (_) {
+    return baselineRows.map(r => ({ ...r }));
+  }
+
+  const datasetOverrides = (overrides.datasets && overrides.datasets[datasetName]) || {};
+  const keyFn = datasetName === 'egowCodes' ? buildEgowCodeKey : buildRegistrationKey;
+
+  const baselineKeys = new Set();
+  const result = [];
+
+  for (const row of baselineRows) {
+    const key = keyFn(row);
+    baselineKeys.add(key);
+    const entry = datasetOverrides[key];
+
+    if (!entry || !entry.action) {
+      result.push({ ...row });
+    } else if (entry.action === 'edit' && entry.fields && typeof entry.fields === 'object') {
+      result.push({ ...row, ...entry.fields });
+    } else if (entry.action === 'hide') {
+      // excluded
+    } else {
+      result.push({ ...row }); // malformed: fall back to baseline
+    }
+  }
+
+  // Append locally-added rows (keys not in baseline), sorted deterministically
+  const addedEntries = Object.entries(datasetOverrides)
+    .filter(([key, entry]) => entry.action === 'add' && !baselineKeys.has(key))
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  for (const [, entry] of addedEntries) {
+    if (entry.fields && typeof entry.fields === 'object') {
+      result.push({ ...entry.fields });
+    }
+  }
+
+  return result;
+}
+
+/** Recompute effective arrays after any override change and notify listeners. */
+function _reapplyOverrides() {
+  vkbData.registrations = applyDatasetOverrides('registrations', vkbBaselineData.registrations);
+  vkbData.egowCodes = applyDatasetOverrides('egowCodes', vkbBaselineData.egowCodes);
+  window.dispatchEvent(new CustomEvent('fdms:vkb-overrides-changed'));
+}
+
+// ── End VKB Override Layer ──────────────────────────────────────────────────
 
 /**
  * Validate squawk code
