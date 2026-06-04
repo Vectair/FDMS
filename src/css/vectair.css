@@ -4990,14 +4990,117 @@ tr.strip.ft-ovr > td {
 
 /* ── VKB Admin Editor ───────────────────────────────────────────────────────── */
 
+/* Section fills the admin-content pane height; no page-level scroll needed */
+#admin-sec-vkb-data {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* Outer card that contains all VKB editor chrome */
+.vkb-admin-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--va-border);
+  background: var(--va-panel-bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Top chrome: tabs row + toolbar row */
+.vkb-admin-topbar {
+  flex: 0 0 auto;
+}
+
+/* Dataset tab strip */
+.vkb-dataset-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 10px;
+  background: #f7f7f7;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.vkb-dataset-tab {
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: #555;
+  margin-bottom: -1px;
+}
+
+.vkb-dataset-tab:hover:not(.active) {
+  color: #333;
+  background: rgba(0,0,0,0.04);
+}
+
+.vkb-dataset-tab.active {
+  color: var(--va-accent-brown, #6d4c30);
+  border-bottom-color: var(--va-accent-brown, #6d4c30);
+  font-weight: 600;
+  background: #fff;
+}
+
+/* Toolbar row: summary + search + add button */
 .vkb-admin-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid #eee;
   flex-wrap: wrap;
-  margin-bottom: 4px;
 }
 
+.vkb-admin-summary {
+  flex: 1;
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Scrollable table area — fills remaining height */
+.vkb-admin-table-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.vkb-admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.vkb-admin-table th,
+.vkb-admin-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+
+.vkb-admin-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f5f5f5;
+  font-size: 11px;
+  font-weight: 600;
+  color: #555;
+  border-bottom: 2px solid #ddd;
+  white-space: nowrap;
+}
+
+/* Status badges */
 .vkb-badge {
   display: inline-block;
   font-size: 10px;

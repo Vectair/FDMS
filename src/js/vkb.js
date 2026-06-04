@@ -1400,21 +1400,30 @@ function _renderVkbAdminSummary() {
 }
 
 function _currentAdminDataset() {
-  return document.getElementById('vkbAdminDataset')?.value || 'egowCodes';
+  return document.querySelector('.vkb-dataset-tab.active')?.dataset.ds || 'egowCodes';
 }
 
 function _refreshVkbAdminTable() {
   const dataset = _currentAdminDataset();
   const search  = (document.getElementById('vkbAdminSearch')?.value || '').toLowerCase().trim();
-  document.getElementById('vkbAdminTableEgow')?.classList.toggle('hidden', dataset !== 'egowCodes');
-  document.getElementById('vkbAdminTableReg')?.classList.toggle('hidden', dataset !== 'registrations');
   if (dataset === 'egowCodes') _renderEgowAdminTable(search);
   else _renderRegAdminTable(search);
 }
 
 function _renderEgowAdminTable(search) {
-  const tbody = document.getElementById('vkbAdminBodyEgow');
+  const thead = document.getElementById('vkbAdminTableHead');
+  const tbody = document.getElementById('vkbAdminTableBody');
   if (!tbody) return;
+
+  if (thead) thead.innerHTML = `<tr>
+    <th style="width:68px;">Status</th>
+    <th>Callsign Base</th>
+    <th>Flt #</th>
+    <th>EGOW Code</th>
+    <th>Unit Code</th>
+    <th>Name</th>
+    <th style="width:190px;text-align:right;">Actions</th>
+  </tr>`;
 
   const egowOverrides = getVKBOverrides().datasets.egowCodes || {};
   const allRows = [];
@@ -1448,11 +1457,11 @@ function _renderEgowAdminTable(search) {
                 : status === 'edited'    ? '<span class="vkb-badge vkb-badge-edited">Edited</span>'
                 : '';
     const ek = _esc(key);
-    const editBtn  = status !== 'hidden'                       ? `<button class="small-btn" data-va="edit"    data-key="${ek}" data-ds="egowCodes" type="button">Edit</button>`    : '';
-    const histBtn  =                                             `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="egowCodes" type="button">History</button>`;
+    const editBtn  = status !== 'hidden'                           ? `<button class="small-btn" data-va="edit"    data-key="${ek}" data-ds="egowCodes" type="button">Edit</button>`    : '';
+    const histBtn  =                                                 `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="egowCodes" type="button">History</button>`;
     const hideBtn  = (status === 'bundled' || status === 'edited') ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="egowCodes" type="button">Hide</button>`    : '';
-    const delBtn   = status === 'local-add'                    ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="egowCodes" type="button">Delete</button>` : '';
-    const resetBtn = (status === 'edited' || status === 'hidden') ? `<button class="small-btn" data-va="reset"   data-key="${ek}" data-ds="egowCodes" type="button">Reset</button>`   : '';
+    const delBtn   = status === 'local-add'                        ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="egowCodes" type="button">Delete</button>` : '';
+    const resetBtn = (status === 'edited' || status === 'hidden')  ? `<button class="small-btn" data-va="reset"   data-key="${ek}" data-ds="egowCodes" type="button">Reset</button>`   : '';
     return `<tr class="${status === 'hidden' ? 'vkb-row-hidden' : ''}">
       <td>${badge}</td>
       <td>${_esc(effectiveRow['CALLSIGN_BASE'] || '')}</td>
@@ -1470,8 +1479,17 @@ function _renderEgowAdminTable(search) {
 }
 
 function _renderRegAdminTable(search) {
-  const tbody = document.getElementById('vkbAdminBodyReg');
+  const thead = document.getElementById('vkbAdminTableHead');
+  const tbody = document.getElementById('vkbAdminTableBody');
   if (!tbody) return;
+
+  if (thead) thead.innerHTML = `<tr>
+    <th style="width:68px;">Status</th>
+    <th>Registration</th>
+    <th>Operator</th>
+    <th>Type</th>
+    <th style="width:190px;text-align:right;">Actions</th>
+  </tr>`;
 
   const regOverrides = getVKBOverrides().datasets.registrations || {};
   const allRows = [];
@@ -1739,12 +1757,18 @@ function _openVkbEditModal(dataset, key) {
  * Call once from app.js bootstrap after VKB data is loaded.
  */
 export function initVkbAdmin() {
-  const datasetSel  = document.getElementById('vkbAdminDataset');
+  const tabBtns     = document.querySelectorAll('.vkb-dataset-tab');
   const searchInput = document.getElementById('vkbAdminSearch');
   const addBtn      = document.getElementById('vkbAdminAddRow');
-  if (!datasetSel) return;
+  if (!tabBtns.length) return;
 
-  datasetSel.addEventListener('change', _refreshVkbAdminTable);
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _refreshVkbAdminTable();
+    });
+  });
   searchInput?.addEventListener('input', _refreshVkbAdminTable);
   addBtn?.addEventListener('click', () => _openVkbEditModal(_currentAdminDataset(), null));
 

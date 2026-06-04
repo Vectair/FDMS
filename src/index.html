@@ -2305,26 +2305,25 @@
   <!-- ── VKB / Reference Data ── -->
   <div class="admin-section hidden" id="admin-sec-vkb-data">
 
-    <div class="panel">
-      <h3>VKB / Reference Data</h3>
-      <div id="vkbAdminSummary" style="font-size:12px;color:#555;margin-bottom:4px;">Loading…</div>
-    </div>
+    <div class="vkb-admin-editor">
 
-    <div class="panel">
-      <div class="vkb-admin-toolbar">
-        <label style="font-size:12px;font-weight:500;margin-right:6px;" for="vkbAdminDataset">Dataset:</label>
-        <select id="vkbAdminDataset" class="modal-select" style="width:180px;">
-          <option value="egowCodes">EGOW Codes</option>
-          <option value="registrations">Registrations</option>
-        </select>
-        <input type="search" id="vkbAdminSearch" class="modal-input" placeholder="Filter rows…" style="flex:1;min-width:140px;max-width:240px;" />
-        <button class="btn btn-primary" id="vkbAdminAddRow" type="button">Add Row</button>
+      <!-- Tabs + toolbar -->
+      <div class="vkb-admin-topbar">
+        <div class="vkb-dataset-tabs">
+          <button class="vkb-dataset-tab active" data-ds="egowCodes" type="button">EGOW Codes</button>
+          <button class="vkb-dataset-tab" data-ds="registrations" type="button">Registrations</button>
+        </div>
+        <div class="vkb-admin-toolbar">
+          <span id="vkbAdminSummary" class="vkb-admin-summary">Loading…</span>
+          <input type="search" id="vkbAdminSearch" class="modal-input" placeholder="Filter rows…" style="flex:1;min-width:120px;max-width:220px;" />
+          <button class="btn btn-primary" id="vkbAdminAddRow" type="button">+ Add Row</button>
+        </div>
       </div>
 
-      <!-- EGOW Codes table -->
-      <div id="vkbAdminTableEgow" class="table-container" style="margin-top:10px;">
-        <table>
-          <thead>
+      <!-- Single shared table -->
+      <div class="vkb-admin-table-shell">
+        <table class="vkb-admin-table" id="vkbAdminTable">
+          <thead id="vkbAdminTableHead">
             <tr>
               <th style="width:68px;">Status</th>
               <th>Callsign Base</th>
@@ -2335,29 +2334,12 @@
               <th style="width:190px;text-align:right;">Actions</th>
             </tr>
           </thead>
-          <tbody id="vkbAdminBodyEgow">
+          <tbody id="vkbAdminTableBody">
             <tr><td colspan="7" style="text-align:center;color:#999;padding:12px;">Loading VKB data…</td></tr>
           </tbody>
         </table>
       </div>
 
-      <!-- Registrations table -->
-      <div id="vkbAdminTableReg" class="table-container hidden" style="margin-top:10px;">
-        <table>
-          <thead>
-            <tr>
-              <th style="width:68px;">Status</th>
-              <th>Registration</th>
-              <th>Operator</th>
-              <th>Type</th>
-              <th style="width:190px;text-align:right;">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="vkbAdminBodyReg">
-            <tr><td colspan="5" style="text-align:center;color:#999;padding:12px;">Loading VKB data…</td></tr>
-          </tbody>
-        </table>
-      </div>
     </div>
 
   </div>
