@@ -1155,7 +1155,7 @@ function getVKBOverrides() {
       return migrated;
     }
 
-    return {
+    const result = {
       version: parsed.version || 1,
       updatedAt: parsed.updatedAt || null,
       datasets: {
@@ -1163,6 +1163,30 @@ function getVKBOverrides() {
         registrations: parsed.datasets?.registrations || {}
       }
     };
+
+    // Normalise registration override fields saved before this fix was in place.
+    // Re-keys to canonical form (e.g. 'n620ha' → 'N620HA') and normalises
+    // field values so the table and lookups see correct casing without the user
+    // having to re-save every record.
+    let regChanged = false;
+    const normReg = {};
+    for (const [storedKey, ov] of Object.entries(result.datasets.registrations)) {
+      if (!ov?.fields) { normReg[storedKey] = ov; continue; }
+      const nf = normalizeRegistrationFields(ov.fields);
+      const ck = registrationVKBKey(nf['REGISTRATION'] || '') || storedKey;
+      if (ck !== storedKey || JSON.stringify(nf) !== JSON.stringify(ov.fields)) {
+        normReg[ck] = { ...ov, key: ck, fields: nf };
+        regChanged = true;
+      } else {
+        normReg[storedKey] = ov;
+      }
+    }
+    if (regChanged) {
+      result.datasets.registrations = normReg;
+      saveVKBOverrides(result);
+    }
+
+    return result;
   } catch (_) {
     return _emptyOverrides();
   }
@@ -1258,21 +1282,41 @@ function _rebuildEffectiveArrays() {
  * Returns the stored override entry, or null if no change was detected.
  */
 export function upsertVKBOverride(datasetName, key, fields, note = '', effectiveFrom = new Date().toISOString().slice(0, 10)) {
+  // Normalise registration fields at the mutation layer so every caller benefits,
+  // regardless of whether the modal save handler has already normalised or not.
+  const normFields = datasetName === 'registrations'
+    ? normalizeRegistrationFields(fields)
+    : { ...fields };
+
+  // For registrations, derive the canonical key from the normalised REGISTRATION
+  // so a row saved before normalisation (e.g. key='n620ha') is automatically
+  // migrated to its canonical form (key='N620HA').
+  let canonicalKey = key;
+  if (datasetName === 'registrations') {
+    const derivedKey = registrationVKBKey(normFields['REGISTRATION'] || '');
+    if (derivedKey) canonicalKey = derivedKey;
+  }
+
   const overrides = getVKBOverrides();
   if (!overrides.datasets[datasetName]) overrides.datasets[datasetName] = {};
 
-  const existing = overrides.datasets[datasetName][key];
-  const bundled  = getBundledRow(datasetName, key);
+  // Remove stale pre-normalisation entry so no duplicate keys remain
+  if (canonicalKey !== key && overrides.datasets[datasetName][key]) {
+    delete overrides.datasets[datasetName][key];
+  }
+
+  const existing = overrides.datasets[datasetName][canonicalKey];
+  const bundled  = getBundledRow(datasetName, canonicalKey);
   const action   = (!bundled && (!existing || existing.action === 'add')) ? 'add' : 'edit';
 
-  const currentEffective = resolveCurrentEffective(datasetName, key);
-  const proposedRow = { ...fields };
+  const currentEffective = resolveCurrentEffective(datasetName, canonicalKey);
+  const proposedRow = normFields;
 
   const auditEvent = auditEntityChange({
     domain: 'vkb',
     dataset: datasetName,
-    entityId: key,
-    label: key,
+    entityId: canonicalKey,
+    label: canonicalKey,
     action: `vkb.${action}`,
     before: action === 'add' ? {} : currentEffective,
     after: proposedRow,
@@ -1293,17 +1337,17 @@ export function upsertVKBOverride(datasetName, key, fields, note = '', effective
       if (String(v ?? '') !== String(bundledVal)) storedFields[k] = v;
     }
     if (Object.keys(storedFields).length === 0) {
-      delete overrides.datasets[datasetName][key];
+      delete overrides.datasets[datasetName][canonicalKey];
       saveVKBOverrides(overrides);
       _rebuildEffectiveArrays();
       return null;
     }
   }
 
-  overrides.datasets[datasetName][key] = { action, key, fields: storedFields, note, updatedAt: new Date().toISOString() };
+  overrides.datasets[datasetName][canonicalKey] = { action, key: canonicalKey, fields: storedFields, note, updatedAt: new Date().toISOString() };
   saveVKBOverrides(overrides);
   _rebuildEffectiveArrays();
-  return overrides.datasets[datasetName][key];
+  return overrides.datasets[datasetName][canonicalKey];
 }
 
 /**
