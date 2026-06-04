@@ -5140,3 +5140,36 @@ tr.strip.ft-ovr > td {
   margin-left: 2px;
 }
 
+/* ── VKB Registration modal — registry lookup aid ── */
+
+.vkb-reg-aid-container {
+  margin-top: 8px;
+  min-height: 28px;
+}
+
+.vkb-reg-aid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: #f0f7ff;
+  border: 1px solid #b3d1f0;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.vkb-reg-aid-label {
+  font-weight: 600;
+  color: #1565c0;
+}
+
+.vkb-reg-aid-token {
+  color: #333;
+}
+
+.vkb-reg-aid-none {
+  font-size: 11px;
+  color: #999;
+}
+

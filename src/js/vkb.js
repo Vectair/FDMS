@@ -1547,6 +1547,84 @@ function _handleVkbAction(action, dataset, key) {
   else if (action === 'reset')   _confirmVkbReset(dataset, key);
 }
 
+// ─── Registry lookup aid ──────────────────────────────────────────────────────
+
+/**
+ * Detect the national register for a registration string.
+ * Returns a descriptor object or null for unsupported formats.
+ * Only used as a manual lookup aid — does not fetch or populate fields.
+ */
+function detectAircraftRegistry(registration) {
+  const raw = String(registration || '').toUpperCase().trim().replace(/\s+/g, ' ');
+  if (!raw) return null;
+
+  // UK G-register: G + optional separator + 1–5 letters
+  const ukMatch = raw.match(/^G[-\s]?([A-Z]{1,5})$/);
+  if (ukMatch) {
+    const token = ukMatch[1];
+    return {
+      jurisdiction: 'UK',
+      label: 'UK CAA G-INFO',
+      normalizedRegistration: `G-${token}`,
+      lookupToken: token,
+      url: 'https://www.caa.co.uk/aircraft-register/g-info/search-g-info/'
+    };
+  }
+
+  // US N-register: N + optional separator + digits then alphanumeric
+  const usMatch = raw.match(/^N[-\s]?([0-9][A-Z0-9]{0,5})$/);
+  if (usMatch) {
+    const token = usMatch[1];
+    return {
+      jurisdiction: 'US',
+      label: 'FAA Registry',
+      normalizedRegistration: `N${token}`,
+      lookupToken: token,
+      url: 'https://registry.faa.gov/aircraftinquiry/Search/NNumberInquiry'
+    };
+  }
+
+  return null;
+}
+
+function _clipboardFallback(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+  document.body.removeChild(ta);
+}
+
+function _copyToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => _clipboardFallback(text));
+  } else {
+    _clipboardFallback(text);
+  }
+}
+
+function _updateVkbRegistryAid(value, aidEl) {
+  if (!aidEl) return;
+  const info = detectAircraftRegistry(value);
+  if (!info) {
+    aidEl.innerHTML = value.trim()
+      ? `<span class="vkb-reg-aid-none">No supported registry detected.</span>`
+      : '';
+    return;
+  }
+  aidEl.innerHTML = `
+    <div class="vkb-reg-aid">
+      <span class="vkb-reg-aid-label">${_esc(info.label)}</span>
+      <span class="vkb-reg-aid-token">Token: <strong>${_esc(info.lookupToken)}</strong></span>
+      <button class="small-btn" id="_vkbRegCopy" type="button">Copy token</button>
+      <button class="small-btn" id="_vkbRegOpen" type="button">Open registry ↗</button>
+    </div>`;
+  aidEl.querySelector('#_vkbRegCopy')?.addEventListener('click', () => _copyToClipboard(info.lookupToken));
+  aidEl.querySelector('#_vkbRegOpen')?.addEventListener('click', () => window.open(info.url, '_blank', 'noopener'));
+}
+
 function _simpleConfirm(message, onConfirm) {
   const bd = document.createElement('div');
   bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:3000;display:flex;align-items:center;justify-content:center;';
@@ -1685,6 +1763,10 @@ function _openVkbEditModal(dataset, key) {
     ? `Add ${dataset === 'egowCodes' ? 'EGOW Code Row' : 'Registration'}`
     : `Edit ${key}`;
 
+  const regAidHtml = dataset === 'registrations'
+    ? `<div id="vkbRegAid" class="vkb-reg-aid-container"></div>`
+    : '';
+
   const bd = document.createElement('div');
   bd.className = 'modal-backdrop';
   bd.style.zIndex = '3000';
@@ -1704,7 +1786,8 @@ function _openVkbEditModal(dataset, key) {
         <input type="text" id="vkbEditNote" class="modal-input" placeholder="Optional reason…" />
       </div>
     </div>
-    <div id="vkbEditError" style="color:#c62828;font-size:11px;min-height:16px;margin-top:8px;"></div>
+    ${regAidHtml}
+    <div id="vkbEditError" style="color:#c62828;font-size:11px;min-height:16px;margin-top:4px;"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
       <button class="btn btn-secondary" id="_veCancel" type="button">Cancel</button>
       <button class="btn btn-primary"   id="_veSave"   type="button">Save</button>
@@ -1715,6 +1798,13 @@ function _openVkbEditModal(dataset, key) {
   const cleanup = () => { if (bd.parentNode) document.body.removeChild(bd); };
   bd.querySelector('#_veCancel').addEventListener('click', cleanup);
   bd.addEventListener('click', e => { if (e.target === bd) cleanup(); });
+
+  if (dataset === 'registrations') {
+    const regInput = bd.querySelector('#vkbEd_REGISTRATION');
+    const aidEl    = bd.querySelector('#vkbRegAid');
+    _updateVkbRegistryAid(regInput?.value || '', aidEl);
+    regInput?.addEventListener('input', () => _updateVkbRegistryAid(regInput.value, aidEl));
+  }
 
   bd.querySelector('#_veSave').addEventListener('click', () => {
     const formFields = {};
