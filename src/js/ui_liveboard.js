@@ -7007,9 +7007,9 @@ function openEditMovementModal(m) {
   document.getElementById("editReg")?.addEventListener("blur", _refreshEditVkbButton);
   _refreshEditVkbButton();
 
-  // Bind save handler with validation
-  document.querySelector(".js-save-edit")?.addEventListener("click", () => {
-    // Get form values
+  // Shared helper: validate, build updates, save movement, update UI, close modal.
+  // Returns true on success, false if any validation step fails (caller must not write VKB).
+  function _saveEditMovementFromModal() {
     const dof = document.getElementById("editDOF")?.value || getTodayDateString();
     let depPlanned = document.getElementById("editDepPlanned")?.value || "";
     let depActual = document.getElementById("editDepActual")?.value || "";
@@ -7019,14 +7019,10 @@ function openEditMovementModal(m) {
     const tng = document.getElementById("editTng")?.value || "0";
     const callsignCode = normOperationalText(document.getElementById("editCallsignCode")?.value);
     const flightNumber = normOperationalText(document.getElementById("editFlightNumber")?.value);
-    const callsign = callsignCode + flightNumber; // Combine for full callsign
+    const callsign = callsignCode + flightNumber;
 
-    // Validate inputs
     const dofValidation = validateDate(dof);
-    if (!dofValidation.valid) {
-      showToast(dofValidation.error, 'error');
-      return;
-    }
+    if (!dofValidation.valid) { showToast(dofValidation.error, 'error'); return false; }
 
     const depPlannedValidation = validateTime(depPlanned);
     const depActualValidation = validateTime(depActual);
@@ -7046,11 +7042,10 @@ function openEditMovementModal(m) {
       if (!validation.result.valid) {
         const msg = validation.label ? `${validation.label}: ${validation.result.error}` : validation.result.error;
         showToast(msg, 'error');
-        return;
+        return false;
       }
     }
 
-    // Use normalized times if provided
     if (depPlannedValidation.normalized) {
       depPlanned = depPlannedValidation.normalized;
       document.getElementById("editDepPlanned").value = depPlanned;
@@ -7068,7 +7063,6 @@ function openEditMovementModal(m) {
       document.getElementById("editArrActual").value = arrActual;
     }
 
-    // Convert Local→UTC if currently in LOCAL display mode
     const _editSaveMode = (getConfig().timeInputMode || "UTC").toUpperCase();
     if (_editSaveMode === "LOCAL") {
       if (depPlanned) depPlanned = convertLocalToUTC(depPlanned);
@@ -7077,7 +7071,6 @@ function openEditMovementModal(m) {
       if (arrActual)  arrActual  = convertLocalToUTC(arrActual);
     }
 
-    // Check for past times and show warning
     if (depPlanned) {
       const depPastCheck = checkPastTime(depPlanned, dof);
       if (depPastCheck.isPast) showToast(depPastCheck.warning, 'warning');
@@ -7095,43 +7088,37 @@ function openEditMovementModal(m) {
       if (arrActualPastCheck.isPast) showToast(arrActualPastCheck.warning, 'warning');
     }
 
-    // Validate callsign
     const editCallsignValidation = validateRequired(callsignCode, "Callsign Code");
-    if (!editCallsignValidation.valid) { showToast(editCallsignValidation.error, 'error'); return; }
+    if (!editCallsignValidation.valid) { showToast(editCallsignValidation.error, 'error'); return false; }
 
-    // Validate EGOW Code
     const editEgowCode = document.getElementById("editEgowCode")?.value?.toUpperCase().trim() || "";
     const editValidEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
     if (!editEgowCode || !editValidEgowCodes.includes(editEgowCode)) {
       showToast("Valid EGOW Code is required", 'error');
-      return;
+      return false;
     }
     if (editEgowCode === 'BM') {
       const unitCodeVal = (document.getElementById("editUnitCode")?.value || "").trim();
       if (!unitCodeVal) {
         showToast("EGOW Unit code is required for BM flights", 'error');
-        return;
+        return false;
       }
     }
 
-    // Get WTC based on aircraft type and flight type
     const aircraftType = normOperationalText(document.getElementById("editType")?.value);
     const selectedFlightType = document.getElementById("editFlightType")?.value || flightType;
     const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
 
-    // Get voice callsign for display
     const regValue = normalizeEuCivilRegistration(document.getElementById("editReg")?.value || "");
     const regData = lookupRegistration(regValue);
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
-    // Get departure and arrival location names
     const depAd = normOperationalText(document.getElementById("editDepAd")?.value);
     const arrAd = normOperationalText(document.getElementById("editArrAd")?.value);
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
 
-    // Get new optional fields
     const editPriorityLetterRaw = document.getElementById("editPriorityLetter")?.value || "";
     const editPriorityLetterValue = editPriorityLetterRaw === "-" ? "" : editPriorityLetterRaw;
     const editRemarksValue = normOperationalText(document.getElementById("editRwRemarks")?.value);
@@ -7142,7 +7129,6 @@ function openEditMovementModal(m) {
     const editRouteValue = normOperationalText(document.getElementById("editAtcRoute")?.value);
     const editClearanceValue = normOperationalText(document.getElementById("editAtcClearance")?.value);
 
-    // Auto-activate strip when ATD is entered for PLANNED DEP/LOC flights
     let newStatus = m.status;
     if (m.status === "PLANNED" && depActual && depActual.trim() !== "") {
       if (selectedFlightType === "DEP" || selectedFlightType === "LOC") {
@@ -7150,7 +7136,6 @@ function openEditMovementModal(m) {
       }
     }
 
-    // Update movement
     const editDurationRaw = parseInt(document.getElementById("editDuration")?.value || "", 10);
     const updates = {
       status: newStatus,
@@ -7195,21 +7180,19 @@ function openEditMovementModal(m) {
       outcomeTime: document.getElementById("editOutcomeTime")?.value || "",
     };
 
-    // Validate ZZZZ companion fields
     if (updates.depAd?.trim().toUpperCase() === 'ZZZZ' && !updates.depAdText) {
-      showToast("Departure AD is ZZZZ — location name is required", 'error'); return;
+      showToast("Departure AD is ZZZZ — location name is required", 'error'); return false;
     }
     if (updates.arrAd?.trim().toUpperCase() === 'ZZZZ' && !updates.arrAdText) {
-      showToast("Arrival AD is ZZZZ — location name is required", 'error'); return;
+      showToast("Arrival AD is ZZZZ — location name is required", 'error'); return false;
     }
     if (updates.type?.trim().toUpperCase() === 'ZZZZ' && !updates.aircraftTypeText) {
-      showToast("Aircraft Type is ZZZZ — aircraft description is required", 'error'); return;
+      showToast("Aircraft Type is ZZZZ — aircraft description is required", 'error'); return false;
     }
     if ((updates.actualDestinationAd || "").trim().toUpperCase() === 'ZZZZ' && !updates.actualDestinationText) {
-      showToast("Actual Destination is ZZZZ — location name is required", 'error'); return;
+      showToast("Actual Destination is ZZZZ — location name is required", 'error'); return false;
     }
 
-    // Validate and read formation
     const editFmBase = (document.getElementById("editCallsignCode")?.value?.trim() || "") +
                        (document.getElementById("editFlightNumber")?.value?.trim() || "");
     const editFmShared = {
@@ -7224,7 +7207,7 @@ function openEditMovementModal(m) {
       fisCount:   parseInt(document.getElementById("editFisCount")?.value || "0", 10)   || 0
     };
     const editFm = readFormationFromModal(editFmBase, "editFormationCount", "editFormationElementsContainer", editFmShared, editFormationDraft);
-    if (editFm?._error) { showToast(editFm.message, 'error'); return; }
+    if (editFm?._error) { showToast(editFm.message, 'error'); return false; }
     updates.formation = editFm;
 
     const savedMovement = updateMovement(m.id, updates);
@@ -7262,7 +7245,6 @@ function openEditMovementModal(m) {
       }
     }
 
-    // Sync back to booking if this strip is linked
     onMovementUpdated(m);
 
     renderLiveBoard();
@@ -7272,8 +7254,13 @@ function openEditMovementModal(m) {
     if (window.updateFisCounters) window.updateFisCounters();
     showToast("Movement updated successfully", 'success');
 
-    // Close modal (also removes the document keydown handler to prevent leaks)
     closeActiveModal();
+    return true;
+  }
+
+  // Bind save handler with validation
+  document.querySelector(".js-save-edit")?.addEventListener("click", () => {
+    _saveEditMovementFromModal();
   });
 
   // Bind Save + Update VKB handler
@@ -7284,8 +7271,10 @@ function openEditMovementModal(m) {
       return;
     }
     _showVkbUpdateConfirm(candidate, () => {
-      upsertVKBOverride('registrations', candidate.key, candidate.fieldsToSave, 'Quick update from strip edit');
-      document.querySelector(".js-save-edit")?.click();
+      const saved = _saveEditMovementFromModal();
+      if (saved) {
+        upsertVKBOverride('registrations', candidate.key, candidate.fieldsToSave, 'Quick update from strip edit');
+      }
     });
   });
 
