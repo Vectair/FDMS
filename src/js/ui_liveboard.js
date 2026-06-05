@@ -4424,7 +4424,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
       <div style="display: flex; gap: 8px;">
         <button class="btn btn-secondary-modal js-save-complete-flight" type="button" style="display: none;">Save &amp; Complete</button>
-        <button class="btn btn-secondary-modal js-save-flight-vkb" type="button">Create + Update VKB</button>
+        <button class="btn btn-secondary-modal js-save-flight-vkb" type="button" style="display:none;">Create + Update VKB</button>
         <button class="btn btn-primary js-save-flight" type="button">Save</button>
       </div>
     </div>
@@ -4849,6 +4849,41 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       wtcDirty = true;
     }
   }
+
+  // ── VKB button visibility helpers ────────────────────────────────────────
+  // Read current form values and check whether a VKB update candidate exists.
+  function _buildNewFlightVkbCandidate() {
+    return buildRegistrationVkbUpdateCandidate({
+      registration: normalizeEuCivilRegistration(document.getElementById("newReg")?.value || ""),
+      type:          normOperationalText(document.getElementById("newType")?.value),
+      egowFlightType: normOperationalText(document.getElementById("newEgowCode")?.value),
+      warnings:      normOperationalText(document.getElementById("rwWarnings")?.value),
+      notes:         normOperationalText(document.getElementById("rwRemarks")?.value),
+    });
+  }
+
+  function _refreshNewFlightVkbButton() {
+    const btn = document.querySelector(".js-save-flight-vkb");
+    if (!btn) return;
+    const has = !!_buildNewFlightVkbCandidate();
+    btn.style.display = has ? "" : "none";
+    btn.title = has ? "Save this registration data to VKB for future movements" : "";
+  }
+
+  // Bind refresh to all VKB-relevant trigger fields
+  const _vkbTriggerIds = ["newReg", "newType", "newEgowCode", "rwRemarks", "rwWarnings"];
+  for (const id of _vkbTriggerIds) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("input",  _refreshNewFlightVkbButton);
+      el.addEventListener("change", _refreshNewFlightVkbButton);
+    }
+  }
+  // Also run after blur on registration so normalisation + autofill have settled
+  document.getElementById("newReg")?.addEventListener("blur", _refreshNewFlightVkbButton);
+
+  // Initial evaluation (after prefill or blank state)
+  _refreshNewFlightVkbButton();
 
   // Local helper: validate form and build movement object.
   // Returns { movement, formRemarks, formWarnings } on success, or null if validation fails.
@@ -5525,7 +5560,7 @@ function openNewLocFlightModal() {
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
       <div style="display: flex; gap: 8px;">
         <button class="btn btn-secondary-modal js-save-complete-loc" type="button" style="display: none;">Save &amp; Complete</button>
-        <button class="btn btn-secondary-modal js-save-loc-vkb" type="button">Save + Update VKB</button>
+        <button class="btn btn-secondary-modal js-save-loc-vkb" type="button" style="display:none;">Save + Update VKB</button>
         <button class="btn btn-primary js-save-loc" type="button">Save</button>
       </div>
     </div>
@@ -5859,6 +5894,37 @@ function openNewLocFlightModal() {
 
   // Bind bidirectional Duration ↔ planned-end sync
   bindPlannedTimesSync("newLocStart", "newLocEnd", "newLocDuration");
+
+  // ── VKB button visibility helpers ────────────────────────────────────────
+  function _buildLocVkbCandidate() {
+    return buildRegistrationVkbUpdateCandidate({
+      registration: normalizeEuCivilRegistration(document.getElementById("newLocReg")?.value || ""),
+      type:          normOperationalText(document.getElementById("newLocType")?.value),
+      egowFlightType: normOperationalText(document.getElementById("newLocEgowCode")?.value),
+      warnings:      normOperationalText(document.getElementById("newLocWarnings")?.value),
+      notes:         normOperationalText(document.getElementById("newLocRemarks")?.value),
+    });
+  }
+
+  function _refreshLocVkbButton() {
+    const btn = document.querySelector(".js-save-loc-vkb");
+    if (!btn) return;
+    const has = !!_buildLocVkbCandidate();
+    btn.style.display = has ? "" : "none";
+    btn.title = has ? "Save this registration data to VKB for future movements" : "";
+  }
+
+  const _locVkbTriggerIds = ["newLocReg", "newLocType", "newLocEgowCode", "newLocRemarks", "newLocWarnings"];
+  for (const id of _locVkbTriggerIds) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("input",  _refreshLocVkbButton);
+      el.addEventListener("change", _refreshLocVkbButton);
+    }
+  }
+  document.getElementById("newLocReg")?.addEventListener("blur", _refreshLocVkbButton);
+
+  _refreshLocVkbButton();
 
   // Local helper: validate form and build LOC movement object.
   // Returns { movement, formRemarks, formWarnings } on success, or null if validation fails.
