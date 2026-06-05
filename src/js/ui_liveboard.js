@@ -1079,6 +1079,7 @@ function bindZzzzCompanion(codeInput, companionInput) {
   codeInput.addEventListener('input', update);
   codeInput.addEventListener('change', update);
   update(); // run once on bind in case value already set
+  return update;
 }
 
 /**
@@ -4474,9 +4475,9 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
   makeInputUppercase(arrAdInput);
 
   // ZZZZ companion field visibility
-  bindZzzzCompanion(depAdInput, document.getElementById("newDepAdText"));
-  bindZzzzCompanion(arrAdInput, document.getElementById("newArrAdText"));
-  bindZzzzCompanion(typeInput, document.getElementById("newAircraftTypeText"));
+  const refreshDepZzzzCompanion  = bindZzzzCompanion(depAdInput, document.getElementById("newDepAdText"));
+  const refreshArrZzzzCompanion  = bindZzzzCompanion(arrAdInput, document.getElementById("newArrAdText"));
+  const refreshTypeZzzzCompanion = bindZzzzCompanion(typeInput, document.getElementById("newAircraftTypeText"));
 
   // Pilot dropdown: show full suggestion list even when a default PIC is already autofilled
   bindPilotDropdownFocus(document.getElementById('newCaptain'));
@@ -4875,12 +4876,11 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       wtcSelect.value = prefill.wtc;
       wtcDirty = true;
     }
-    // Re-fire input events on AD/type code fields so bindZzzzCompanion can react.
-    // Prefill sets values via el.value = ... which does not fire input/change events,
-    // so the companion fields stay hidden even when depAd/arrAd/type is set to ZZZZ.
-    depAdInput?.dispatchEvent(new Event('input', { bubbles: true }));
-    arrAdInput?.dispatchEvent(new Event('input', { bubbles: true }));
-    typeInput?.dispatchEvent(new Event('input', { bubbles: true }));
+    // Directly invoke update functions so companion fields reflect prefilled ZZZZ values.
+    // Prefill sets values via el.value = ... which does not fire input/change events.
+    refreshDepZzzzCompanion?.();
+    refreshArrZzzzCompanion?.();
+    refreshTypeZzzzCompanion?.();
   }
 
   // ── VKB button visibility helpers ────────────────────────────────────────
