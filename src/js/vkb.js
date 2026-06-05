@@ -1423,6 +1423,96 @@ export function resetVKBOverride(datasetName, key, effectiveFrom = new Date().to
   return { action: 'reset' };
 }
 
+// ─── Live Board VKB Quick-Update Helper ───────────────────────────────────
+
+/**
+ * Build a VKB registration update candidate from movement form data.
+ * Returns null when no useful VKB update is possible (no reg, no diff,
+ * or new registration without the minimum three fields).
+ *
+ * formData shape:
+ *   registration   – normalised registration string (e.g. "G-FPEH")
+ *   type           – aircraft type from form (maps to VKB 'TYPE')
+ *   egowFlightType – EGOW code from form (maps to VKB 'EGOW FLIGHT TYPE')
+ *   warnings       – warnings textarea value (maps to VKB 'WARNINGS')
+ *   notes          – remarks textarea value (maps to VKB 'NOTES')
+ *
+ * Return shape:
+ *   { action, registration, key, before, after, changedFields, fieldsToSave }
+ *   action       – 'add' (new VKB profile) or 'edit' (update existing)
+ *   before/after – display-only diff (only changed fields)
+ *   fieldsToSave – full row to pass to upsertVKBOverride
+ */
+export function buildRegistrationVkbUpdateCandidate(formData) {
+  const reg = (formData.registration || '').trim();
+  if (!reg) return null;
+
+  const key = registrationVKBKey(reg);
+  if (!key) return null;
+
+  const currentRow = lookupRegistration(reg);
+
+  const SUPPORTED_FIELDS = [
+    ['REGISTRATION',     formData.registration],
+    ['TYPE',             formData.type],
+    ['EGOW FLIGHT TYPE', formData.egowFlightType],
+    ['WARNINGS',         formData.warnings],
+    ['NOTES',            formData.notes],
+  ];
+
+  if (!currentRow) {
+    // New registration – require the three minimum fields before offering an add
+    const proposed = {};
+    for (const [field, val] of SUPPORTED_FIELDS) {
+      const v = (val || '').trim();
+      if (v) proposed[field] = v;
+    }
+    const MIN_FIELDS = ['REGISTRATION', 'TYPE', 'EGOW FLIGHT TYPE'];
+    if (!MIN_FIELDS.every(f => proposed[f])) return null;
+
+    return {
+      action: 'add',
+      registration: reg,
+      key,
+      before: {},
+      after: proposed,
+      changedFields: Object.keys(proposed),
+      fieldsToSave: proposed,
+    };
+  }
+
+  // Existing registration – find fields that differ from the current effective row
+  const changedFields = [];
+  const beforeDisplay = {};
+  const afterDisplay = {};
+
+  for (const [field, formVal] of SUPPORTED_FIELDS) {
+    const v = (formVal || '').trim();
+    if (!v) continue; // blank form value → don't offer to blank out VKB
+    const currentVal = (currentRow[field] || '').trim();
+    if (v !== currentVal) {
+      changedFields.push(field);
+      beforeDisplay[field] = currentVal;
+      afterDisplay[field] = v;
+    }
+  }
+
+  if (changedFields.length === 0) return null;
+
+  // Full row for upsert so the audit event has a complete before/after picture
+  const fieldsToSave = { ...currentRow, ...afterDisplay };
+
+  return {
+    action: 'edit',
+    registration: reg,
+    key,
+    before: beforeDisplay,
+    after: afterDisplay,
+    changedFields,
+    fieldsToSave,
+  };
+}
+
 // ─── VKB Admin Editor UI ───────────────────────────────────────────────────
 
 function _esc(s) {

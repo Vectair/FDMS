@@ -81,7 +81,9 @@ import {
   validateSquawkCode,
   isKnownContraction,
   lookupEgowAttributionFromCallsign,
-  lookupAircraftPilots
+  lookupAircraftPilots,
+  upsertVKBOverride,
+  buildRegistrationVkbUpdateCandidate
 } from "./vkb.js";
 
 /* -----------------------------
@@ -4099,6 +4101,66 @@ function shouldShowNewFormTimeModeToggle() {
   return shouldShowUtcLocalToggleForNewForms();
 }
 
+/**
+ * Show a compact confirmation dialog before writing a VKB registration update.
+ * Calls onConfirm() if the user confirms; closes without action on cancel.
+ * Rendered above the flight creation modal (z-index 2000).
+ */
+function _showVkbUpdateConfirm(candidate, onConfirm) {
+  const isAdd = candidate.action === 'add';
+  const reg   = candidate.registration;
+  const esc   = escapeHtml;
+
+  let fieldsHtml;
+  if (isAdd) {
+    fieldsHtml = Object.entries(candidate.after)
+      .filter(([f]) => f !== 'REGISTRATION')
+      .map(([f, v]) =>
+        `<tr>
+          <td style="padding:3px 8px 3px 0;color:#555;font-size:12px;">${esc(f)}</td>
+          <td style="padding:3px 0;font-size:12px;font-weight:600;">${esc(v)}</td>
+        </tr>`)
+      .join('');
+  } else {
+    fieldsHtml = candidate.changedFields.map(f => {
+      const before = candidate.before[f] || '—';
+      const after  = candidate.after[f];
+      return `<tr>
+        <td style="padding:3px 8px 3px 0;color:#555;font-size:12px;">${esc(f)}</td>
+        <td style="padding:3px 4px 3px 0;font-size:12px;">${esc(before)}</td>
+        <td style="padding:3px 6px 3px 0;color:#888;font-size:12px;">→</td>
+        <td style="padding:3px 0;font-size:12px;font-weight:600;">${esc(after)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  const title = isAdd
+    ? 'Create new local VKB registration profile?'
+    : 'Save this VKB update for future movements?';
+  const note = isAdd
+    ? 'This will be used for future lookups only.'
+    : 'Future movements will use this updated data.';
+
+  const bd = document.createElement('div');
+  bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center;';
+  bd.innerHTML = `<div style="background:#fff;border-radius:6px;padding:16px 20px 14px;max-width:440px;width:92%;box-shadow:0 4px 24px rgba(0,0,0,0.28);font-family:inherit;">
+    <div style="font-size:13px;font-weight:700;color:#5c3317;margin-bottom:8px;">${esc(title)}</div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Registration: ${esc(reg)}</div>
+    <table style="margin:0 0 8px;">${fieldsHtml}</table>
+    <div style="font-size:11px;color:#888;line-height:1.4;">${esc(note)}<br>Existing movements and historic statistics will not be changed.</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn btn-secondary" id="_vkbConfirmCancel" type="button">Cancel</button>
+      <button class="btn btn-primary" id="_vkbConfirmOk" type="button">Confirm</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(bd);
+  const cleanup = () => { if (bd.parentNode) document.body.removeChild(bd); };
+  bd.querySelector('#_vkbConfirmCancel').addEventListener('click', cleanup);
+  bd.querySelector('#_vkbConfirmOk').addEventListener('click', () => { cleanup(); onConfirm(); });
+  bd.addEventListener('click', e => { if (e.target === bd) cleanup(); });
+}
+
 function openNewFlightModal(flightType = "DEP", prefill = null) {
   openModal(`
     <div class="modal-header">
@@ -4362,6 +4424,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
       <div style="display: flex; gap: 8px;">
         <button class="btn btn-secondary-modal js-save-complete-flight" type="button" style="display: none;">Save &amp; Complete</button>
+        <button class="btn btn-secondary-modal js-save-flight-vkb" type="button">Create + Update VKB</button>
         <button class="btn btn-primary js-save-flight" type="button">Save</button>
       </div>
     </div>
@@ -4787,9 +4850,9 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     }
   }
 
-  // Bind save handler with validation
-  document.querySelector(".js-save-flight")?.addEventListener("click", () => {
-    // Get form values
+  // Local helper: validate form and build movement object.
+  // Returns { movement, formRemarks, formWarnings } on success, or null if validation fails.
+  function _buildNewFlightData() {
     const dof = document.getElementById("newDOF")?.value || getTodayDateString();
     let depPlanned = document.getElementById("newDepPlanned")?.value || "";
     let arrPlanned = document.getElementById("newArrPlanned")?.value || "";
@@ -4799,63 +4862,36 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     const tng = document.getElementById("newTng")?.value || "0";
     const callsignCode = normOperationalText(document.getElementById("newCallsignCode")?.value);
     const flightNumber = normOperationalText(document.getElementById("newFlightNumber")?.value);
-    const callsign = callsignCode + flightNumber; // Combine for full callsign
+    const callsign = callsignCode + flightNumber;
 
-    // Determine which field group is active (planned or actual)
     const _timingMode = document.getElementById("newFlightTimingToggle")?.dataset.timingMode || "planned";
-    // Zero-out the hidden group so only visible fields are written
     if (_timingMode === "planned") {
       depActual = ""; arrActual = "";
     } else {
       depPlanned = ""; arrPlanned = "";
     }
 
-    // Validate inputs
     const dofValidation = validateDate(dof);
-    if (!dofValidation.valid) {
-      showToast(dofValidation.error, 'error');
-      return;
-    }
+    if (!dofValidation.valid) { showToast(dofValidation.error, 'error'); return null; }
 
     if (_timingMode === "planned") {
-      // Validate planned time fields only
       const depValidation = validateTime(depPlanned);
-      if (!depValidation.valid) {
-        showToast(`Departure time: ${depValidation.error}`, 'error');
-        return;
-      }
-      if (depValidation.normalized) {
-        depPlanned = depValidation.normalized;
-        document.getElementById("newDepPlanned").value = depPlanned;
-      }
+      if (!depValidation.valid) { showToast(`Departure time: ${depValidation.error}`, 'error'); return null; }
+      if (depValidation.normalized) { depPlanned = depValidation.normalized; document.getElementById("newDepPlanned").value = depPlanned; }
 
       const arrValidation = validateTime(arrPlanned);
-      if (!arrValidation.valid) {
-        showToast(`Arrival time: ${arrValidation.error}`, 'error');
-        return;
-      }
-      if (arrValidation.normalized) {
-        arrPlanned = arrValidation.normalized;
-        document.getElementById("newArrPlanned").value = arrPlanned;
-      }
+      if (!arrValidation.valid) { showToast(`Arrival time: ${arrValidation.error}`, 'error'); return null; }
+      if (arrValidation.normalized) { arrPlanned = arrValidation.normalized; document.getElementById("newArrPlanned").value = arrPlanned; }
     } else {
-      // Validate actual time fields only
       const depActualValidation = validateTime(depActual);
-      if (!depActualValidation.valid) {
-        showToast(`Actual departure time: ${depActualValidation.error}`, 'error');
-        return;
-      }
+      if (!depActualValidation.valid) { showToast(`Actual departure time: ${depActualValidation.error}`, 'error'); return null; }
       if (depActualValidation.normalized) { depActual = depActualValidation.normalized; document.getElementById("newDepActual").value = depActual; }
 
       const arrActualValidation = validateTime(arrActual);
-      if (!arrActualValidation.valid) {
-        showToast(`Actual arrival time: ${arrActualValidation.error}`, 'error');
-        return;
-      }
+      if (!arrActualValidation.valid) { showToast(`Actual arrival time: ${arrActualValidation.error}`, 'error'); return null; }
       if (arrActualValidation.normalized) { arrActual = arrActualValidation.normalized; document.getElementById("newArrActual").value = arrActual; }
     }
 
-    // Convert Local→UTC if currently in LOCAL display mode (only for the active field group)
     const _newSaveMode = (getConfig().timeInputMode || "UTC").toUpperCase();
     if (_newSaveMode === "LOCAL") {
       if (_timingMode === "planned") {
@@ -4867,68 +4903,39 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       }
     }
 
-    // Check for past times and show warning
     if (depPlanned) {
       const depPastCheck = checkPastTime(depPlanned, dof);
-      if (depPastCheck.isPast) {
-        showToast(depPastCheck.warning, 'warning');
-      }
+      if (depPastCheck.isPast) showToast(depPastCheck.warning, 'warning');
     }
-
     if (arrPlanned) {
       const arrPastCheck = checkPastTime(arrPlanned, dof);
-      if (arrPastCheck.isPast) {
-        showToast(arrPastCheck.warning, 'warning');
-      }
+      if (arrPastCheck.isPast) showToast(arrPastCheck.warning, 'warning');
     }
 
     const pobValidation = validateNumberRange(pob, 0, 999, "POB");
-    if (!pobValidation.valid) {
-      showToast(pobValidation.error, 'error');
-      return;
-    }
+    if (!pobValidation.valid) { showToast(pobValidation.error, 'error'); return null; }
 
     const tngValidation = validateNumberRange(tng, 0, 99, "T&G count");
-    if (!tngValidation.valid) {
-      showToast(tngValidation.error, 'error');
-      return;
-    }
+    if (!tngValidation.valid) { showToast(tngValidation.error, 'error'); return null; }
 
     const callsignValidation = validateRequired(callsignCode, "Callsign Code");
-    if (!callsignValidation.valid) {
-      showToast(callsignValidation.error, 'error');
-      return;
-    }
+    if (!callsignValidation.valid) { showToast(callsignValidation.error, 'error'); return null; }
 
-    // Validate EGOW Code (mandatory with 7 valid options)
     const egowCode = document.getElementById("newEgowCode")?.value?.toUpperCase().trim() || "";
     const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
-    if (!egowCode) {
-      showToast("EGOW Code is required", 'error');
-      return;
-    }
-    if (!validEgowCodes.includes(egowCode)) {
-      showToast(`EGOW Code must be one of: ${validEgowCodes.join(', ')}`, 'error');
-      return;
-    }
+    if (!egowCode) { showToast("EGOW Code is required", 'error'); return null; }
+    if (!validEgowCodes.includes(egowCode)) { showToast(`EGOW Code must be one of: ${validEgowCodes.join(', ')}`, 'error'); return null; }
     if (egowCode === 'BM') {
       const unitCodeVal = (document.getElementById("newUnitCode")?.value || "").trim();
-      if (!unitCodeVal) {
-        showToast("EGOW Unit code is required for BM flights", 'error');
-        return;
-      }
+      if (!unitCodeVal) { showToast("EGOW Unit code is required for BM flights", 'error'); return null; }
     }
 
-    // Get operator and popular name from VKB registration data
     const regValue = normalizeEuCivilRegistration(document.getElementById("newReg")?.value || "");
     const regData = lookupRegistration(regValue);
     const operator = regData ? (regData['OPERATOR'] || "") : "";
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
-
-    // Get voice callsign for display (only if different from contraction/registration)
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
-    // WTC: manual select override wins; fall back to computed value
     const aircraftType = normOperationalText(document.getElementById("newType")?.value);
     const selectedFlightType = document.getElementById("newFlightType")?.value || flightType;
     const wtcManual = (document.getElementById("newWtc")?.value || "").trim().toUpperCase();
@@ -4939,53 +4946,39 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     })();
     const wtc = wtcManual || wtcComputed;
 
-    // Get departure and arrival location names
     const depAd = normOperationalText(document.getElementById("newDepAd")?.value);
     const arrAd = normOperationalText(document.getElementById("newArrAd")?.value);
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
 
-    // ZZZZ companion field validation
     const newDepAdText = document.getElementById("newDepAdText")?.value?.trim() || "";
     const newArrAdText = document.getElementById("newArrAdText")?.value?.trim() || "";
     const newAircraftTypeText = document.getElementById("newAircraftTypeText")?.value?.trim() || "";
-    if (depAd.trim().toUpperCase() === 'ZZZZ' && !newDepAdText) {
-      showToast("Departure AD is ZZZZ — location name is required", 'error'); return;
-    }
-    if (arrAd.trim().toUpperCase() === 'ZZZZ' && !newArrAdText) {
-      showToast("Arrival AD is ZZZZ — location name is required", 'error'); return;
-    }
-    if (aircraftType.trim().toUpperCase() === 'ZZZZ' && !newAircraftTypeText) {
-      showToast("Aircraft Type is ZZZZ — aircraft description is required", 'error'); return;
-    }
+    if (depAd.trim().toUpperCase() === 'ZZZZ' && !newDepAdText) { showToast("Departure AD is ZZZZ — location name is required", 'error'); return null; }
+    if (arrAd.trim().toUpperCase() === 'ZZZZ' && !newArrAdText) { showToast("Arrival AD is ZZZZ — location name is required", 'error'); return null; }
+    if (aircraftType.trim().toUpperCase() === 'ZZZZ' && !newAircraftTypeText) { showToast("Aircraft Type is ZZZZ — aircraft description is required", 'error'); return null; }
 
-    // Priority is now a plain select; empty string or "-" means no priority
     const priorityLetterRaw = document.getElementById("priorityLetter")?.value || "";
     const priorityLetterValue = priorityLetterRaw === "-" ? "" : priorityLetterRaw;
     const remarksValue = normOperationalText(document.getElementById("rwRemarks")?.value);
     const warningsValue = normOperationalText(document.getElementById("rwWarnings")?.value);
-    const notesValue = regData ? (regData['NOTES'] || "") : ""; // Keep notes from VKB for backward compatibility
+    const notesValue = regData ? (regData['NOTES'] || "") : "";
     const osCountValue = parseInt(document.getElementById("newOsCount")?.value || "0", 10);
     const fisCountValue = parseInt(document.getElementById("newFisCount")?.value || ((document.getElementById("newFlightType")?.value || flightType) === "OVR" ? "1" : "0"), 10);
     const squawkValue = normOperationalText(document.getElementById("atcSquawk")?.value);
     const routeValue = normOperationalText(document.getElementById("atcRoute")?.value);
     const clearanceValue = normOperationalText(document.getElementById("atcClearance")?.value);
 
-    // Active mode: force ACTIVE status and infer missing actual time(s) from system clock
     if (_timingMode === "active") {
       const _now = new Date();
       const _nowUtc = `${String(_now.getUTCHours()).padStart(2, '0')}:${String(_now.getUTCMinutes()).padStart(2, '0')}`;
       if (selectedFlightType === "ARR") {
         if (!arrActual) arrActual = _nowUtc;
       } else {
-        // DEP and OVR: depActual is the primary actual time (ACT for OVR)
         if (!depActual) depActual = _nowUtc;
       }
     }
 
-    // OVR-specific: if EOFT (depPlanned) is blank in planned mode, treat as an
-    // immediate/now crossing — create as ACTIVE and stamp ACT (depActual) = now.
-    // If EOFT is provided, keep normal planned-mode behavior.
     const _ovrImmediateActive = selectedFlightType === "OVR"
       && _timingMode === "planned"
       && !depPlanned;
@@ -4994,11 +4987,11 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       depActual = `${String(_now.getUTCHours()).padStart(2, '0')}:${String(_now.getUTCMinutes()).padStart(2, '0')}`;
     }
 
-    // Create movement - determine initial status based on whether time is past
     const initialStatus = (_timingMode === "active" || _ovrImmediateActive)
       ? "ACTIVE"
       : determineInitialStatus(selectedFlightType, dof, depPlanned, arrPlanned);
-    let movement = {
+
+    const movement = {
       status: initialStatus,
       callsignCode: callsign,
       callsignLabel: "",
@@ -5018,8 +5011,8 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       arrActual: arrActual,
       dof: dof,
       rules: normOperationalText(document.getElementById("newRules")?.value) || "VFR",
-      flightType: document.getElementById("newFlightType")?.value || flightType,
-      isLocal: (document.getElementById("newFlightType")?.value || flightType) === "LOC",
+      flightType: selectedFlightType,
+      isLocal: selectedFlightType === "LOC",
       tngCount: parseInt(tng, 10),
       osCount: osCountValue,
       fisCount: fisCountValue,
@@ -5047,7 +5040,6 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       outcomeTime: '',
     };
 
-    // Validate and read formation (must happen before enrichMovementData)
     const newFormationBase = (document.getElementById("newCallsignCode")?.value?.trim() || "") +
                              (document.getElementById("newFlightNumber")?.value?.trim() || "");
     const newFormationShared = {
@@ -5061,22 +5053,64 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       osCount:    parseInt(document.getElementById("newOsCount")?.value  || "0", 10) || 0,
       fisCount:   parseInt(document.getElementById("newFisCount")?.value || "0", 10) || 0
     };
-    const newFormation = readFormationFromModal(newFormationBase, "newFormationCount", "newFormationElementsContainer", newFormationShared, newFormationDraft);
-    if (newFormation?._error) { showToast(newFormation.message, 'error'); return; }
-    movement.formation = newFormation;
+    const formation = readFormationFromModal(newFormationBase, "newFormationCount", "newFormationElementsContainer", newFormationShared, newFormationDraft);
+    if (formation?._error) { showToast(formation.message, 'error'); return null; }
+    movement.formation = formation;
 
-    // Enrich with auto-populated fields
+    return { movement, formRemarks: remarksValue, formWarnings: warningsValue };
+  }
+
+  // Bind save handler with validation
+  document.querySelector(".js-save-flight")?.addEventListener("click", () => {
+    const result = _buildNewFlightData();
+    if (!result) return;
+    let { movement } = result;
     movement = enrichMovementData(movement);
-
     createMovement(movement);
     renderLiveBoard();
     renderHistoryBoard();
     if (window.updateDailyStats) window.updateDailyStats();
     if (window.updateFisCounters) window.updateFisCounters();
     showToast("Movement created successfully", 'success');
-
-    // Close modal (also removes the document keydown handler to prevent leaks)
     closeActiveModal();
+  });
+
+  // Bind "Create + Update VKB" handler — creates the movement and optionally updates
+  // the local VKB registration profile after explicit user confirmation.
+  document.querySelector(".js-save-flight-vkb")?.addEventListener("click", () => {
+    const result = _buildNewFlightData();
+    if (!result) return;
+    const { movement, formRemarks, formWarnings } = result;
+
+    const _commit = () => {
+      let m = enrichMovementData(movement);
+      createMovement(m);
+      renderLiveBoard();
+      renderHistoryBoard();
+      if (window.updateDailyStats) window.updateDailyStats();
+      if (window.updateFisCounters) window.updateFisCounters();
+      showToast("Movement created successfully", 'success');
+      closeActiveModal();
+    };
+
+    const candidate = buildRegistrationVkbUpdateCandidate({
+      registration: movement.registration,
+      type: movement.type,
+      egowFlightType: movement.egowCode,
+      warnings: formWarnings,
+      notes: formRemarks,
+    });
+
+    if (!candidate) {
+      showToast("No VKB update needed – movement created", 'info');
+      _commit();
+      return;
+    }
+
+    _showVkbUpdateConfirm(candidate, () => {
+      upsertVKBOverride('registrations', candidate.key, candidate.fieldsToSave, 'Quick update from movement creation');
+      _commit();
+    });
   });
 
   // Bind "Save & Complete" handler - creates movement and immediately marks as completed
@@ -5491,6 +5525,7 @@ function openNewLocFlightModal() {
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
       <div style="display: flex; gap: 8px;">
         <button class="btn btn-secondary-modal js-save-complete-loc" type="button" style="display: none;">Save &amp; Complete</button>
+        <button class="btn btn-secondary-modal js-save-loc-vkb" type="button">Save + Update VKB</button>
         <button class="btn btn-primary js-save-loc" type="button">Save</button>
       </div>
     </div>
@@ -5825,8 +5860,9 @@ function openNewLocFlightModal() {
   // Bind bidirectional Duration ↔ planned-end sync
   bindPlannedTimesSync("newLocStart", "newLocEnd", "newLocDuration");
 
-  // Bind save handler
-  document.querySelector(".js-save-loc")?.addEventListener("click", () => {
+  // Local helper: validate form and build LOC movement object.
+  // Returns { movement, formRemarks, formWarnings } on success, or null if validation fails.
+  function _buildLocData() {
     const dof = document.getElementById("newLocDOF")?.value || getTodayDateString();
     let depPlanned = document.getElementById("newLocStart")?.value || "";
     let arrPlanned = document.getElementById("newLocEnd")?.value || "";
@@ -5838,9 +5874,7 @@ function openNewLocFlightModal() {
     const flightNumber = normOperationalText(document.getElementById("newLocFlightNumber")?.value);
     const callsign = callsignCode + flightNumber;
 
-    // Determine which field group is active (planned or actual)
     const _locTimingMode = document.getElementById("newLocTimingToggle")?.dataset.timingMode || "planned";
-    // Zero-out the hidden group so only visible fields are written
     if (_locTimingMode === "planned") {
       depActual = ""; arrActual = "";
     } else {
@@ -5848,27 +5882,26 @@ function openNewLocFlightModal() {
     }
 
     const dofValidation = validateDate(dof);
-    if (!dofValidation.valid) { showToast(dofValidation.error, 'error'); return; }
+    if (!dofValidation.valid) { showToast(dofValidation.error, 'error'); return null; }
 
     if (_locTimingMode === "planned") {
       const depValidation = validateTime(depPlanned);
-      if (!depValidation.valid) { showToast(`Departure time: ${depValidation.error}`, 'error'); return; }
+      if (!depValidation.valid) { showToast(`Departure time: ${depValidation.error}`, 'error'); return null; }
       if (depValidation.normalized) { depPlanned = depValidation.normalized; document.getElementById("newLocStart").value = depPlanned; }
 
       const arrValidation = validateTime(arrPlanned);
-      if (!arrValidation.valid) { showToast(`Arrival time: ${arrValidation.error}`, 'error'); return; }
+      if (!arrValidation.valid) { showToast(`Arrival time: ${arrValidation.error}`, 'error'); return null; }
       if (arrValidation.normalized) { arrPlanned = arrValidation.normalized; document.getElementById("newLocEnd").value = arrPlanned; }
     } else {
       const depActualValidation = validateTime(depActual);
-      if (!depActualValidation.valid) { showToast(`Actual departure time: ${depActualValidation.error}`, 'error'); return; }
+      if (!depActualValidation.valid) { showToast(`Actual departure time: ${depActualValidation.error}`, 'error'); return null; }
       if (depActualValidation.normalized) { depActual = depActualValidation.normalized; document.getElementById("newLocStartActual").value = depActual; }
 
       const arrActualValidation = validateTime(arrActual);
-      if (!arrActualValidation.valid) { showToast(`Actual arrival time: ${arrActualValidation.error}`, 'error'); return; }
+      if (!arrActualValidation.valid) { showToast(`Actual arrival time: ${arrActualValidation.error}`, 'error'); return null; }
       if (arrActualValidation.normalized) { arrActual = arrActualValidation.normalized; document.getElementById("newLocEndActual").value = arrActual; }
     }
 
-    // Convert Local→UTC if in LOCAL display mode (only for the active field group)
     const _locSaveMode = (getConfig().timeInputMode || "UTC").toUpperCase();
     if (_locSaveMode === "LOCAL") {
       if (_locTimingMode === "planned") {
@@ -5881,23 +5914,20 @@ function openNewLocFlightModal() {
     }
 
     const pobValidation = validateNumberRange(pob, 0, 999, "POB");
-    if (!pobValidation.valid) { showToast(pobValidation.error, 'error'); return; }
+    if (!pobValidation.valid) { showToast(pobValidation.error, 'error'); return null; }
 
     const tngValidation = validateNumberRange(tng, 0, 99, "T&G count");
-    if (!tngValidation.valid) { showToast(tngValidation.error, 'error'); return; }
+    if (!tngValidation.valid) { showToast(tngValidation.error, 'error'); return null; }
 
     const callsignValidation = validateRequired(callsignCode, "Callsign Code");
-    if (!callsignValidation.valid) { showToast(callsignValidation.error, 'error'); return; }
+    if (!callsignValidation.valid) { showToast(callsignValidation.error, 'error'); return null; }
 
     const egowCode = document.getElementById("newLocEgowCode")?.value?.toUpperCase().trim() || "";
     const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
-    if (!egowCode || !validEgowCodes.includes(egowCode)) {
-      showToast("Valid EGOW Code is required", "error");
-      return;
-    }
+    if (!egowCode || !validEgowCodes.includes(egowCode)) { showToast("Valid EGOW Code is required", "error"); return null; }
     if (egowCode === 'BM') {
       const unitCodeVal = (document.getElementById("newLocUnitCode")?.value || "").trim();
-      if (!unitCodeVal) { showToast("EGOW Unit code is required for BM flights", 'error'); return; }
+      if (!unitCodeVal) { showToast("EGOW Unit code is required for BM flights", 'error'); return null; }
     }
 
     const osCountValue  = parseInt(document.getElementById("newLocOsCount")?.value  || "0", 10);
@@ -5914,14 +5944,13 @@ function openNewLocFlightModal() {
       fisCount:   fisCountValue
     };
     const locFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer", locFormationShared, newLocFormationDraft);
-    if (locFormation?._error) { showToast(locFormation.message, 'error'); return; }
+    if (locFormation?._error) { showToast(locFormation.message, 'error'); return null; }
 
     const regValue = normalizeEuCivilRegistration(document.getElementById("newLocReg")?.value || "");
     const regData = lookupRegistration(regValue);
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
     const aircraftType = normOperationalText(document.getElementById("newLocType")?.value);
-    // WTC: manual select override wins; fall back to computed value
     const wtcManual = (document.getElementById("newLocWtc")?.value || "").trim().toUpperCase();
     const wtcComputed = (() => {
       const w = getWTC(aircraftType, "LOC", getConfig().wtcSystem || "ICAO") || "";
@@ -5933,10 +5962,8 @@ function openNewLocFlightModal() {
       || ['L','S','M','H','J']
     );
     const wtc = wtcManual || wtcComputed;
-    if (wtc && !wtcAllowed.has(wtc)) {
-      showToast('Invalid WTC category', 'error');
-      return;
-    }
+    if (wtc && !wtcAllowed.has(wtc)) { showToast('Invalid WTC category', 'error'); return null; }
+
     const operator = regData ? (regData['OPERATOR'] || "") : "";
     const notes = regData ? (regData['NOTES'] || "") : "";
 
@@ -5948,13 +5975,11 @@ function openNewLocFlightModal() {
     const routeValue = normOperationalText(document.getElementById("newLocRoute")?.value);
     const clearanceValue = normOperationalText(document.getElementById("newLocClearance")?.value);
 
-    // Active mode: force ACTIVE status and infer missing actual time(s) from system clock
     if (_locTimingMode === "active") {
       const _now = new Date();
       const _nowUtc = `${String(_now.getUTCHours()).padStart(2, '0')}:${String(_now.getUTCMinutes()).padStart(2, '0')}`;
       if (!depActual) depActual = _nowUtc;
       if (!arrActual) {
-        // Infer ATA = ATD + configured LOC flight duration (UTC arithmetic, wraps at midnight)
         const _locDur = getConfig().locFlightDurationMinutes || 40;
         const [_h, _m] = depActual.split(':').map(Number);
         const _totMins = _h * 60 + _m + _locDur;
@@ -5967,7 +5992,8 @@ function openNewLocFlightModal() {
     const initialStatus = _locTimingMode === "active"
       ? "ACTIVE"
       : determineInitialStatus("LOC", dof, depPlanned, arrPlanned);
-    let movement = {
+
+    const movement = {
       status: initialStatus,
       callsignCode: callsign,
       callsignLabel: "",
@@ -6009,16 +6035,60 @@ function openNewLocFlightModal() {
       formation: locFormation || null
     };
 
-    movement = enrichMovementData(movement);
+    return { movement, formRemarks: remarksValue, formWarnings: warningsValue };
+  }
 
+  // Bind save handler
+  document.querySelector(".js-save-loc")?.addEventListener("click", () => {
+    const result = _buildLocData();
+    if (!result) return;
+    let { movement } = result;
+    movement = enrichMovementData(movement);
     createMovement(movement);
     renderLiveBoard();
     renderHistoryBoard();
     if (window.updateDailyStats) window.updateDailyStats();
     if (window.updateFisCounters) window.updateFisCounters();
     showToast("Local flight created successfully", 'success');
-
     closeActiveModal();
+  });
+
+  // Bind "Save + Update VKB" handler — creates the movement and optionally updates
+  // the local VKB registration profile after explicit user confirmation.
+  document.querySelector(".js-save-loc-vkb")?.addEventListener("click", () => {
+    const result = _buildLocData();
+    if (!result) return;
+    const { movement, formRemarks, formWarnings } = result;
+
+    const _commit = () => {
+      let m = enrichMovementData(movement);
+      createMovement(m);
+      renderLiveBoard();
+      renderHistoryBoard();
+      if (window.updateDailyStats) window.updateDailyStats();
+      if (window.updateFisCounters) window.updateFisCounters();
+      showToast("Local flight created successfully", 'success');
+      closeActiveModal();
+    };
+
+    const candidate = buildRegistrationVkbUpdateCandidate({
+      registration: movement.registration,
+      type: movement.type,
+      egowFlightType: movement.egowCode,
+      warnings: formWarnings,
+      notes: formRemarks,
+    });
+
+    if (!candidate) {
+      showToast("No VKB update needed – movement created", 'info');
+      _commit();
+      return;
+    }
+
+    _showVkbUpdateConfirm(candidate, () => {
+      upsertVKBOverride('registrations', candidate.key, candidate.fieldsToSave, 'Quick update from movement creation');
+      _commit();
+    });
   });
 
   // Bind "Save & Complete" handler
