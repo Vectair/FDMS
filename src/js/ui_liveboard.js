@@ -4527,6 +4527,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
           if (pilots.length === 1) applyTrackedAutofill(captainInput, pilots[0].displayName);
         }
       }
+      _refreshNewFlightVkbButton();
     };
     regInput.addEventListener("input", applyNewRegAutofill);
     regInput.addEventListener("change", applyNewRegAutofill);
@@ -4584,6 +4585,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
         }
       }
     }
+    _refreshNewFlightVkbButton();
   };
 
   if (callsignCodeInput) {
@@ -5694,6 +5696,7 @@ function openNewLocFlightModal() {
           if (pilots.length === 1) applyTrackedAutofill(captainEl, pilots[0].displayName);
         }
       }
+      _refreshLocVkbButton();
     };
     regInput.addEventListener("input", applyLocRegAutofill);
     regInput.addEventListener("change", applyLocRegAutofill);
@@ -5747,6 +5750,7 @@ function openNewLocFlightModal() {
         }
       }
     }
+    _refreshLocVkbButton();
   };
 
   if (callsignCodeInput) {
@@ -6607,6 +6611,7 @@ function openEditMovementModal(m) {
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
       <div style="display: flex; gap: 8px;">
         <button class="btn btn-secondary-modal js-save-complete-edit" type="button">Save &amp; Complete</button>
+        <button class="btn btn-secondary-modal js-save-edit-vkb" type="button" style="display:none;">Save + Update VKB</button>
         <button class="btn btn-primary js-save-edit" type="button">Save Changes</button>
       </div>
     </div>
@@ -6708,6 +6713,7 @@ function openEditMovementModal(m) {
           if (pilots.length === 1) applyTrackedAutofill(captainInput, pilots[0].displayName);
         }
       }
+      _refreshEditVkbButton();
     };
     regInput.addEventListener("input", applyRegAutofill);
     regInput.addEventListener("change", applyRegAutofill);
@@ -6765,6 +6771,7 @@ function openEditMovementModal(m) {
         }
       }
     }
+    _refreshEditVkbButton();
   };
 
   if (callsignCodeInput) {
@@ -6969,6 +6976,36 @@ function openEditMovementModal(m) {
   // ARR mode: ETA (arrPlanned) is the calculation root; ETD (depPlanned) is derived.
   bindPlannedTimesSync("editDepPlanned", "editArrPlanned", "editDuration",
     { arrMode: m.flightType === 'ARR' });
+
+  // ── VKB button visibility helpers ────────────────────────────────────────
+  function _buildEditVkbCandidate() {
+    return buildRegistrationVkbUpdateCandidate({
+      registration: normalizeEuCivilRegistration(document.getElementById("editReg")?.value || ""),
+      type:          normOperationalText(document.getElementById("editType")?.value),
+      egowFlightType: normOperationalText(document.getElementById("editEgowCode")?.value),
+      warnings:      normOperationalText(document.getElementById("editRwWarnings")?.value),
+      notes:         normOperationalText(document.getElementById("editRwRemarks")?.value),
+    });
+  }
+
+  function _refreshEditVkbButton() {
+    const btn = document.querySelector(".js-save-edit-vkb");
+    if (!btn) return;
+    const has = !!_buildEditVkbCandidate();
+    btn.style.display = has ? "" : "none";
+    btn.title = has ? "Save this registration data to VKB for future movements" : "";
+  }
+
+  const _editVkbTriggerIds = ["editReg", "editType", "editEgowCode", "editRwRemarks", "editRwWarnings"];
+  for (const id of _editVkbTriggerIds) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("input",  _refreshEditVkbButton);
+      el.addEventListener("change", _refreshEditVkbButton);
+    }
+  }
+  document.getElementById("editReg")?.addEventListener("blur", _refreshEditVkbButton);
+  _refreshEditVkbButton();
 
   // Bind save handler with validation
   document.querySelector(".js-save-edit")?.addEventListener("click", () => {
@@ -7237,6 +7274,19 @@ function openEditMovementModal(m) {
 
     // Close modal (also removes the document keydown handler to prevent leaks)
     closeActiveModal();
+  });
+
+  // Bind Save + Update VKB handler
+  document.querySelector(".js-save-edit-vkb")?.addEventListener("click", () => {
+    const candidate = _buildEditVkbCandidate();
+    if (!candidate) {
+      showToast("No VKB update needed – use Save Changes to save the strip", 'info');
+      return;
+    }
+    _showVkbUpdateConfirm(candidate, () => {
+      upsertVKBOverride('registrations', candidate.key, candidate.fieldsToSave, 'Quick update from strip edit');
+      document.querySelector(".js-save-edit")?.click();
+    });
   });
 
   // Bind "Save & Complete" handler for edit modal
