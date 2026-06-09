@@ -3535,6 +3535,11 @@ export function renderLiveBoard() {
                 </div>
               </div>
               ${
+                m.status === "ACTIVE"
+                  ? '<button class="js-return-planned flite-menu-item" type="button">Planned</button>'
+                  : ""
+              }
+              ${
                 m.status === "PLANNED" || m.status === "ACTIVE"
                   ? '<button class="js-cancel flite-menu-item flite-menu-item-danger" type="button">Cancel</button>'
                   : ""
@@ -3593,6 +3598,14 @@ export function renderLiveBoard() {
         closeDropdownPortal();
         openCreateFromMovementModal(m, btn.dataset.target);
       });
+    });
+
+    // Bind Return to Planned option
+    const returnPlannedBtn = tr.querySelector(".js-return-planned");
+    safeOn(returnPlannedBtn, "click", (e) => {
+      e.stopPropagation();
+      closeDropdownPortal();
+      transitionToPlanned(m.id);
     });
 
     // Bind Cancel option
@@ -8208,6 +8221,31 @@ function transitionToActive(id) {
       updateMovement(id, timingPatch);
     }
   }
+
+  renderLiveBoard();
+  renderHistoryBoard();
+  if (window.updateDailyStats) window.updateDailyStats();
+}
+
+/**
+ * Transition an ACTIVE movement back to PLANNED.
+ * Status-only action — no strip data is cleared or overwritten.
+ * Prompts for confirmation if actual times are already recorded.
+ */
+function transitionToPlanned(id) {
+  const movement = getMovements().find(m => String(m.id) === String(id));
+  if (!movement) return;
+
+  const hasActualTimes =
+    !!(movement.depActual && String(movement.depActual).trim()) ||
+    !!(movement.arrActual && String(movement.arrActual).trim());
+
+  if (hasActualTimes) {
+    const ok = window.confirm("This strip has actual times recorded. Return it to Planned anyway?");
+    if (!ok) return;
+  }
+
+  updateMovement(id, { status: "PLANNED" });
 
   renderLiveBoard();
   renderHistoryBoard();

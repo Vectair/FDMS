@@ -3056,3 +3056,12 @@ Autoactivation reconciliation remains a separate follow-up item.
 
 LIVEBOARD-OVERDUE-ELIGIBLE-STATES-001 implemented.
 ARR overdue action warnings now apply only to PLANNED and ACTIVE unresolved arrivals. Any terminal, deleted, unknown, or blank status does not receive an overdue warning.
+
+---
+
+## 37. LIVEBOARD-EDIT-RETURN-TO-PLANNED-001 — Add Edit → Planned lifecycle action
+
+**Status:** Implemented.
+
+LIVEBOARD-EDIT-RETURN-TO-PLANNED-001 implemented.
+Active strips now have an Edit → Planned action allowing operators to return a strip to PLANNED. The action preserves strip data, confirms before returning strips with actual times recorded, and allows existing reconciliation logic to reactivate the strip if its planned time remains inside the activation/overdue window.
