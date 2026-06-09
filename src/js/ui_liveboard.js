@@ -2602,11 +2602,11 @@ function generateMovementAlerts(m) {
   // Check for overdue arrival (CAA 493 - ARR only)
   const status = (m.status || "").toUpperCase();
   const hasAta = !!(m.arrActual && String(m.arrActual).trim());
+  const overdueEligibleStatus = status === "PLANNED" || status === "ACTIVE";
 
   const unresolvedArr =
     ft === "ARR" &&
-    status !== "COMPLETED" &&
-    status !== "CANCELLED" &&
+    overdueEligibleStatus &&
     !hasAta;
 
   if (unresolvedArr) {

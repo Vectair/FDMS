@@ -3051,3 +3051,6 @@ Final V1 regression and acceptance sweep (section 21.8).
 LIVEBOARD-OVERDUE-INDEPENDENT-001 implemented.
 ARR overdue action warnings now apply to unresolved ARR strips regardless of PLANNED/ACTIVE status.
 Autoactivation reconciliation remains a separate follow-up item.
+
+LIVEBOARD-OVERDUE-ELIGIBLE-STATES-001 implemented.
+ARR overdue action warnings now apply only to PLANNED and ACTIVE unresolved arrivals. Any terminal, deleted, unknown, or blank status does not receive an overdue warning.
