@@ -2600,7 +2600,16 @@ function generateMovementAlerts(m) {
   }
 
   // Check for overdue arrival (CAA 493 - ARR only)
-  if (ft === "ARR" && m.status === "ACTIVE") {
+  const status = (m.status || "").toUpperCase();
+  const hasAta = !!(m.arrActual && String(m.arrActual).trim());
+
+  const unresolvedArr =
+    ft === "ARR" &&
+    status !== "COMPLETED" &&
+    status !== "CANCELLED" &&
+    !hasAta;
+
+  if (unresolvedArr) {
     const eta = getETA(m);
     if (eta && eta !== "-" && m.dof) {
       const etaParts = eta.split(':');

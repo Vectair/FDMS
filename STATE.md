@@ -3041,3 +3041,13 @@ Documentation-only correction pass. No app code changed.
 ### 35.6 Next recommended action
 
 Final V1 regression and acceptance sweep (section 21.8).
+
+---
+
+## 36. LIVEBOARD-OVERDUE-INDEPENDENT-001 — ARR overdue warnings independent of activation state
+
+**Status:** Implemented.
+
+LIVEBOARD-OVERDUE-INDEPENDENT-001 implemented.
+ARR overdue action warnings now apply to unresolved ARR strips regardless of PLANNED/ACTIVE status.
+Autoactivation reconciliation remains a separate follow-up item.
