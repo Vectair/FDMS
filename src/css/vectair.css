@@ -4661,6 +4661,39 @@ tr.strip.ft-ovr > td {
   right: 100%;
 }
 
+/* Create From submenu — flight-type colour coding */
+.create-from-option.create-from-dep {
+  background: color-mix(in srgb, var(--ft-dep) 35%, #ffffff);
+}
+
+.create-from-option.create-from-arr {
+  background: color-mix(in srgb, var(--ft-arr) 35%, #ffffff);
+}
+
+.create-from-option.create-from-ovr {
+  background: color-mix(in srgb, var(--ft-ovr) 35%, #ffffff);
+}
+
+.create-from-option.create-from-loc {
+  background: color-mix(in srgb, var(--ft-loc) 35%, #ffffff);
+}
+
+.create-from-option.create-from-dep:hover {
+  background: color-mix(in srgb, var(--ft-dep) 50%, #ffffff);
+}
+
+.create-from-option.create-from-arr:hover {
+  background: color-mix(in srgb, var(--ft-arr) 50%, #ffffff);
+}
+
+.create-from-option.create-from-ovr:hover {
+  background: color-mix(in srgb, var(--ft-ovr) 50%, #ffffff);
+}
+
+.create-from-option.create-from-loc:hover {
+  background: color-mix(in srgb, var(--ft-loc) 50%, #ffffff);
+}
+
 /* ── METAR Builder ────────────────────────────────────────────────────────── */
 
 .mb-output-panel {
