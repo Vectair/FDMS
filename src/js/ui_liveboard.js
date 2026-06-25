@@ -3644,7 +3644,7 @@ export function renderLiveBoard() {
                   <span>Create From</span><span class="flite-submenu-arrow">&#x203A;</span>
                 </button>
                 <div class="flite-submenu-menu js-create-from-submenu" role="menu">
-                  ${getCreateFromOptions(ft).map(target => `<button class="js-create-from flite-menu-item create-from-option create-from-${target.toLowerCase()}" data-target="${target}" type="button" role="menuitem">${CREATE_FROM_LABELS[target]}</button>`).join("")}
+                  ${getCreateFromOptions(ft).map(target => `<button class="js-create-from flite-menu-item create-from-option create-from-${(target === "DUPLICATE" ? ft : target).toLowerCase()}" data-target="${target}" type="button" role="menuitem">${CREATE_FROM_LABELS[target]}</button>`).join("")}
                 </div>
               </div>
               ${
