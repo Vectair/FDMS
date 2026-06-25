@@ -1054,6 +1054,11 @@ tr.strip.ft-ovr > td {
 .small-btn:hover {
   background: #e4eaee;
 }
+.small-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+  background: #f5f6f7;
+}
 
 .counter-btn {
   font-size: 12px;
@@ -5111,6 +5116,58 @@ tr.strip.ft-ovr > td {
 
 .vkb-actions-cell .small-btn {
   margin-left: 2px;
+}
+
+/* Aircraft Registrations pagination/grid controls bar */
+.vkb-grid-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #eee;
+  background: #fafafa;
+  font-size: 11px;
+  color: #555;
+  flex-wrap: wrap;
+}
+
+.vkb-grid-status {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vkb-grid-page-size {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.vkb-grid-page-size select {
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
+.vkb-grid-pager {
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.vkb-sortable-th {
+  cursor: pointer;
+  user-select: none;
+}
+
+.vkb-sortable-th:hover {
+  background: #ebebeb;
+}
+
+.vkb-sort-indicator {
+  margin-left: 4px;
+  color: var(--va-accent-brown, #6d4c30);
 }
 
 /* ── VKB Registration modal — registry lookup aid ── */

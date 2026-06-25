@@ -3078,3 +3078,18 @@ Active strips now have an Edit → Planned action allowing operators to return a
 
 LIVEBOARD-RETURN-TO-PLANNED-SEMANTICS-002 implemented.
 DEP/LOC return-to-planned now performs a true replanning transition: actual departure state is cleared, a revised ETD is assigned, dependent timing is recalculated through the canonical timing model, and timeline/counter displays refresh. Inline future ATD edits on ACTIVE DEP/LOC strips are now treated as revised ETD entries and return the strip to PLANNED. ARR and OVR semantics remain unchanged.
+
+---
+
+## 39. VKB-REG-GRID-001 — Aircraft Registrations admin grid lazy/paginated render
+
+**Status:** Implemented.
+
+VKB-REG-GRID-001 implemented. `Admin → Reference Data → Aircraft Registrations` previously rendered the full ~25k-row effective registration set into the DOM on every open (`tbody.innerHTML = filtered.map(...).join('')`), causing a 5–15 second UI hang.
+
+- The full-table DOM render for Aircraft Registrations has been removed. `_renderRegAdminTable()` now renders only the current page slice (default page size 100; selectable 50/100/250) — the DOM never contains more than one page of rows.
+- Added stateful grid: search text, page, page size, sort field, and sort direction (`REG_ADMIN_GRID_DEFAULTS`, default sort `REGISTRATION` ascending). Search/page-size/sort changes reset to page 1; the page clamps if data shrinks below the current page.
+- Search is debounced ~200ms and matches REGISTRATION, TYPE, OPERATOR, POPULAR NAME, FIXED C/S, EGOW FLIGHT TYPE, OPERATION TYPE, WARNINGS, and NOTES via a precomputed lowercase search-text row cache, invalidated inside `_rebuildEffectiveArrays()` (covers edit/add/delete/reset/`refreshVkbAdminDisplay()`).
+- Sortable column headers (Registration, Type, Operator, Fixed C/S, EGOW Flt Type, Op Type) with a direction indicator; sorting does not trigger a full re-render of all rows.
+- Pagination/status controls (rows-per-page selector, Previous/Next, "Showing X–Y of Z" status line) are generated dynamically and hidden when EGOW Callsign Attribution is active — EGOW keeps its original full-render behaviour, now also using shared event delegation (`_ensureVkbAdminDelegatedActions`) instead of per-button listeners.
+- CSV storage, override/audit schema, VKB storage keys, and Live Board VKB lookup/autofill behaviour are unchanged. SQLite remains explicitly deferred.

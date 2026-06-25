@@ -1272,6 +1272,7 @@ function _rebuildEffectiveArrays() {
   if (!vkbData.loaded) return;
   vkbData.egowCodes    = getEffectiveEgowCodes();
   vkbData.registrations = getEffectiveRegistrations();
+  _invalidateRegAdminCache();
 }
 
 // ─── VKB Override Mutations ────────────────────────────────────────────────
@@ -1553,6 +1554,207 @@ function _refreshVkbAdminTable() {
   else _renderRegAdminTable(search);
 }
 
+// ─── Aircraft Registrations admin grid: lazy/paginated render ────────────────
+//
+// The Aircraft Registrations dataset can hold tens of thousands of effective
+// rows. Rendering them all into the DOM blocks the UI thread for several
+// seconds, so this dataset is rendered as a stateful paginated grid instead:
+// only the current page slice is ever placed in the DOM. EGOW Callsign
+// Attribution is small and keeps its original full-render behaviour.
+
+const REG_ADMIN_GRID_DEFAULTS = {
+  search: '',
+  page: 1,
+  pageSize: 100,
+  sortField: 'REGISTRATION',
+  sortDir: 'asc'
+};
+
+const REG_ADMIN_PAGE_SIZES = [50, 100, 250];
+
+// Columns rendered for Aircraft Registrations: { field, label, sortable }.
+// `field` is omitted/false for columns that aren't sortable.
+const REG_ADMIN_COLUMNS = [
+  { field: 'REGISTRATION',     label: 'Registration',   sortable: true },
+  { field: 'TYPE',             label: 'Type',           sortable: true },
+  { field: 'OPERATOR',         label: 'Operator',       sortable: true },
+  { field: null,               label: 'Popular Name',   sortable: false },
+  { field: 'FIXED C/S',        label: 'Fixed C/S',      sortable: true },
+  { field: 'EGOW FLIGHT TYPE', label: 'EGOW Flt Type',  sortable: true },
+  { field: 'OPERATION TYPE',   label: 'Op Type',        sortable: true },
+  { field: null,               label: 'Warnings',       sortable: false },
+  { field: null,               label: 'Notes',          sortable: false }
+];
+
+const _regAdminGridState = { ...REG_ADMIN_GRID_DEFAULTS };
+let _regAdminRowCache = null;
+let _regAdminSearchDebounceTimer = null;
+
+function _invalidateRegAdminCache() {
+  _regAdminRowCache = null;
+}
+
+/**
+ * Build one cache entry for a registration admin row, precomputing the
+ * lowercase search text once so repeated filtering avoids re-joining fields.
+ */
+function _makeRegAdminCacheRow(key, status, effectiveRow, ov) {
+  const _searchText = [
+    effectiveRow['REGISTRATION'],
+    effectiveRow['TYPE'],
+    effectiveRow['OPERATOR'],
+    effectiveRow['POPULAR NAME'],
+    effectiveRow['FIXED C/S'],
+    effectiveRow['EGOW FLIGHT TYPE'],
+    effectiveRow['OPERATION TYPE'],
+    effectiveRow['WARNINGS'],
+    effectiveRow['NOTES']
+  ].join(' ').toLowerCase();
+  return { key, status, effectiveRow, ov, _searchText };
+}
+
+function _buildRegAdminRowCache() {
+  const regOverrides = getVKBOverrides().datasets.registrations || {};
+  const rows = [];
+
+  for (const row of vkbBaselineData.registrations) {
+    const key = registrationVKBKey(row['REGISTRATION']);
+    const ov  = regOverrides[key];
+    let status = 'bundled', effectiveRow = { ...row };
+    if (ov?.action === 'hide')      { status = 'hidden'; }
+    else if (ov?.action === 'edit') { status = 'edited'; effectiveRow = { ...row, ...(ov.fields || {}) }; }
+    rows.push(_makeRegAdminCacheRow(key, status, effectiveRow, ov));
+  }
+  for (const [key, ov] of Object.entries(regOverrides)) {
+    if (ov.action === 'add') rows.push(_makeRegAdminCacheRow(key, 'local-add', ov.fields || {}, ov));
+  }
+
+  return rows;
+}
+
+function _getRegAdminRowCache() {
+  if (!_regAdminRowCache) _regAdminRowCache = _buildRegAdminRowCache();
+  return _regAdminRowCache;
+}
+
+function _compareRegAdminRows(a, b, field, dir) {
+  const av = String(a.effectiveRow[field] ?? '');
+  const bv = String(b.effectiveRow[field] ?? '');
+  const cmp = av.localeCompare(bv, undefined, { sensitivity: 'base', numeric: true });
+  return dir === 'desc' ? -cmp : cmp;
+}
+
+function _regAdminSortIndicator(dir) {
+  return `<span class="vkb-sort-indicator">${dir === 'asc' ? '▲' : '▼'}</span>`;
+}
+
+function _buildRegAdminTableHead() {
+  const ths = REG_ADMIN_COLUMNS.map(col => {
+    if (!col.sortable) return `<th>${_esc(col.label)}</th>`;
+    const active = _regAdminGridState.sortField === col.field;
+    const indicator = active ? _regAdminSortIndicator(_regAdminGridState.sortDir) : '';
+    return `<th class="vkb-sortable-th" data-sort-field="${_esc(col.field)}">${_esc(col.label)}${indicator}</th>`;
+  }).join('');
+  return `<tr>${ths}<th style="width:110px;">Last Updated</th><th style="width:150px;text-align:right;">Actions</th></tr>`;
+}
+
+function _bindRegAdminSortHandlers(thead) {
+  if (!thead) return;
+  thead.querySelectorAll('.vkb-sortable-th').forEach(th => {
+    th.addEventListener('click', () => {
+      const field = th.dataset.sortField;
+      if (_regAdminGridState.sortField === field) {
+        _regAdminGridState.sortDir = _regAdminGridState.sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        _regAdminGridState.sortField = field;
+        _regAdminGridState.sortDir = 'asc';
+      }
+      _regAdminGridState.page = 1;
+      _renderRegAdminTable(_regAdminGridState.search);
+    });
+  });
+}
+
+function _hideRegAdminGridControls() {
+  const el = document.getElementById('vkbAdminGridControls');
+  if (el) el.style.display = 'none';
+}
+
+function _ensureRegAdminGridControls() {
+  let el = document.getElementById('vkbAdminGridControls');
+  if (el) return el;
+
+  const shell = document.querySelector('.vkb-admin-table-shell');
+  if (!shell || !shell.parentNode) return null;
+
+  el = document.createElement('div');
+  el.id = 'vkbAdminGridControls';
+  el.className = 'vkb-grid-controls';
+  el.innerHTML = `
+    <span id="vkbGridStatus" class="vkb-grid-status"></span>
+    <label class="vkb-grid-page-size">
+      Rows per page:
+      <select id="vkbGridPageSize">
+        ${REG_ADMIN_PAGE_SIZES.map(n => `<option value="${n}">${n}</option>`).join('')}
+      </select>
+    </label>
+    <span class="vkb-grid-pager">
+      <button class="small-btn" id="vkbGridPrev" type="button">&lsaquo; Prev</button>
+      <button class="small-btn" id="vkbGridNext" type="button">Next &rsaquo;</button>
+    </span>`;
+  shell.parentNode.insertBefore(el, shell);
+
+  el.querySelector('#vkbGridPageSize')?.addEventListener('change', e => {
+    _regAdminGridState.pageSize = parseInt(e.target.value, 10) || REG_ADMIN_GRID_DEFAULTS.pageSize;
+    _regAdminGridState.page = 1;
+    _renderRegAdminTable(_regAdminGridState.search);
+  });
+  el.querySelector('#vkbGridPrev')?.addEventListener('click', () => {
+    if (_regAdminGridState.page > 1) {
+      _regAdminGridState.page--;
+      _renderRegAdminTable(_regAdminGridState.search);
+    }
+  });
+  el.querySelector('#vkbGridNext')?.addEventListener('click', () => {
+    _regAdminGridState.page++;
+    _renderRegAdminTable(_regAdminGridState.search);
+  });
+
+  return el;
+}
+
+function _renderRegAdminGridControls(total, startIdx, pageCount) {
+  const el = _ensureRegAdminGridControls();
+  if (!el) return;
+  el.style.display = '';
+
+  const statusEl   = el.querySelector('#vkbGridStatus');
+  const pageSizeEl = el.querySelector('#vkbGridPageSize');
+  const prevBtn    = el.querySelector('#vkbGridPrev');
+  const nextBtn    = el.querySelector('#vkbGridNext');
+
+  if (pageSizeEl) pageSizeEl.value = String(_regAdminGridState.pageSize);
+
+  const searching  = !!_regAdminGridState.search.trim();
+  const totalPages = Math.max(1, Math.ceil(total / _regAdminGridState.pageSize));
+
+  if (statusEl) {
+    if (!total) {
+      statusEl.textContent = searching
+        ? 'No registrations match the current search.'
+        : 'No registrations found.';
+    } else {
+      const from = startIdx + 1;
+      const to   = startIdx + pageCount;
+      const noun = searching ? 'matches' : 'registrations';
+      statusEl.textContent = `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${total.toLocaleString()} ${noun}`;
+    }
+  }
+
+  if (prevBtn) prevBtn.disabled = _regAdminGridState.page <= 1;
+  if (nextBtn) nextBtn.disabled = _regAdminGridState.page >= totalPages;
+}
+
 /**
  * Derive a display date for the "Last Updated" column.
  * Prefers the override's own updatedAt; falls back to the most recent
@@ -1574,6 +1776,8 @@ function _renderEgowAdminTable(search) {
   const thead = document.getElementById('vkbAdminTableHead');
   const tbody = document.getElementById('vkbAdminTableBody');
   if (!tbody) return;
+
+  _hideRegAdminGridControls();
 
   if (thead) thead.innerHTML = `<tr>
     <th>Callsign Base</th>
@@ -1627,77 +1831,84 @@ function _renderEgowAdminTable(search) {
     </tr>`;
   }).join('');
 
-  tbody.querySelectorAll('[data-va]').forEach(btn => {
-    btn.addEventListener('click', () => _handleVkbAction(btn.dataset.va, btn.dataset.ds, btn.dataset.key));
-  });
+  _ensureVkbAdminDelegatedActions(tbody);
 }
 
+/**
+ * Render the Aircraft Registrations admin grid for the current page.
+ * Builds/filters/sorts the full effective row set in memory (cheap, ~25k
+ * rows), but only ever places the current page slice into the DOM.
+ */
 function _renderRegAdminTable(search) {
   const thead = document.getElementById('vkbAdminTableHead');
   const tbody = document.getElementById('vkbAdminTableBody');
   if (!tbody) return;
 
-  if (thead) thead.innerHTML = `<tr>
-    <th>Registration</th>
-    <th>Type</th>
-    <th>Operator</th>
-    <th>Popular Name</th>
-    <th>Fixed C/S</th>
-    <th>EGOW Flt Type</th>
-    <th>Op Type</th>
-    <th>Warnings</th>
-    <th>Notes</th>
-    <th style="width:110px;">Last Updated</th>
-    <th style="width:150px;text-align:right;">Actions</th>
-  </tr>`;
+  _regAdminGridState.search = search || '';
 
-  const regOverrides = getVKBOverrides().datasets.registrations || {};
-  const allRows = [];
-
-  for (const row of vkbBaselineData.registrations) {
-    const key = registrationVKBKey(row['REGISTRATION']);
-    const ov  = regOverrides[key];
-    let status = 'bundled', effectiveRow = { ...row };
-    if (ov?.action === 'hide')      { status = 'hidden'; }
-    else if (ov?.action === 'edit') { status = 'edited'; effectiveRow = { ...row, ...(ov.fields || {}) }; }
-    allRows.push({ key, status, effectiveRow, ov });
-  }
-  for (const [key, ov] of Object.entries(regOverrides)) {
-    if (ov.action === 'add') allRows.push({ key, status: 'local-add', effectiveRow: ov.fields || {}, ov });
+  if (thead) {
+    thead.innerHTML = _buildRegAdminTableHead();
+    _bindRegAdminSortHandlers(thead);
   }
 
-  const filtered = search
-    ? allRows.filter(r => Object.values(r.effectiveRow).join(' ').toLowerCase().includes(search) || r.key.toLowerCase().includes(search))
+  const searchLower = _regAdminGridState.search.toLowerCase().trim();
+  const allRows = _getRegAdminRowCache();
+  const filtered = searchLower
+    ? allRows.filter(r => r._searchText.includes(searchLower))
     : allRows;
 
-  if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#999;padding:12px;">No records match the filter.</td></tr>`;
-    return;
+  const sorted = filtered.slice().sort((a, b) =>
+    _compareRegAdminRows(a, b, _regAdminGridState.sortField, _regAdminGridState.sortDir));
+
+  const total = sorted.length;
+  const totalPages = Math.max(1, Math.ceil(total / _regAdminGridState.pageSize));
+  if (_regAdminGridState.page > totalPages) _regAdminGridState.page = totalPages;
+  if (_regAdminGridState.page < 1) _regAdminGridState.page = 1;
+
+  const startIdx = (_regAdminGridState.page - 1) * _regAdminGridState.pageSize;
+  const pageRows = sorted.slice(startIdx, startIdx + _regAdminGridState.pageSize);
+
+  if (!pageRows.length) {
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#999;padding:12px;">${searchLower ? 'No registrations match the current search.' : 'No records match the filter.'}</td></tr>`;
+  } else {
+    tbody.innerHTML = pageRows.map(({ key, status, effectiveRow, ov }) => {
+      const ek = _esc(key);
+      const editBtn   = status !== 'hidden'                                                  ? `<button class="small-btn" data-va="edit"   data-key="${ek}" data-ds="registrations" type="button">Edit</button>`   : '';
+      const histBtn   =                                                                        `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="registrations" type="button">History</button>`;
+      const deleteBtn = (status === 'bundled' || status === 'edited' || status === 'local-add') ? `<button class="small-btn" data-va="delete" data-key="${ek}" data-ds="registrations" type="button">Delete</button>` : '';
+      return `<tr class="${status === 'hidden' ? 'vkb-row-hidden' : ''}">
+        <td>${_esc(effectiveRow['REGISTRATION']     || '')}</td>
+        <td>${_esc(effectiveRow['TYPE']             || '')}</td>
+        <td>${_esc(effectiveRow['OPERATOR']         || '')}</td>
+        <td>${_esc(effectiveRow['POPULAR NAME']     || '')}</td>
+        <td>${_esc(effectiveRow['FIXED C/S']        || '')}</td>
+        <td>${_esc(effectiveRow['EGOW FLIGHT TYPE'] || '')}</td>
+        <td>${_esc(effectiveRow['OPERATION TYPE']   || '')}</td>
+        <td>${_esc(effectiveRow['WARNINGS']         || '')}</td>
+        <td>${_esc(effectiveRow['NOTES']            || '')}</td>
+        <td>${_esc(_formatLastUpdated(key, ov))}</td>
+        <td class="vkb-actions-cell">${editBtn}${histBtn}${deleteBtn}</td>
+      </tr>`;
+    }).join('');
   }
 
-  tbody.innerHTML = filtered.map(({ key, status, effectiveRow, ov }) => {
-    const ek = _esc(key);
-    const editBtn   = status !== 'hidden'                                                  ? `<button class="small-btn" data-va="edit"   data-key="${ek}" data-ds="registrations" type="button">Edit</button>`   : '';
-    const histBtn   =                                                                        `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="registrations" type="button">History</button>`;
-    const deleteBtn = (status === 'bundled' || status === 'edited' || status === 'local-add') ? `<button class="small-btn" data-va="delete" data-key="${ek}" data-ds="registrations" type="button">Delete</button>` : '';
-    return `<tr class="${status === 'hidden' ? 'vkb-row-hidden' : ''}">
-      <td>${_esc(effectiveRow['REGISTRATION']     || '')}</td>
-      <td>${_esc(effectiveRow['TYPE']             || '')}</td>
-      <td>${_esc(effectiveRow['OPERATOR']         || '')}</td>
-      <td>${_esc(effectiveRow['POPULAR NAME']     || '')}</td>
-      <td>${_esc(effectiveRow['FIXED C/S']        || '')}</td>
-      <td>${_esc(effectiveRow['EGOW FLIGHT TYPE'] || '')}</td>
-      <td>${_esc(effectiveRow['OPERATION TYPE']   || '')}</td>
-      <td>${_esc(effectiveRow['WARNINGS']         || '')}</td>
-      <td>${_esc(effectiveRow['NOTES']            || '')}</td>
-      <td>${_esc(_formatLastUpdated(key, ov))}</td>
-      <td class="vkb-actions-cell">${editBtn}${histBtn}${deleteBtn}</td>
-    </tr>`;
-  }).join('');
+  _ensureVkbAdminDelegatedActions(tbody);
+  _renderRegAdminGridControls(total, startIdx, pageRows.length);
+}
 
-  tbody.querySelectorAll('[data-va]').forEach(btn => {
-    btn.addEventListener('click', () => _handleVkbAction(btn.dataset.va, btn.dataset.ds, btn.dataset.key));
+/**
+ * Delegate action-button clicks for an admin table body instead of binding
+ * a listener per rendered button — keeps repeated renders cheap and avoids
+ * double-binding since the flag survives innerHTML replacement.
+ */
+function _ensureVkbAdminDelegatedActions(tbody) {
+  if (!tbody || tbody.dataset.vkbActionsBound === '1') return;
+  tbody.addEventListener('click', event => {
+    const btn = event.target.closest('[data-va]');
+    if (!btn || !tbody.contains(btn)) return;
+    _handleVkbAction(btn.dataset.va, btn.dataset.ds, btn.dataset.key);
   });
+  tbody.dataset.vkbActionsBound = '1';
 }
 
 function _handleVkbAction(action, dataset, key) {
@@ -2047,7 +2258,17 @@ export function initVkbAdmin() {
       _refreshVkbAdminTable();
     });
   });
-  searchInput?.addEventListener('input', _refreshVkbAdminTable);
+  searchInput?.addEventListener('input', () => {
+    if (_currentAdminDataset() === 'egowCodes') {
+      _refreshVkbAdminTable();
+      return;
+    }
+    clearTimeout(_regAdminSearchDebounceTimer);
+    _regAdminSearchDebounceTimer = setTimeout(() => {
+      _regAdminGridState.page = 1;
+      _refreshVkbAdminTable();
+    }, 200);
+  });
   addBtn?.addEventListener('click', () => _openVkbEditModal(_currentAdminDataset(), null));
 
   _renderVkbAdminSummary();
