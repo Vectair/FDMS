@@ -34,7 +34,8 @@ const vkbData = {
  */
 const vkbBaselineData = {
   egowCodes: [],
-  registrations: []
+  registrations: [],
+  aircraftPilots: []
 };
 
 /**
@@ -162,17 +163,18 @@ export async function loadVKBData() {
     vkbData.callsignsNonstandard = callsignsNonstandard;
     vkbData.locations = locations;
     vkbData.callsignKey = callsignKey;
-    vkbData.aircraftPilots = aircraftPilots;
     vkbData.loaded = true;
     vkbData.loadError = null;
 
     // Store bundled originals before applying overrides
     vkbBaselineData.egowCodes = egowCodes;
     vkbBaselineData.registrations = registrations;
+    vkbBaselineData.aircraftPilots = aircraftPilots;
 
     // Set effective arrays (overrides applied on top of baseline)
     vkbData.egowCodes = getEffectiveEgowCodes();
     vkbData.registrations = getEffectiveRegistrations();
+    vkbData.aircraftPilots = getEffectiveAircraftPilots();
 
     const endTime = performance.now();
     const loadTime = (endTime - startTime).toFixed(0);
@@ -1092,10 +1094,25 @@ function registrationVKBKey(reg) {
   return String(reg || '').toUpperCase().trim().replace(/[-\s]/g, '');
 }
 
+/**
+ * Canonical aircraft-pilot key: REGISTRATION|FIXED_CALLSIGN|LAST|FIRST, all
+ * uppercased/trimmed (registration also strips hyphens/spaces). REGISTRATION
+ * and FIXED_CALLSIGN are locked as the identity anchor in the admin editor
+ * (see _openVkbEditModal); name fields are editable, mirroring the egowCodes
+ * APPROVED_CONTRACTION precedent.
+ */
+function aircraftPilotsVKBKey(row) {
+  const reg   = registrationVKBKey(row['REGISTRATION'] || '');
+  const cs    = (row['FIXED_CALLSIGN'] || '').toUpperCase().trim();
+  const last  = (row['PILOT_NAME_LAST'] || '').toUpperCase().trim();
+  const first = (row['PILOT_NAME_FIRST'] || '').toUpperCase().trim();
+  return `${reg}|${cs}|${last}|${first}`;
+}
+
 // ── Override read / write ─────────────────────────────────────────────────
 
 function _emptyOverrides() {
-  return { version: 1, updatedAt: null, datasets: { egowCodes: {}, registrations: {} } };
+  return { version: 1, updatedAt: null, datasets: { egowCodes: {}, registrations: {}, aircraftPilots: {} } };
 }
 
 /**
@@ -1137,7 +1154,7 @@ function _migrateOverrides(parsed) {
   return {
     version: parsed.version || 1,
     updatedAt: null,
-    datasets: { egowCodes: newEgow, registrations: newReg }
+    datasets: { egowCodes: newEgow, registrations: newReg, aircraftPilots: {} }
   };
 }
 
@@ -1159,8 +1176,9 @@ function getVKBOverrides() {
       version: parsed.version || 1,
       updatedAt: parsed.updatedAt || null,
       datasets: {
-        egowCodes:     parsed.datasets?.egowCodes     || {},
-        registrations: parsed.datasets?.registrations || {}
+        egowCodes:      parsed.datasets?.egowCodes      || {},
+        registrations:  parsed.datasets?.registrations  || {},
+        aircraftPilots: parsed.datasets?.aircraftPilots || {}
       }
     };
 
@@ -1207,6 +1225,9 @@ function getBundledRow(datasetName, key) {
   }
   if (datasetName === 'registrations') {
     return vkbBaselineData.registrations.find(row => registrationVKBKey(row['REGISTRATION']) === key) || null;
+  }
+  if (datasetName === 'aircraftPilots') {
+    return vkbBaselineData.aircraftPilots.find(row => aircraftPilotsVKBKey(row) === key) || null;
   }
   return null;
 }
@@ -1265,13 +1286,33 @@ function getEffectiveRegistrations() {
 }
 
 /**
- * Rebuild vkbData.egowCodes and vkbData.registrations to reflect
- * current overrides. Call after any override mutation.
+ * Build the effective aircraft pilots array (baseline + overrides).
+ * Called by lookupAircraftPilots and loadVKBData.
+ */
+function getEffectiveAircraftPilots() {
+  const overrides = getVKBOverrides().datasets.aircraftPilots || {};
+  const effective = [];
+  for (const row of vkbBaselineData.aircraftPilots) {
+    const key = aircraftPilotsVKBKey(row);
+    const ov  = overrides[key];
+    if (ov?.action === 'hide') continue;
+    effective.push(ov?.action === 'edit' ? { ...row, ...(ov.fields || {}) } : row);
+  }
+  for (const [, ov] of Object.entries(overrides)) {
+    if (ov.action === 'add') effective.push(ov.fields);
+  }
+  return effective;
+}
+
+/**
+ * Rebuild vkbData.egowCodes, vkbData.registrations, and vkbData.aircraftPilots
+ * to reflect current overrides. Call after any override mutation.
  */
 function _rebuildEffectiveArrays() {
   if (!vkbData.loaded) return;
-  vkbData.egowCodes    = getEffectiveEgowCodes();
+  vkbData.egowCodes     = getEffectiveEgowCodes();
   vkbData.registrations = getEffectiveRegistrations();
+  vkbData.aircraftPilots = getEffectiveAircraftPilots();
   _invalidateRegAdminCache();
 }
 
@@ -1287,6 +1328,8 @@ export function upsertVKBOverride(datasetName, key, fields, note = '', effective
   // regardless of whether the modal save handler has already normalised or not.
   const normFields = datasetName === 'registrations'
     ? normalizeRegistrationFields(fields)
+    : datasetName === 'aircraftPilots'
+    ? normalizeAircraftPilotFields(fields)
     : { ...fields };
 
   // For registrations, derive the canonical key from the normalised REGISTRATION
@@ -1538,9 +1581,10 @@ function _renderVkbAdminSummary() {
   if (!el) return;
   const summary  = getAuditSummary();
   const datasets = getVKBOverrides().datasets;
-  const egowCount = Object.keys(datasets.egowCodes     || {}).length;
-  const regCount  = Object.keys(datasets.registrations || {}).length;
-  el.textContent = `Local overrides: ${egowCount} EGOW attribution, ${regCount} registrations  ·  Audit events: ${summary.totalEvents}`;
+  const egowCount   = Object.keys(datasets.egowCodes      || {}).length;
+  const regCount    = Object.keys(datasets.registrations  || {}).length;
+  const pilotsCount = Object.keys(datasets.aircraftPilots || {}).length;
+  el.textContent = `Local overrides: ${egowCount} EGOW attribution, ${regCount} registrations, ${pilotsCount} aircraft pilots  ·  Audit events: ${summary.totalEvents}`;
 }
 
 function _currentAdminDataset() {
@@ -1551,6 +1595,7 @@ function _refreshVkbAdminTable() {
   const dataset = _currentAdminDataset();
   const search  = (document.getElementById('vkbAdminSearch')?.value || '').toLowerCase().trim();
   if (dataset === 'egowCodes') _renderEgowAdminTable(search);
+  else if (dataset === 'aircraftPilots') _renderPilotsAdminTable(search);
   else _renderRegAdminTable(search);
 }
 
@@ -1835,6 +1880,68 @@ function _renderEgowAdminTable(search) {
 }
 
 /**
+ * Render the Aircraft Pilots / Based Civilian Users admin table.
+ * Small dataset (tens of rows) — full render, same pattern as EGOW codes.
+ */
+function _renderPilotsAdminTable(search) {
+  const thead = document.getElementById('vkbAdminTableHead');
+  const tbody = document.getElementById('vkbAdminTableBody');
+  if (!tbody) return;
+
+  _hideRegAdminGridControls();
+
+  if (thead) thead.innerHTML = `<tr>
+    <th>Registration</th>
+    <th>Fixed Callsign</th>
+    <th>Last Name</th>
+    <th>First Name</th>
+    <th style="width:110px;">Last Updated</th>
+    <th style="width:150px;text-align:right;">Actions</th>
+  </tr>`;
+
+  const overrides = getVKBOverrides().datasets.aircraftPilots || {};
+  const allRows = [];
+
+  for (const row of vkbBaselineData.aircraftPilots) {
+    const key = aircraftPilotsVKBKey(row);
+    const ov  = overrides[key];
+    let status = 'bundled', effectiveRow = { ...row };
+    if (ov?.action === 'hide')      { status = 'hidden'; }
+    else if (ov?.action === 'edit') { status = 'edited'; effectiveRow = { ...row, ...(ov.fields || {}) }; }
+    allRows.push({ key, status, effectiveRow, ov });
+  }
+  for (const [key, ov] of Object.entries(overrides)) {
+    if (ov.action === 'add') allRows.push({ key, status: 'local-add', effectiveRow: ov.fields || {}, ov });
+  }
+
+  const filtered = search
+    ? allRows.filter(r => Object.values(r.effectiveRow).join(' ').toLowerCase().includes(search) || r.key.toLowerCase().includes(search))
+    : allRows;
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#999;padding:12px;">No records match the filter.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(({ key, status, effectiveRow, ov }) => {
+    const ek = _esc(key);
+    const editBtn   = status !== 'hidden'                                                  ? `<button class="small-btn" data-va="edit"   data-key="${ek}" data-ds="aircraftPilots" type="button">Edit</button>`   : '';
+    const histBtn   =                                                                        `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="aircraftPilots" type="button">History</button>`;
+    const deleteBtn = (status === 'bundled' || status === 'edited' || status === 'local-add') ? `<button class="small-btn" data-va="delete" data-key="${ek}" data-ds="aircraftPilots" type="button">Delete</button>` : '';
+    return `<tr class="${status === 'hidden' ? 'vkb-row-hidden' : ''}">
+      <td>${_esc(effectiveRow['REGISTRATION']     || '')}</td>
+      <td>${_esc(effectiveRow['FIXED_CALLSIGN']   || '')}</td>
+      <td>${_esc(effectiveRow['PILOT_NAME_LAST']  || '')}</td>
+      <td>${_esc(effectiveRow['PILOT_NAME_FIRST'] || '')}</td>
+      <td>${_esc(_formatLastUpdated(key, ov))}</td>
+      <td class="vkb-actions-cell">${editBtn}${histBtn}${deleteBtn}</td>
+    </tr>`;
+  }).join('');
+
+  _ensureVkbAdminDelegatedActions(tbody);
+}
+
+/**
  * Render the Aircraft Registrations admin grid for the current page.
  * Builds/filters/sorts the full effective row set in memory (cheap, ~25k
  * rows), but only ever places the current page slice into the DOM.
@@ -1983,6 +2090,32 @@ function normalizeRegistrationFields(fields) {
 
   // Preserve-case fields — trim only
   for (const f of ['POPULAR NAME', 'NOTES']) {
+    if (out[f] !== undefined) out[f] = String(out[f] || '').trim();
+  }
+
+  return out;
+}
+
+/**
+ * Normalise aircraft-pilot record fields before saving to overrides.
+ * REGISTRATION uses the same canonical-form detection as registrations;
+ * FIXED_CALLSIGN is uppercased; name fields are trimmed only (case preserved).
+ */
+function normalizeAircraftPilotFields(fields) {
+  const out = { ...fields };
+
+  if (out['REGISTRATION'] !== undefined) {
+    const info = detectAircraftRegistry(out['REGISTRATION']);
+    out['REGISTRATION'] = info
+      ? info.normalizedRegistration
+      : String(out['REGISTRATION'] || '').toUpperCase().trim().replace(/\s+/g, '');
+  }
+
+  if (out['FIXED_CALLSIGN'] !== undefined) {
+    out['FIXED_CALLSIGN'] = String(out['FIXED_CALLSIGN'] || '').toUpperCase().trim();
+  }
+
+  for (const f of ['PILOT_NAME_LAST', 'PILOT_NAME_FIRST']) {
     if (out[f] !== undefined) out[f] = String(out[f] || '').trim();
   }
 
@@ -2144,8 +2277,16 @@ function _openVkbEditModal(dataset, key) {
     { id: 'WARNINGS',         label: 'Warnings',         readonly: false },
     { id: 'NOTES',            label: 'Notes',            readonly: false },
   ];
+  const pilotFields = [
+    { id: 'REGISTRATION',      label: 'Registration',     readonly: !isNew && !!bundled },
+    { id: 'FIXED_CALLSIGN',    label: 'Fixed Callsign',   readonly: !isNew && !!bundled },
+    { id: 'PILOT_NAME_LAST',   label: 'Last Name',        readonly: false },
+    { id: 'PILOT_NAME_FIRST',  label: 'First Name',       readonly: false },
+  ];
 
-  const fieldDefs = dataset === 'egowCodes' ? egowFields : regFields;
+  const fieldDefs = dataset === 'egowCodes' ? egowFields
+    : dataset === 'aircraftPilots' ? pilotFields
+    : regFields;
   const safeId = id => 'vkbEd_' + id.replace(/[^a-zA-Z0-9_]/g, '_');
 
   const fieldsHtml = fieldDefs.map(f => `
@@ -2156,8 +2297,19 @@ function _openVkbEditModal(dataset, key) {
         ${f.readonly ? 'readonly style="background:#f5f5f5;"' : ''} />
     </div>`).join('');
 
+  const DATASET_ADMIN_LABELS = {
+    egowCodes: 'EGOW Callsign Attribution',
+    registrations: 'Aircraft Registrations',
+    aircraftPilots: 'Aircraft Pilots / Based Civilian Users',
+  };
+  const DATASET_ADD_LABELS = {
+    egowCodes: 'EGOW Attribution Row',
+    registrations: 'Aircraft Registration',
+    aircraftPilots: 'Aircraft Pilot',
+  };
+
   const title = isNew
-    ? `Add ${dataset === 'egowCodes' ? 'EGOW Attribution Row' : 'Aircraft Registration'}`
+    ? `Add ${DATASET_ADD_LABELS[dataset] || 'Row'}`
     : `Edit ${key}`;
 
   const regAidHtml = dataset === 'registrations'
@@ -2170,7 +2322,7 @@ function _openVkbEditModal(dataset, key) {
   bd.innerHTML = `<div class="modal" style="max-width:540px;">
     <div class="modal-header">
       <span class="modal-title">${_esc(title)}</span>
-      <span class="modal-subtitle">${_esc(dataset === 'egowCodes' ? 'EGOW Callsign Attribution' : 'Aircraft Registrations')}</span>
+      <span class="modal-subtitle">${_esc(DATASET_ADMIN_LABELS[dataset] || '')}</span>
     </div>
     <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;">
       ${fieldsHtml}
@@ -2213,9 +2365,11 @@ function _openVkbEditModal(dataset, key) {
     const effectiveFrom = bd.querySelector('#vkbEditEffectiveFrom')?.value || _todayISO();
     const note = bd.querySelector('#vkbEditNote')?.value?.trim() || '';
 
-    // Normalise registration fields before save
+    // Normalise registration / aircraft-pilot fields before save
     const savedFields = dataset === 'registrations'
       ? normalizeRegistrationFields(formFields)
+      : dataset === 'aircraftPilots'
+      ? normalizeAircraftPilotFields(formFields)
       : formFields;
 
     // Build canonical key from (normalised) form fields for new rows
@@ -2224,6 +2378,8 @@ function _openVkbEditModal(dataset, key) {
       editKey = key; // editing existing row — key is already canonical
     } else if (dataset === 'egowCodes') {
       editKey = egowVKBKey(savedFields);
+    } else if (dataset === 'aircraftPilots') {
+      editKey = aircraftPilotsVKBKey(savedFields);
     } else {
       editKey = registrationVKBKey(savedFields['REGISTRATION'] || '');
     }
@@ -2259,7 +2415,7 @@ export function initVkbAdmin() {
     });
   });
   searchInput?.addEventListener('input', () => {
-    if (_currentAdminDataset() === 'egowCodes') {
+    if (_currentAdminDataset() !== 'registrations') {
       _refreshVkbAdminTable();
       return;
     }

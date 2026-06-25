@@ -4196,7 +4196,10 @@ function enrichMovementData(movement) {
       if (egowAttrib.unitCode) movement.unitCode = egowAttrib.unitCode;
     }
     if (!movement.captain || movement.captain === '') {
-      if (egowAttrib.name) movement.captain = egowAttrib.name;
+      const category = (movement.egowCode || egowAttrib.egowCode || '').toUpperCase().trim();
+      const pilots = lookupAircraftPilots(movement.registration || '', callsignCode);
+      const captainName = resolveCaptainAttribution(category, egowAttrib, pilots);
+      if (captainName) movement.captain = captainName;
     }
     if (!movement.unitDesc || movement.unitDesc === '') {
       if (egowAttrib.unit) movement.unitDesc = egowAttrib.unit;
@@ -4257,6 +4260,26 @@ function clearTrackedAutofill(inputEl) {
     inputEl.value = '';
     delete inputEl.dataset.autofillValue;
   }
+}
+
+/** EGOW categories that represent visiting aircraft — never auto-fill pilot/captain. */
+const VISITING_EGOW_CATEGORIES = ['VC', 'VCH', 'VM', 'VMH', 'VNH'];
+
+/**
+ * Decide what (if anything) should be auto-filled into the captain field, applying the
+ * BM/BC/visiting attribution-source rules: BM stays callsign-led (EGOW_CODES.NAME), BC is
+ * registration/fixed-callsign-led (FDMS_AIRCRAFT_PILOTS, falling back to EGOW_CODES.NAME
+ * only when no aircraft-pilot rows exist), and visiting categories are never auto-filled.
+ */
+function resolveCaptainAttribution(category, egowAttrib, pilots) {
+  const cat = String(category || '').toUpperCase().trim();
+  if (VISITING_EGOW_CATEGORIES.includes(cat)) return null;
+  if (cat === 'BC') {
+    if (pilots && pilots.length === 1) return pilots[0].displayName;
+    if (pilots && pilots.length > 1) return null;
+    return egowAttrib?.name || null;
+  }
+  return egowAttrib?.name || null;
 }
 
 /**
@@ -4719,7 +4742,10 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
         const pilots = lookupAircraftPilots(regInput.value, '');
         if (pilots.length > 0) {
           pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          if (pilots.length === 1) applyTrackedAutofill(captainInput, pilots[0].displayName);
+          const category = (egowCodeInput?.value || '').toUpperCase().trim();
+          if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
+            applyTrackedAutofill(captainInput, pilots[0].displayName);
+          }
         }
       }
       _refreshNewFlightVkbButton();
@@ -4747,7 +4773,9 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       if (egowAttrib) {
         egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
         egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
-        egowAttrib.name ? applyTrackedAutofill(captainEl, egowAttrib.name) : clearTrackedAutofill(captainEl);
+        const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
+        const captainName = resolveCaptainAttribution(egowAttrib.egowCode, egowAttrib, pilots);
+        captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
       } else {
         clearTrackedAutofill(egowCodeInput);
         clearTrackedAutofill(unitCodeInput);
@@ -5904,7 +5932,10 @@ function openNewLocFlightModal() {
         const pilots = lookupAircraftPilots(regInput.value, '');
         if (pilots.length > 0) {
           pilotDl.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          if (pilots.length === 1) applyTrackedAutofill(captainEl, pilots[0].displayName);
+          const category = (egowCodeInput?.value || '').toUpperCase().trim();
+          if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
+            applyTrackedAutofill(captainEl, pilots[0].displayName);
+          }
         }
       }
       _refreshLocVkbButton();
@@ -5930,7 +5961,9 @@ function openNewLocFlightModal() {
       if (egowAttrib) {
         egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
         egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
-        egowAttrib.name ? applyTrackedAutofill(captainEl, egowAttrib.name) : clearTrackedAutofill(captainEl);
+        const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
+        const captainName = resolveCaptainAttribution(egowAttrib.egowCode, egowAttrib, pilots);
+        captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
       } else {
         clearTrackedAutofill(egowCodeInput);
         clearTrackedAutofill(unitCodeInput);
@@ -6928,7 +6961,10 @@ function openEditMovementModal(m) {
         const pilots = lookupAircraftPilots(regInput.value, '');
         if (pilots.length > 0) {
           pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          if (pilots.length === 1) applyTrackedAutofill(captainInput, pilots[0].displayName);
+          const category = (egowCodeInput?.value || '').toUpperCase().trim();
+          if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
+            applyTrackedAutofill(captainInput, pilots[0].displayName);
+          }
         }
       }
       _refreshEditVkbButton();
@@ -6956,7 +6992,9 @@ function openEditMovementModal(m) {
       if (egowAttrib) {
         egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
         egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
-        egowAttrib.name ? applyTrackedAutofill(captainEl, egowAttrib.name) : clearTrackedAutofill(captainEl);
+        const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
+        const captainName = resolveCaptainAttribution(egowAttrib.egowCode, egowAttrib, pilots);
+        captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
       } else {
         clearTrackedAutofill(egowCodeInput);
         clearTrackedAutofill(unitCodeInput);
