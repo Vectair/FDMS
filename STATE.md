@@ -136,7 +136,7 @@ C:\Users\dmshs\FDMS
 GitHub repository:
 
 ```text
-Arkmere/FDMS
+Vectair/FDMS
 ```
 
 ### 2.2 Authoritative branch
@@ -2545,7 +2545,7 @@ localStorage remains acceptable for V1 single-operator desktop use if backup/exp
 - `src-tauri/tauri.conf.json`:
   - `bundle.createUpdaterArtifacts: true`
   - `plugins.updater.pubkey` — public signing key (minisign)
-  - `plugins.updater.endpoints` — `https://github.com/Arkmere/FDMS/releases/latest/download/latest.json`
+  - `plugins.updater.endpoints` — `https://github.com/Vectair/FDMS/releases/latest/download/latest.json`
   - `plugins.updater.windows.installMode: "passive"`
 
 ### 24.3 Signing keypair
@@ -2556,7 +2556,7 @@ localStorage remains acceptable for V1 single-operator desktop use if backup/exp
 
 ### 24.4 Update endpoint
 
-- **Current endpoint:** `https://github.com/Arkmere/FDMS/releases/latest/download/latest.json`
+- **Current endpoint:** `https://github.com/Vectair/FDMS/releases/latest/download/latest.json`
 - The release maintainer must publish a signed installer and a valid `latest.json` alongside each GitHub Release for updates to be delivered.
 - `latest.json` must be signed with the private key matching the embedded public key.
 

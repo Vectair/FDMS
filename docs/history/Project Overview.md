@@ -628,7 +628,7 @@ This is the central starting point; new feature modules (e.g. ui_history.js, ui_
 
 Clone the repo:
 
-git clone git@github.com:Arkmere/FDMS.git
+git clone git@github.com:Vectair/FDMS.git
 cd FDMS
 
 

@@ -3,7 +3,7 @@
 Flite uses Tauri updater artifacts.
 
 Current endpoint:
-https://github.com/Arkmere/FDMS/releases/latest/download/latest.json
+https://github.com/Vectair/FDMS/releases/latest/download/latest.json
 
 The public signing key is committed in src-tauri/tauri.conf.json.
 
