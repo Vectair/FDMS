@@ -136,7 +136,7 @@ It automates the full cycle of pulling the latest `main`, building the NSIS inst
 Important distinctions:
 
 - This script installs from a locally built NSIS installer. It does **not** publish a release and does **not** update the app via GitHub Releases.
-- True in-app updates (the Tauri updater, accessible from Admin → System Status → Updates) require signed release artifacts and a published `latest.json` at the configured updater endpoint. That flow is entirely separate from this script.
+- True in-app updates (the Tauri updater, accessible from Admin → Overview → Version & Updates) require signed release artifacts and a published `latest.json` at the configured updater endpoint. That flow is entirely separate from this script.
 - Because Windows enforces version ordering for installers, downgrading from a previously installed `1.0.x` build (such as `1.0.3`) to `0.9.0` requires a manual uninstall first: `Apps & features → Vectair Flite → Uninstall`.
 
 Offline operation
@@ -205,21 +205,23 @@ Those package imports are not safe in the current unbundled static frontend arch
 
 In-app updates
 
-Vectair Flite includes a manual, operator-initiated update mechanism accessible from Admin → System Status → Updates.
+Vectair Flite includes a manual, operator-initiated update mechanism accessible from Admin → Overview → Version & Updates.
 
 Key policies:
 
-- Update checking is initiated by the operator only. The app never checks for updates at launch or in the background.
-- No update is installed without operator action. There is no auto-install.
+- Manual update checks are always available from the Version & Updates panel.
+- An optional check-on-launch can be enabled or disabled in that panel. When enabled, it silently checks for an update shortly after startup and, if one is available, shows an informational toast pointing to Admin → Overview → Version & Updates — it never downloads or installs anything on its own.
+- No update is installed without explicit operator action (clicking Download and install update). There is no auto-install.
 - No update prompt blocks operational use. Live Board and all other features remain fully available during or after an update check.
 - The app remains fully usable offline. A failed or unreachable update check degrades cleanly and shows a status message.
+- On Windows NSIS builds, clicking Download and install update may close Flite and relaunch it automatically partway through installation — this is expected Windows installer behaviour, not a crash. A manual Restart Flite button remains available as a fallback if Flite stays open after install and needs a restart to pick up the new version.
 
 To check for updates:
 
-1. Open Admin → System Status.
-2. In the Updates panel, click Check for updates.
-3. If an update is available, click Download and install update.
-4. After installation, click Restart Flite to apply the update.
+1. Open Admin → Overview → Version & Updates.
+2. In the Version & Updates panel, click Check for updates.
+3. If an update is available, click Download and install update. On Windows, Flite may close and restart automatically as part of installation.
+4. If Flite remains open after installation, click Restart Flite to apply the update.
 
 It is recommended to take an Admin → Session Management backup before installing a major update.
 

@@ -310,6 +310,39 @@ const diagnostics = {
 window.__FDMS_DIAGNOSTICS__ = true;
 window.__fdmsDiag = diagnostics.runtimeCounters;
 
+// Set while an updater install is in flight so the global error handlers can
+// suppress toasts for the teardown/IPC-closure noise Tauri generates when
+// Windows NSIS exits the app mid-install (see docs/updater-validation.md).
+window.__FDMS_UPDATE_INSTALL_IN_PROGRESS__ = false;
+
+const UPDATE_INSTALL_TEARDOWN_MESSAGE_FRAGMENTS = [
+  'ipc',
+  'webview',
+  'window is closed',
+  'window is destroyed',
+  'window not found',
+  'message channel closed',
+  'the message port closed',
+  'failed to send',
+  'unable to communicate',
+  'disconnected',
+  'channel closed',
+  'oneshot canceled',
+  'oneshot cancelled',
+  'operation canceled',
+  'operation cancelled',
+  'connection closed',
+  'transport error',
+  'failed to receive',
+];
+
+function shouldSuppressUpdateInstallToast(message) {
+  if (!window.__FDMS_UPDATE_INSTALL_IN_PROGRESS__) return false;
+  const msg = String(message || '').toLowerCase();
+  if (!msg) return false;
+  return UPDATE_INSTALL_TEARDOWN_MESSAGE_FRAGMENTS.some((fragment) => msg.includes(fragment));
+}
+
 function recordError(obj) {
   const entry = {
     message: obj.message || 'unknown',
@@ -341,7 +374,9 @@ window.addEventListener("error", (e) => {
     type:    'error',
   });
   updateDiagnostics();
-  showToast(`Error: ${diagnostics.errors.lastErrorMessage}`, 'error', 6000);
+  if (!shouldSuppressUpdateInstallToast(diagnostics.errors.lastErrorMessage)) {
+    showToast(`Error: ${diagnostics.errors.lastErrorMessage}`, 'error', 6000);
+  }
 });
 
 window.addEventListener("unhandledrejection", (e) => {
@@ -355,7 +390,9 @@ window.addEventListener("unhandledrejection", (e) => {
     type:    'unhandledrejection',
   });
   updateDiagnostics();
-  showToast(`Promise error: ${diagnostics.errors.lastErrorMessage}`, 'error', 6000);
+  if (!shouldSuppressUpdateInstallToast(diagnostics.errors.lastErrorMessage)) {
+    showToast(`Promise error: ${diagnostics.errors.lastErrorMessage}`, 'error', 6000);
+  }
 });
 
 /**
@@ -2033,6 +2070,10 @@ function initLiveboardCounters() {
 const UPDATER_CHECK_ON_LAUNCH_KEY = 'vectair_flite_check_updates_on_launch_v1';
 const UPDATER_LAST_CHECKED_KEY = 'vectair_flite_last_update_check_v1';
 
+// If a probable installer handoff/teardown error leaves the panel waiting for
+// an app close that never happens, un-stick the UI after this long.
+const UPDATE_INSTALL_HANDOFF_FALLBACK_MS = 15000;
+
 function initUpdaterPanel() {
   const invoke = window.__TAURI__?.core?.invoke;
   const isTauri = typeof invoke === 'function';
@@ -2053,6 +2094,8 @@ function initUpdaterPanel() {
   const checkOnLaunch    = document.getElementById('updaterCheckOnLaunch');
 
   if (!browserNotice || !btnCheck) return;
+
+  let updateInstallHandoffFallbackTimer = null;
 
   function formatUpdaterDate(value) {
     if (!value) return 'Never';
@@ -2192,27 +2235,68 @@ function initUpdaterPanel() {
 
   if (btnInstall) {
     btnInstall.addEventListener('click', async () => {
-      const ok = confirm('Download and install the available Flite update? Flite will need to restart after installation.');
+      const ok = confirm('Download and install the available Flite update? On Windows, Flite may close and restart automatically during installation.');
       if (!ok) return;
+
+      if (updateInstallHandoffFallbackTimer) {
+        clearTimeout(updateInstallHandoffFallbackTimer);
+        updateInstallHandoffFallbackTimer = null;
+      }
 
       btnInstall.disabled = true;
       btnCheck.disabled = true;
-      setStatus('Downloading and installing…', '#1565c0');
+      // Restart is only needed for the fallback path where the app stays open
+      // after install (e.g. non-Windows); hide it until that result comes back.
+      if (btnRestart) {
+        btnRestart.style.display = 'none';
+        btnRestart.disabled = true;
+      }
+      setStatus('Installing update. Flite may close and restart automatically.', '#1565c0');
+      window.__FDMS_UPDATE_INSTALL_IN_PROGRESS__ = true;
 
       try {
         const result = await invoke('flite_download_and_install_update');
+        window.__FDMS_UPDATE_INSTALL_IN_PROGRESS__ = false;
+
         if (result.status === 'installed_restart_required') {
           setStatus('Restart required', '#6a1b9a');
           if (btnInstall) btnInstall.style.display = 'none';
-          if (btnRestart) btnRestart.style.display = '';
+          if (btnRestart) {
+            btnRestart.style.display = '';
+            btnRestart.disabled = false;
+          }
+          btnCheck.disabled = false;
         } else {
           setStatus(`Update failed — ${result.message || 'unknown error'}`, '#b71c1c');
           btnInstall.disabled = false;
+          btnCheck.disabled = false;
         }
       } catch (err) {
-        setStatus(`Update failed — ${err}`, '#b71c1c');
+        // The app may legitimately close/relaunch mid-install on Windows NSIS,
+        // which can surface as a rejected invoke() here — often as a *second*,
+        // later teardown rejection after an earlier handled one, by which point
+        // a naive immediate flag-clear would already have re-armed the global
+        // toast. Treat a teardown-shaped rejection as probable installer
+        // handoff: keep the in-progress flag set and the neutral status, and
+        // don't re-enable Install, since the app may still be about to close
+        // and relaunch out from under us. A short fallback timer un-sticks the
+        // panel if that close never actually happens (see
+        // shouldSuppressUpdateInstallToast for the matching global-handler case).
+        if (shouldSuppressUpdateInstallToast(err?.message || err)) {
+          updateInstallHandoffFallbackTimer = setTimeout(() => {
+            updateInstallHandoffFallbackTimer = null;
+            if (!window.__FDMS_UPDATE_INSTALL_IN_PROGRESS__) return;
+            window.__FDMS_UPDATE_INSTALL_IN_PROGRESS__ = false;
+            setStatus('Update did not complete — installer handoff timed out', '#b71c1c');
+            btnInstall.disabled = false;
+            btnCheck.disabled = false;
+          }, UPDATE_INSTALL_HANDOFF_FALLBACK_MS);
+          return;
+        }
+
+        window.__FDMS_UPDATE_INSTALL_IN_PROGRESS__ = false;
+        setStatus(`Update did not complete — ${err}`, '#b71c1c');
         btnInstall.disabled = false;
-      } finally {
         btnCheck.disabled = false;
       }
     });
