@@ -57,3 +57,12 @@ platforms/paths where the app stays open after install and needs an explicit
 restart to pick up the new version (step 7 above). Do not treat the absence
 of that manual restart step as a failure on Windows — an automatic
 close-and-relaunch is the expected outcome there.
+
+### Install confirmation is inline, not a native dialog
+
+Step 6 (Install update) requires clicking **Download and install update**
+twice: the first click arms an inline confirmation (button relabels to
+**Confirm install update**, arming expires after 30s), the second click
+starts the install. This avoids a native `confirm()` dialog, which in the
+packaged app routes through `plugin:dialog|confirm` and is blocked by ACL —
+that dependency is intentionally not granted.

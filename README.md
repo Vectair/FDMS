@@ -220,7 +220,7 @@ To check for updates:
 
 1. Open Admin → Overview → Version & Updates.
 2. In the Version & Updates panel, click Check for updates.
-3. If an update is available, click Download and install update. On Windows, Flite may close and restart automatically as part of installation.
+3. If an update is available, click Download and install update, then click the button again (it relabels to Confirm install update) within 30 seconds to proceed. This inline two-click confirmation replaces a native OS dialog, which the packaged app's permissions intentionally do not allow. On Windows, Flite may close and restart automatically as part of installation.
 4. If Flite remains open after installation, click Restart Flite to apply the update.
 
 It is recommended to take an Admin → Session Management backup before installing a major update.

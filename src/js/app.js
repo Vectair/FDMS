@@ -2074,6 +2074,11 @@ const UPDATER_LAST_CHECKED_KEY = 'vectair_flite_last_update_check_v1';
 // an app close that never happens, un-stick the UI after this long.
 const UPDATE_INSTALL_HANDOFF_FALLBACK_MS = 15000;
 
+// Native confirm() routes through plugin:dialog, which the packaged app's ACL
+// does not allow, so Install requires an inline two-click confirmation
+// instead. The first click arms this window; a second click within it installs.
+const UPDATE_INSTALL_CONFIRM_ARM_MS = 30000;
+
 function initUpdaterPanel() {
   const invoke = window.__TAURI__?.core?.invoke;
   const isTauri = typeof invoke === 'function';
@@ -2096,6 +2101,18 @@ function initUpdaterPanel() {
   if (!browserNotice || !btnCheck) return;
 
   let updateInstallHandoffFallbackTimer = null;
+  let installConfirmArmed = false;
+  let installConfirmTimeoutTimer = null;
+  const installButtonDefaultText = btnInstall ? btnInstall.textContent : '';
+
+  function resetInstallConfirm() {
+    installConfirmArmed = false;
+    if (installConfirmTimeoutTimer) {
+      clearTimeout(installConfirmTimeoutTimer);
+      installConfirmTimeoutTimer = null;
+    }
+    if (btnInstall) btnInstall.textContent = installButtonDefaultText;
+  }
 
   function formatUpdaterDate(value) {
     if (!value) return 'Never';
@@ -2172,6 +2189,8 @@ function initUpdaterPanel() {
   }
 
   async function runUpdateCheck({ startup = false } = {}) {
+    resetInstallConfirm();
+
     if (!startup) {
       btnCheck.disabled = true;
       if (btnInstall) btnInstall.style.display = 'none';
@@ -2235,8 +2254,22 @@ function initUpdaterPanel() {
 
   if (btnInstall) {
     btnInstall.addEventListener('click', async () => {
-      const ok = confirm('Download and install the available Flite update? On Windows, Flite may close and restart automatically during installation.');
-      if (!ok) return;
+      // Native confirm() routes through plugin:dialog|confirm, which the
+      // packaged app's ACL does not allow. Use an inline two-click
+      // confirmation instead: the first click just arms the button.
+      if (!installConfirmArmed) {
+        installConfirmArmed = true;
+        btnInstall.textContent = 'Confirm install update';
+        setStatus('Ready to install. Click Confirm install update to continue. Flite may close and restart automatically.', '#1565c0');
+        installConfirmTimeoutTimer = setTimeout(() => {
+          installConfirmTimeoutTimer = null;
+          resetInstallConfirm();
+          setStatus('Update available', '#1565c0');
+        }, UPDATE_INSTALL_CONFIRM_ARM_MS);
+        return;
+      }
+
+      resetInstallConfirm();
 
       if (updateInstallHandoffFallbackTimer) {
         clearTimeout(updateInstallHandoffFallbackTimer);
@@ -2267,6 +2300,7 @@ function initUpdaterPanel() {
           }
           btnCheck.disabled = false;
         } else {
+          resetInstallConfirm();
           setStatus(`Update failed — ${result.message || 'unknown error'}`, '#b71c1c');
           btnInstall.disabled = false;
           btnCheck.disabled = false;
@@ -2294,6 +2328,7 @@ function initUpdaterPanel() {
           return;
         }
 
+        resetInstallConfirm();
         window.__FDMS_UPDATE_INSTALL_IN_PROGRESS__ = false;
         setStatus(`Update did not complete — ${err}`, '#b71c1c');
         btnInstall.disabled = false;
