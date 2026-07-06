@@ -8,6 +8,7 @@ import {
   renderLiveBoard,
   renderHistoryBoard,
   initHistoryExport,
+  initHistoryRetroEntry,
   initVkbLookup,
   initAdminPanel,
   initTimeline,
@@ -2381,6 +2382,7 @@ async function bootstrap() {
       initCancelledSortiesLog();
       initDeletedStripsLog();
       initHistoryExport();
+      initHistoryRetroEntry();
       initHistorySubtabs();
     });
     runStage('vkb-lookup:init', () => initVkbLookup());

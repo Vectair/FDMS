@@ -4139,7 +4139,7 @@ function openModal(contentHtml) {
       if (!backdrop || !backdrop.isConnected) return;
 
       // Find the primary save button
-      const saveBtn = backdrop?.querySelector(".js-save-flight, .js-save-loc, .js-save-edit, .js-save-dup");
+      const saveBtn = backdrop?.querySelector(".js-save-flight, .js-save-loc, .js-save-edit, .js-save-dup, .js-save-retro");
       if (saveBtn) {
         e.preventDefault();
         saveBtn.click();
@@ -8077,6 +8077,429 @@ function openDuplicateMovementModal(m) {
 
     // Close modal (also removes the document keydown handler to prevent leaks)
     closeActiveModal();
+  });
+}
+
+// ─── RETRO-001: Retrospective completed movement entry (from History) ────────
+
+/**
+ * Open the compact "Add retrospective entry" modal used from History to record
+ * a completed movement that was never run through the Live Board lifecycle.
+ * @param {string} prefillDate - YYYY-MM-DD date to prefill DOF with (History
+ *   Calendar selected date, or today when no date filter is active).
+ */
+function openRetrospectiveMovementModal(prefillDate) {
+  const dof = prefillDate || getTodayDateString();
+
+  openModal(`
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Add Retrospective Entry</div>
+        <div class="modal-subtitle">Record a completed movement directly into History</div>
+      </div>
+      <div class="modal-header-buttons">
+        <button class="btn btn-ghost js-minimize-modal" type="button" title="Minimize">−</button>
+        <button class="btn btn-ghost js-close-modal" type="button" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="modal-body modal-sectioned">
+      <section class="modal-section">
+        <h3 class="modal-section-title">Identity</h3>
+        <div class="modal-grid-identity">
+          <div class="modal-field">
+            <label class="modal-label">Callsign <span style="color: #d32f2f;">*</span></label>
+            <input id="retroCallsignCode" class="modal-input" placeholder="SYS106, G-BNKV" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Registration</label>
+            <input id="retroReg" class="modal-input" placeholder="ZM520, G-BNKV" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Aircraft Type</label>
+            <input id="retroType" class="modal-input is-derived" placeholder="EC35, C152" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Captain / Pilot</label>
+            <input id="retroCaptain" class="modal-input" placeholder="Pilot in Command" list="retroCaptainPilotSuggestions" autocomplete="off" />
+            <datalist id="retroCaptainPilotSuggestions"></datalist>
+          </div>
+        </div>
+      </section>
+
+      <section class="modal-section">
+        <h3 class="modal-section-title">Movement</h3>
+        <div class="modal-section-grid-3">
+          <div class="modal-field">
+            <label class="modal-label">Date of Flight <span style="color: #d32f2f;">*</span></label>
+            <input id="retroDOF" type="date" class="modal-input" value="${escapeHtml(dof)}" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Movement Type</label>
+            <select id="retroFlightType" class="modal-select">
+              <option value="DEP" selected>DEP</option>
+              <option value="ARR">ARR</option>
+              <option value="LOC">LOC</option>
+              <option value="OVR">OVR</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">POB</label>
+            <input id="retroPob" class="modal-input" type="number" value="0" min="0" />
+          </div>
+        </div>
+        <div class="modal-section-grid modal-subgrid-gap">
+          <div class="modal-field">
+            <label class="modal-label" id="retroDepAdLabel">POD</label>
+            <input id="retroDepAd" class="modal-input" placeholder="EGOW" value="EGOW" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label" id="retroArrAdLabel">POA</label>
+            <input id="retroArrAd" class="modal-input" placeholder="EGOW" value="" />
+          </div>
+        </div>
+      </section>
+
+      <section class="modal-section">
+        <h3 class="modal-section-title">Actual Times</h3>
+        <div class="modal-section-grid">
+          <div class="modal-field" id="retroTime1Field">
+            <label class="modal-label" id="retroTime1Label">ATD <span style="color: #d32f2f;">*</span></label>
+            <input id="retroDepActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" />
+          </div>
+          <div class="modal-field" id="retroTime2Field" style="display:none;">
+            <label class="modal-label" id="retroTime2Label">ATA</label>
+            <input id="retroArrActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" />
+          </div>
+        </div>
+      </section>
+
+      <section class="modal-section">
+        <h3 class="modal-section-title">Operational</h3>
+        <div class="modal-section-grid-3">
+          <div class="modal-field">
+            <label class="modal-label">T&amp;G</label>
+            <input id="retroTng" class="modal-input" type="number" value="0" min="0" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">O/S</label>
+            <input id="retroOsCount" class="modal-input" type="number" value="0" min="0" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">FIS</label>
+            <input id="retroFisCount" class="modal-input" type="number" value="0" min="0" />
+          </div>
+        </div>
+        <div class="modal-section-grid modal-subgrid-gap">
+          <div class="modal-field">
+            <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
+            <input id="retroEgowCode" class="modal-input is-derived" placeholder="" list="retroEgowCodeOptions" />
+            <datalist id="retroEgowCodeOptions">
+              ${getEgowCodeOptionsHtml()}
+            </datalist>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">EGOW Unit Code <span style="color: #d32f2f;">*</span></label>
+            <input id="retroUnitCode" class="modal-input is-derived" placeholder="" list="retroEgowUnitCodeOptions" />
+            <datalist id="retroEgowUnitCodeOptions">
+              ${getEgowUnitCodeOptionsHtml()}
+            </datalist>
+          </div>
+        </div>
+      </section>
+
+      <!-- Collapsible: Additional details -->
+      <section class="modal-section modal-collapsible">
+        <button type="button" class="modal-expander" aria-expanded="false" data-target="retroAdditionalDetails">
+          <span class="expander-icon">▶</span>
+          Additional details
+          <span class="expander-hint">(optional)</span>
+        </button>
+        <div id="retroAdditionalDetails" class="modal-expander-panel" hidden>
+          <div class="modal-section-grid">
+            <div class="modal-field">
+              <label class="modal-label">Flight Rules</label>
+              <select id="retroRules" class="modal-select">
+                <option value="VFR" selected>VFR</option>
+                <option value="IFR">IFR</option>
+                <option value="Y">Y (IFR to VFR)</option>
+                <option value="Z">Z (VFR to IFR)</option>
+                <option value="SVFR">SVFR</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-section-grid">
+            <div class="modal-field modal-field-full">
+              <label class="modal-label">Remarks</label>
+              <textarea id="retroRemarks" class="modal-textarea" rows="3" placeholder="Optional"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
+      <button class="btn btn-primary js-save-retro" type="button">Add entry</button>
+    </div>
+  `);
+
+  const callsignInput = document.getElementById("retroCallsignCode");
+  const regInput = document.getElementById("retroReg");
+  const typeInput = document.getElementById("retroType");
+  const captainInput = document.getElementById("retroCaptain");
+  const egowCodeInput = document.getElementById("retroEgowCode");
+  const unitCodeInput = document.getElementById("retroUnitCode");
+  const depAdInput = document.getElementById("retroDepAd");
+  const arrAdInput = document.getElementById("retroArrAd");
+  const flightTypeSelect = document.getElementById("retroFlightType");
+
+  makeInputUppercase(callsignInput);
+  makeInputUppercase(regInput);
+  makeInputUppercase(typeInput);
+  makeInputUppercase(egowCodeInput);
+  makeInputUppercase(unitCodeInput);
+  makeInputUppercase(depAdInput);
+  makeInputUppercase(arrAdInput);
+
+  bindPilotDropdownFocus(captainInput);
+
+  // Update dependent field labels/visibility/defaults whenever flight type changes.
+  const updateForFlightType = () => {
+    const ft = (flightTypeSelect?.value || "DEP").toUpperCase();
+    const time1Field = document.getElementById("retroTime1Field");
+    const time2Field = document.getElementById("retroTime2Field");
+    const time1Label = document.getElementById("retroTime1Label");
+    const time2Label = document.getElementById("retroTime2Label");
+    const depAdLabel = document.getElementById("retroDepAdLabel");
+    const arrAdLabel = document.getElementById("retroArrAdLabel");
+
+    if (depAdLabel) depAdLabel.textContent = ft === "OVR" ? "POD (optional)" : "POD";
+    if (arrAdLabel) arrAdLabel.textContent = ft === "OVR" ? "POA (optional)" : "POA";
+
+    const depActualInput = document.getElementById("retroDepActual");
+    const arrActualInput = document.getElementById("retroArrActual");
+
+    if (ft === "DEP") {
+      time1Field.style.display = "";
+      time2Field.style.display = "none";
+      time1Label.innerHTML = `ATD <span style="color: #d32f2f;">*</span>`;
+      if (arrActualInput) arrActualInput.value = "";
+    } else if (ft === "ARR") {
+      time1Field.style.display = "none";
+      time2Field.style.display = "";
+      time2Label.innerHTML = `ATA <span style="color: #d32f2f;">*</span>`;
+      if (depActualInput) depActualInput.value = "";
+    } else if (ft === "LOC") {
+      time1Field.style.display = "";
+      time2Field.style.display = "";
+      time1Label.innerHTML = `ATD <span style="color: #d32f2f;">*</span>`;
+      time2Label.innerHTML = `ATA <span style="color: #d32f2f;">*</span>`;
+    } else if (ft === "OVR") {
+      time1Field.style.display = "";
+      time2Field.style.display = "";
+      time1Label.innerHTML = `ACT <span style="color: #d32f2f;">*</span>`;
+      time2Label.innerHTML = `ALFT (optional)`;
+    }
+
+    // Non-destructive AD defaults: only overwrite fields that are still blank
+    // or still hold the previously auto-filled default (never clobber manual entry).
+    if (ft === "DEP") {
+      applyTrackedAutofill(depAdInput, "EGOW");
+      clearTrackedAutofill(arrAdInput);
+    } else if (ft === "ARR") {
+      clearTrackedAutofill(depAdInput);
+      applyTrackedAutofill(arrAdInput, "EGOW");
+    } else if (ft === "LOC") {
+      applyTrackedAutofill(depAdInput, "EGOW");
+      applyTrackedAutofill(arrAdInput, "EGOW");
+    } else if (ft === "OVR") {
+      clearTrackedAutofill(depAdInput);
+      clearTrackedAutofill(arrAdInput);
+    }
+  };
+  flightTypeSelect?.addEventListener("change", updateForFlightType);
+  // Seed initial tracked-autofill state (DEP default POD=EGOW set inline above).
+  if (depAdInput) { depAdInput.dataset.autofillValue = "EGOW"; }
+  updateForFlightType();
+
+  // Registration → autofill type / EGOW code / pilot suggestions (mirrors New Flight modal).
+  if (regInput && typeInput) {
+    const applyRetroRegAutofill = () => {
+      const regData = lookupRegistration(regInput.value);
+      if (regData) {
+        const vkbType = regData['TYPE'];
+        if (vkbType && vkbType !== '-' && vkbType !== '') {
+          typeInput.value = vkbType;
+        }
+        const egowFlightType = regData['EGOW FLIGHT TYPE'];
+        if (egowFlightType && egowFlightType !== '-' && egowFlightType !== '' && egowCodeInput && !egowCodeInput.value) {
+          egowCodeInput.value = egowFlightType;
+        }
+      } else {
+        const inferredType = inferTypeFromReg(regInput.value);
+        if (inferredType) typeInput.value = inferredType;
+      }
+
+      const pilotDatalist = document.getElementById('retroCaptainPilotSuggestions');
+      if (captainInput && pilotDatalist) {
+        const pilots = lookupAircraftPilots(regInput.value, callsignInput?.value || '');
+        pilotDatalist.innerHTML = pilots.length > 0
+          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+          : '';
+      }
+    };
+    regInput.addEventListener("input", applyRetroRegAutofill);
+    regInput.addEventListener("change", applyRetroRegAutofill);
+    regInput.addEventListener("blur", () => {
+      regInput.value = normalizeEuCivilRegistration(regInput.value);
+      applyRetroRegAutofill();
+    });
+  }
+
+  // Callsign → EGOW attribution (code/unit/captain), non-destructive.
+  callsignInput?.addEventListener("blur", () => {
+    const egowAttrib = lookupEgowAttributionFromCallsign(callsignInput.value || '');
+    if (egowAttrib) {
+      if (egowCodeInput && !egowCodeInput.value && egowAttrib.egowCode) egowCodeInput.value = egowAttrib.egowCode;
+      if (unitCodeInput && !unitCodeInput.value && egowAttrib.unitCode) unitCodeInput.value = egowAttrib.unitCode;
+      if (captainInput && !captainInput.value && egowAttrib.name) captainInput.value = egowAttrib.name;
+    }
+  });
+
+  // Wire collapsible "Additional details" section
+  document.querySelectorAll('.modal-expander').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const panel = document.getElementById(targetId);
+      const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+
+      btn.setAttribute('aria-expanded', !isExpanded);
+      panel.hidden = isExpanded;
+      btn.querySelector('.expander-icon').textContent = isExpanded ? '▶' : '▼';
+    });
+  });
+
+  document.querySelector(".js-save-retro")?.addEventListener("click", () => {
+    const ft = (document.getElementById("retroFlightType")?.value || "DEP").toUpperCase();
+
+    const dofVal = document.getElementById("retroDOF")?.value || getTodayDateString();
+    const dofValidation = validateDate(dofVal);
+    if (!dofValidation.valid) { showToast(dofValidation.error, 'error'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dofVal)) { showToast("Date of flight must be in YYYY-MM-DD format", 'error'); return; }
+
+    const callsignCode = normOperationalText(document.getElementById("retroCallsignCode")?.value);
+    const callsignValidation = validateRequired(callsignCode, "Callsign");
+    if (!callsignValidation.valid) { showToast(callsignValidation.error, 'error'); return; }
+
+    const egowCode = (document.getElementById("retroEgowCode")?.value || "").toUpperCase().trim();
+    if (!egowCode) { showToast("EGOW Code is required", 'error'); return; }
+    if (!isValidEgowCode(egowCode)) { showToast(`EGOW Code must be one of: ${getValidEgowCodes().join(', ')}`, 'error'); return; }
+
+    const unitCode = normOperationalText(document.getElementById("retroUnitCode")?.value);
+    if (!unitCode) { showToast("EGOW Unit code is required", 'error'); return; }
+
+    let depActual = document.getElementById("retroDepActual")?.value || "";
+    let arrActual = document.getElementById("retroArrActual")?.value || "";
+
+    const depActualValidation = validateTime(depActual);
+    if (!depActualValidation.valid) { showToast(`Actual time: ${depActualValidation.error}`, 'error'); return; }
+    if (depActualValidation.normalized) depActual = depActualValidation.normalized;
+
+    const arrActualValidation = validateTime(arrActual);
+    if (!arrActualValidation.valid) { showToast(`Actual time: ${arrActualValidation.error}`, 'error'); return; }
+    if (arrActualValidation.normalized) arrActual = arrActualValidation.normalized;
+
+    if ((ft === "DEP" || ft === "LOC" || ft === "OVR") && !depActual) {
+      showToast(ft === "OVR" ? "Actual crossing time (ACT) is required" : "Actual departure time (ATD) is required", 'error');
+      return;
+    }
+    if ((ft === "ARR" || ft === "LOC") && !arrActual) {
+      showToast("Actual arrival time (ATA) is required", 'error');
+      return;
+    }
+
+    const pobValidation = validateNumberRange(document.getElementById("retroPob")?.value, 0, 999, "POB");
+    if (!pobValidation.valid) { showToast(pobValidation.error, 'error'); return; }
+    const tngValidation = validateNumberRange(document.getElementById("retroTng")?.value, 0, 99, "T&G count");
+    if (!tngValidation.valid) { showToast(tngValidation.error, 'error'); return; }
+    const osValidation = validateNumberRange(document.getElementById("retroOsCount")?.value, 0, 99, "O/S count");
+    if (!osValidation.valid) { showToast(osValidation.error, 'error'); return; }
+    const fisValidation = validateNumberRange(document.getElementById("retroFisCount")?.value, 0, 99, "FIS count");
+    if (!fisValidation.valid) { showToast(fisValidation.error, 'error'); return; }
+
+    const depAd = normOperationalText(document.getElementById("retroDepAd")?.value);
+    const arrAd = normOperationalText(document.getElementById("retroArrAd")?.value);
+    if (!isValidIcaoAd(depAd)) { showToast("POD must be a valid ICAO-style AD code (4 letters/digits)", 'error'); return; }
+    if (!isValidIcaoAd(arrAd)) { showToast("POA must be a valid ICAO-style AD code (4 letters/digits)", 'error'); return; }
+
+    const registration = normalizeEuCivilRegistration(document.getElementById("retroReg")?.value || "");
+    const regData = lookupRegistration(registration);
+    const operator = regData ? (regData['OPERATOR'] || "") : "";
+    const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
+    const aircraftType = normOperationalText(document.getElementById("retroType")?.value);
+    const callsignVoice = getVoiceCallsignForDisplay(callsignCode, registration);
+
+    const wtcRaw = getWTC(aircraftType, ft, getConfig().wtcSystem || "ICAO") || "";
+    const wtc = (wtcRaw.trim().toUpperCase().match(/^[A-Z]+/) || [""])[0];
+
+    const pob = parseInt(document.getElementById("retroPob")?.value || "0", 10) || 0;
+    const tngCount = parseInt(document.getElementById("retroTng")?.value || "0", 10) || 0;
+    const osCount = parseInt(document.getElementById("retroOsCount")?.value || "0", 10) || 0;
+    const fisCount = parseInt(document.getElementById("retroFisCount")?.value || "0", 10) || 0;
+
+    let movement = {
+      status: "COMPLETED",
+      callsignCode: callsignCode,
+      callsignVoice: callsignVoice,
+      registration: registration,
+      operator: operator,
+      type: aircraftType,
+      popularName: popularName,
+      wtc: wtc,
+      depAd: depAd,
+      depName: getLocationName(depAd),
+      arrAd: arrAd,
+      arrName: getLocationName(arrAd),
+      depActual: depActual,
+      arrActual: arrActual,
+      dof: dofVal,
+      rules: normOperationalText(document.getElementById("retroRules")?.value) || "VFR",
+      flightType: ft,
+      isLocal: ft === "LOC",
+      tngCount: tngCount,
+      osCount: osCount,
+      fisCount: fisCount,
+      egowCode: egowCode,
+      unitCode: unitCode,
+      captain: document.getElementById("retroCaptain")?.value || "",
+      pob: pob,
+      remarks: normOperationalText(document.getElementById("retroRemarks")?.value),
+      formation: null,
+      entrySource: "retrospective",
+      retrospectiveEntry: true,
+      retrospectiveEnteredAtUtc: new Date().toISOString(),
+    };
+
+    movement = enrichMovementData(movement);
+    createMovement(movement);
+    renderHistoryBoard();
+    renderLiveBoard();
+    if (window.updateDailyStats) window.updateDailyStats();
+    if (window.updateFisCounters) window.updateFisCounters();
+    showToast("Retrospective movement added to History", 'success');
+    closeActiveModal();
+  });
+}
+
+/**
+ * Wire the "Add retrospective entry" button in the History Strip Board actions
+ * row. Opens the retrospective entry modal prefilled with the active History
+ * Calendar date filter, or today when no date filter is selected.
+ */
+export function initHistoryRetroEntry() {
+  const btn = byId("btnAddRetrospectiveEntry");
+  if (!btn) return;
+  safeOn(btn, "click", () => {
+    openRetrospectiveMovementModal(historyCalendarSelectedDate || getTodayDateString());
   });
 }
 
