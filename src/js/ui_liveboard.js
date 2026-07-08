@@ -9147,6 +9147,31 @@ function transitionToCancelled(id) {
 }
 
 /**
+ * Show a compact in-app confirmation dialog (title + message + Cancel/Delete
+ * buttons). Calls onConfirm() only if the user confirms; backdrop click or
+ * Cancel dismiss without action. Never uses native confirm() — packaged Tauri
+ * builds reject window.confirm() calls via the dialog ACL.
+ */
+function _showDeleteStripConfirm(title, message, onConfirm) {
+  const bd = document.createElement('div');
+  bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:3000;display:flex;align-items:center;justify-content:center;';
+  bd.innerHTML = `<div style="background:#fff;border-radius:6px;padding:20px 24px 16px;max-width:420px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.25);font-family:inherit;">
+    <div style="font-size:14px;font-weight:700;margin-bottom:8px;">${escapeHtml(title)}</div>
+    <div style="font-size:13px;line-height:1.5;margin-bottom:16px;white-space:pre-wrap;color:#333;">${escapeHtml(message)}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-secondary" id="_deleteStripConfirmCancel" type="button">Cancel</button>
+      <button class="btn btn-danger" id="_deleteStripConfirmOk" type="button">Delete</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(bd);
+  const cleanup = () => { if (bd.parentNode) document.body.removeChild(bd); };
+  bd.querySelector('#_deleteStripConfirmCancel').addEventListener('click', cleanup);
+  bd.querySelector('#_deleteStripConfirmOk').addEventListener('click', () => { cleanup(); onConfirm(); });
+  bd.addEventListener('click', e => { if (e.target === bd) cleanup(); });
+}
+
+/**
  * Soft-delete a strip: move it to the Deleted Strips retention store.
  * Strip disappears from ordinary operational views immediately.
  * Recoverable via Deleted Strips tab until retention window expires (24 h).
@@ -9159,42 +9184,45 @@ function performDeleteStrip(movement) {
   if (!movement) return;
 
   const callsign = movement.callsignCode || 'this flight';
-  if (!confirm(`Delete strip ${callsign} (#${movement.id})?\nThe strip will be held in Deleted Strips for ${DELETED_STRIPS_RETENTION_HOURS} hours and can be restored before expiry.`)) {
-    return;
-  }
 
-  const deletedAt = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + DELETED_STRIPS_RETENTION_HOURS * 60 * 60 * 1000).toISOString();
+  _showDeleteStripConfirm(
+    'Delete strip?',
+    `Delete strip ${callsign} (#${movement.id})?\nThe strip will be held in Deleted Strips for ${DELETED_STRIPS_RETENTION_HOURS} hours and can be restored before expiry.`,
+    () => {
+      const deletedAt = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + DELETED_STRIPS_RETENTION_HOURS * 60 * 60 * 1000).toISOString();
 
-  // Build deleted-strip log entry with full snapshot
-  const logEntry = {
-    id: `del_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    sourceMovementId: movement.id,
-    deletedAt,
-    expiresAt,
-    snapshot: JSON.parse(JSON.stringify(movement)),
-  };
+      // Build deleted-strip log entry with full snapshot
+      const logEntry = {
+        id: `del_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        sourceMovementId: movement.id,
+        deletedAt,
+        expiresAt,
+        snapshot: JSON.parse(JSON.stringify(movement)),
+      };
 
-  appendDeletedStrip(logEntry);
+      appendDeletedStrip(logEntry);
 
-  // Clear booking's linkedStripId if present
-  if (movement.bookingId) {
-    const booking = getBookingById(movement.bookingId);
-    if (booking && booking.linkedStripId === movement.id) {
-      updateBookingById(movement.bookingId, { linkedStripId: null });
+      // Clear booking's linkedStripId if present
+      if (movement.bookingId) {
+        const booking = getBookingById(movement.bookingId);
+        if (booking && booking.linkedStripId === movement.id) {
+          updateBookingById(movement.bookingId, { linkedStripId: null });
+        }
+      }
+
+      // Remove from active movements store
+      deleteMovement(movement.id);
+
+      showToast(`${callsign} moved to Deleted Strips (recoverable for ${DELETED_STRIPS_RETENTION_HOURS}h)`, 'info');
+      renderLiveBoard();
+      renderHistoryBoard();
+      renderCancelledSortiesLog(); // update if a CANCELLED strip was deleted
+      renderDeletedStripsLog();
+      if (window.updateDailyStats) window.updateDailyStats();
+      if (window.updateFisCounters) window.updateFisCounters();
     }
-  }
-
-  // Remove from active movements store
-  deleteMovement(movement.id);
-
-  showToast(`${callsign} moved to Deleted Strips (recoverable for ${DELETED_STRIPS_RETENTION_HOURS}h)`, 'info');
-  renderLiveBoard();
-  renderHistoryBoard();
-  renderCancelledSortiesLog(); // update if a CANCELLED strip was deleted
-  renderDeletedStripsLog();
-  if (window.updateDailyStats) window.updateDailyStats();
-  if (window.updateFisCounters) window.updateFisCounters();
+  );
 }
 
 /* -----------------------------
