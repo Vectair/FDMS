@@ -8198,7 +8198,7 @@ function openRetrospectiveMovementModal(prefillDate) {
             </datalist>
           </div>
           <div class="modal-field">
-            <label class="modal-label">EGOW Unit Code <span style="color: #d32f2f;">*</span></label>
+            <label class="modal-label" id="retroUnitCodeLabel">EGOW Unit Code</label>
             <input id="retroUnitCode" class="modal-input is-derived" placeholder="" list="retroEgowUnitCodeOptions" />
             <datalist id="retroEgowUnitCodeOptions">
               ${getEgowUnitCodeOptionsHtml()}
@@ -8250,7 +8250,38 @@ function openRetrospectiveMovementModal(prefillDate) {
   const unitCodeInput = document.getElementById("retroUnitCode");
   const depAdInput = document.getElementById("retroDepAd");
   const arrAdInput = document.getElementById("retroArrAd");
+  const pobInput = document.getElementById("retroPob");
   const flightTypeSelect = document.getElementById("retroFlightType");
+
+  // Show the red "required" marker on Unit Code only when the current EGOW
+  // code actually requires one (e.g. BM), mirroring the live new-strip rule.
+  const updateUnitCodeRequiredMarker = () => {
+    const label = document.getElementById("retroUnitCodeLabel");
+    if (!label) return;
+    const code = (egowCodeInput?.value || "").toUpperCase().trim();
+    label.innerHTML = egowCodeRequiresUnitCode(code)
+      ? `EGOW Unit Code <span style="color: #d32f2f;">*</span>`
+      : `EGOW Unit Code`;
+  };
+  egowCodeInput?.addEventListener("input", updateUnitCodeRequiredMarker);
+  egowCodeInput?.addEventListener("change", updateUnitCodeRequiredMarker);
+  updateUnitCodeRequiredMarker();
+
+  // Non-destructive FIS default: 1 while OVR is selected, 0 otherwise. Tracks
+  // its own last-applied value (like applyTrackedAutofill/clearTrackedAutofill)
+  // so a manually edited FIS count is never overwritten by a later type change.
+  const fisCountInput = document.getElementById("retroFisCount");
+  if (fisCountInput) fisCountInput.dataset.fisAutofillValue = "0";
+  const applyFisFlightTypeDefault = (ft) => {
+    if (!fisCountInput) return;
+    const target = ft === "OVR" ? "1" : "0";
+    const current = fisCountInput.value.trim();
+    const previousAuto = fisCountInput.dataset.fisAutofillValue || "";
+    if (current === "" || current === previousAuto) {
+      fisCountInput.value = target;
+      fisCountInput.dataset.fisAutofillValue = target;
+    }
+  };
 
   makeInputUppercase(callsignInput);
   makeInputUppercase(regInput);
@@ -8315,6 +8346,8 @@ function openRetrospectiveMovementModal(prefillDate) {
       clearTrackedAutofill(depAdInput);
       clearTrackedAutofill(arrAdInput);
     }
+
+    applyFisFlightTypeDefault(ft);
   };
   flightTypeSelect?.addEventListener("change", updateForFlightType);
   // Seed initial tracked-autofill state (DEP default POD=EGOW set inline above).
@@ -8333,18 +8366,27 @@ function openRetrospectiveMovementModal(prefillDate) {
         const egowFlightType = regData['EGOW FLIGHT TYPE'];
         if (egowFlightType && egowFlightType !== '-' && egowFlightType !== '' && egowCodeInput && !egowCodeInput.value) {
           egowCodeInput.value = egowFlightType;
+          updateUnitCodeRequiredMarker();
         }
       } else {
         const inferredType = inferTypeFromReg(regInput.value);
         if (inferredType) typeInput.value = inferredType;
       }
 
+      // Aircraft pilot suggestions from registration — non-destructive PIC autofill
+      // when exactly one known pilot and the EGOW category isn't a visiting one.
       const pilotDatalist = document.getElementById('retroCaptainPilotSuggestions');
       if (captainInput && pilotDatalist) {
         const pilots = lookupAircraftPilots(regInput.value, callsignInput?.value || '');
         pilotDatalist.innerHTML = pilots.length > 0
           ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
+        const category = (egowCodeInput?.value || '').toUpperCase().trim();
+        if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
+          applyTrackedAutofill(captainInput, pilots[0].displayName);
+        } else {
+          clearTrackedAutofill(captainInput);
+        }
       }
     };
     regInput.addEventListener("input", applyRetroRegAutofill);
@@ -8353,17 +8395,68 @@ function openRetrospectiveMovementModal(prefillDate) {
       regInput.value = normalizeEuCivilRegistration(regInput.value);
       applyRetroRegAutofill();
     });
+    // Soft hyphen-insertion while typing (mirrors New Flight modal's debounce).
+    let _retroRegNormDebounce = null;
+    regInput.addEventListener("input", () => {
+      if (_retroRegNormDebounce) clearTimeout(_retroRegNormDebounce);
+      _retroRegNormDebounce = setTimeout(() => {
+        const before = regInput.value;
+        const after = normalizeEuCivilRegistration(before);
+        if (after !== before && !before.includes("-") && after.includes("-")) {
+          regInput.value = after;
+        }
+      }, 250);
+    });
   }
 
-  // Callsign → EGOW attribution (code/unit/captain), non-destructive.
-  callsignInput?.addEventListener("blur", () => {
-    const egowAttrib = lookupEgowAttributionFromCallsign(callsignInput.value || '');
-    if (egowAttrib) {
-      if (egowCodeInput && !egowCodeInput.value && egowAttrib.egowCode) egowCodeInput.value = egowAttrib.egowCode;
-      if (unitCodeInput && !unitCodeInput.value && egowAttrib.unitCode) unitCodeInput.value = egowAttrib.unitCode;
-      if (captainInput && !captainInput.value && egowAttrib.name) captainInput.value = egowAttrib.name;
+  // Callsign → UAM/POB default, EGOW attribution (code/unit/captain), and
+  // fixed-callsign registration lookup — all non-destructive, mirrors New Flight modal.
+  const updateRetroCallsignDerivedFields = () => {
+    const fullCallsign = (callsignInput?.value || '').toUpperCase().trim();
+
+    // UAM* pattern → POB = 2 (only when POB is still blank/0, never overwrite a manual value)
+    if (fullCallsign.startsWith('UAM') && pobInput && (pobInput.value === '0' || !pobInput.value)) {
+      pobInput.value = '2';
     }
-  });
+
+    if (fullCallsign) {
+      const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
+      const pilotDatalist = document.getElementById('retroCaptainPilotSuggestions');
+      const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
+      if (pilotDatalist) {
+        pilotDatalist.innerHTML = pilots.length > 0
+          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+          : '';
+      }
+      if (egowAttrib) {
+        egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
+        egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
+        const captainName = resolveCaptainAttribution(egowAttrib.egowCode, egowAttrib, pilots);
+        captainName ? applyTrackedAutofill(captainInput, captainName) : clearTrackedAutofill(captainInput);
+      } else {
+        clearTrackedAutofill(egowCodeInput);
+        clearTrackedAutofill(unitCodeInput);
+        if (pilots.length === 1) applyTrackedAutofill(captainInput, pilots[0].displayName);
+        else clearTrackedAutofill(captainInput);
+      }
+      updateUnitCodeRequiredMarker();
+    }
+
+    // If callsign matches a fixed callsign, auto-fill registration (only if registration is empty)
+    if (fullCallsign && regInput && (!regInput.value || regInput.value === '')) {
+      const regData = lookupRegistrationByFixedCallsign(fullCallsign);
+      if (regData) {
+        const registration = regData['REGISTRATION'] || '';
+        if (registration && registration !== '-') {
+          regInput.value = normalizeEuCivilRegistration(registration);
+          // Trigger registration input event to update dependent fields (incl. pilot suggestions)
+          regInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+    }
+  };
+  callsignInput?.addEventListener("input", updateRetroCallsignDerivedFields);
+  callsignInput?.addEventListener("change", updateRetroCallsignDerivedFields);
 
   // Wire collapsible "Additional details" section
   document.querySelectorAll('.modal-expander').forEach(btn => {
@@ -8395,7 +8488,10 @@ function openRetrospectiveMovementModal(prefillDate) {
     if (!isValidEgowCode(egowCode)) { showToast(`EGOW Code must be one of: ${getValidEgowCodes().join(', ')}`, 'error'); return; }
 
     const unitCode = normOperationalText(document.getElementById("retroUnitCode")?.value);
-    if (!unitCode) { showToast("EGOW Unit code is required", 'error'); return; }
+    if (egowCodeRequiresUnitCode(egowCode) && !unitCode) {
+      showToast("EGOW Unit code is required for BM flights", 'error');
+      return;
+    }
 
     let depActual = document.getElementById("retroDepActual")?.value || "";
     let arrActual = document.getElementById("retroArrActual")?.value || "";
