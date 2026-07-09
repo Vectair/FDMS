@@ -4301,15 +4301,30 @@ function resolveCaptainAttribution(category, egowAttrib, pilots) {
  *
  * @param {string} fullCallsign - Combined callsign code + flight number (may be empty).
  * @param {string} registration - Current registration field value (may be empty).
- * @param {string} egowCodeValue - Current EGOW code field value, used as the category
- *   fallback when callsign attribution doesn't independently supply one.
+ * @param {HTMLInputElement|null} egowCodeInput - The current EGOW code field element, used
+ *   (via its .value) as the category fallback when callsign attribution doesn't independently
+ *   supply one. Passing the element (rather than a raw string) lets the resolver tell a stale
+ *   callsign-tracked-autofill value — left over from a callsign that no longer resolves any
+ *   attribution — apart from a manual entry or a registration-derived value (which is applied
+ *   as a plain .value assignment, never tracked), so a stale visiting category can't suppress
+ *   a still-valid registration-only PIC.
  * @returns {{ name: string|null, egowAttrib: object|null, suggestionPilots: Array }}
  */
-function resolvePicAutofillForContext(fullCallsign, registration, egowCodeValue) {
+function resolvePicAutofillForContext(fullCallsign, registration, egowCodeInput) {
   const cs = String(fullCallsign || '').toUpperCase().trim();
   const reg = String(registration || '').trim();
   const egowAttrib = cs ? lookupEgowAttributionFromCallsign(cs) : null;
   const suggestionPilots = lookupAircraftPilots(reg, cs);
+
+  // Only trust the EGOW-code field's current value as a category fallback when it isn't a
+  // stale callsign-tracked-autofill leftover (i.e. the callsign no longer justifies it via
+  // egowAttrib, yet the field still holds exactly the value applyTrackedAutofill last wrote).
+  // Manual entries and registration-derived codes (set via plain .value assignment, never
+  // tracked) always pass through untouched.
+  const rawEgowCodeValue = egowCodeInput?.value || '';
+  const trackedEgowCodeValue = egowCodeInput?.dataset?.autofillValue || '';
+  const isStaleCallsignEgowCode = !egowAttrib && rawEgowCodeValue !== '' && rawEgowCodeValue === trackedEgowCodeValue;
+  const egowCodeValue = isStaleCallsignEgowCode ? '' : rawEgowCodeValue;
   const category = (egowAttrib?.egowCode || egowCodeValue || '').toUpperCase().trim();
 
   if (VISITING_EGOW_CATEGORIES.includes(category)) {
@@ -4797,7 +4812,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
         const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
         const number = flightNumberInput?.value?.trim() || '';
         const fullCallsign = code + number;
-        const { name: captainName, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput.value, egowCodeInput?.value || '');
+        const { name: captainName, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput.value, egowCodeInput);
         pilotDatalist.innerHTML = suggestionPilots.length > 0
           ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
@@ -4829,7 +4844,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     {
       const captainEl = document.getElementById('newCaptain');
       const pilotDatalist = document.getElementById('newCaptainPilotSuggestions');
-      const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput?.value || '');
+      const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput);
       if (pilotDatalist) {
         pilotDatalist.innerHTML = suggestionPilots.length > 0
           ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
@@ -5983,7 +5998,7 @@ function openNewLocFlightModal() {
         const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
         const number = flightNumberInput?.value?.trim() || '';
         const fullCallsign = code + number;
-        const { name: captainName, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput.value, egowCodeInput?.value || '');
+        const { name: captainName, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput.value, egowCodeInput);
         pilotDl.innerHTML = suggestionPilots.length > 0
           ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
@@ -6013,7 +6028,7 @@ function openNewLocFlightModal() {
     {
       const captainEl = document.getElementById('newLocCaptain');
       const pilotDl = document.getElementById('newLocCaptainPilotSuggestions');
-      const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput?.value || '');
+      const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput);
       if (pilotDl) {
         pilotDl.innerHTML = suggestionPilots.length > 0
           ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
@@ -7008,7 +7023,7 @@ function openEditMovementModal(m) {
         const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
         const number = flightNumberInput?.value?.trim() || '';
         const fullCallsign = code + number;
-        const { name: captainName, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput.value, egowCodeInput?.value || '');
+        const { name: captainName, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput.value, egowCodeInput);
         pilotDatalist.innerHTML = suggestionPilots.length > 0
           ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
@@ -7040,7 +7055,7 @@ function openEditMovementModal(m) {
     {
       const captainEl = document.getElementById('editCaptain');
       const pilotDatalist = document.getElementById('editCaptainPilotSuggestions');
-      const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput?.value || '');
+      const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput);
       if (pilotDatalist) {
         pilotDatalist.innerHTML = suggestionPilots.length > 0
           ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
@@ -8433,7 +8448,7 @@ function openRetrospectiveMovementModal(prefillDate, initialFlightType) {
       const pilotDatalist = document.getElementById('retroCaptainPilotSuggestions');
       if (captainInput && pilotDatalist) {
         const fullCallsign = (callsignInput?.value || '').toUpperCase().trim();
-        const { name: captainName, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput.value, egowCodeInput?.value || '');
+        const { name: captainName, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput.value, egowCodeInput);
         pilotDatalist.innerHTML = suggestionPilots.length > 0
           ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
@@ -8477,7 +8492,7 @@ function openRetrospectiveMovementModal(prefillDate, initialFlightType) {
     // rather than surviving just because the callsign field is now blank.
     {
       const pilotDatalist = document.getElementById('retroCaptainPilotSuggestions');
-      const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput?.value || '');
+      const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput);
       if (pilotDatalist) {
         pilotDatalist.innerHTML = suggestionPilots.length > 0
           ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
