@@ -1,0 +1,355 @@
+Pre-V1 Flite hardening order
+1. Fix Admin backup/restore completeness
+
+Add vectair_fdms_bookings_v1 to the session backup/restore key list and ensure bookings are included in data counts. Your verification showed bookings are stored under that key but omitted from SESSION_BACKUP_KEYS.
+
+Acceptance test:
+
+Create booking.
+Create linked strip.
+Export backup.
+Clear/replace data.
+Restore backup.
+Confirm booking, linked strip, calendar/profile/reference data and reports data are all still present.
+2. Replace all remaining native confirm() / alert() calls
+
+Do this early because native dialogs are a packaged-app reliability risk. Your search confirmed remaining native dialog calls in booking, reports, reporting export fallback, and return-to-planned.
+
+Replace with:
+
+in-app confirmation modal for destructive actions
+toast or inline validation message for simple success/failure
+no browser-native dialogs anywhere in operational code
+
+Specific areas:
+
+Booking cancel linked strips.
+Booking delete.
+Calendar event delete.
+Booking profile delete.
+Reports hours save/clear validation.
+Reports hours clear confirmation.
+XLSX export fallback error.
+Live Board return-to-planned confirmation.
+3. Fix stale/prototype user-facing copy
+
+Remove or rewrite any text that suggests the app is still a prototype. The worst confirmed example is the Booking page text saying the strip wiring is a future step, even though booking-to-strip creation now exists.
+
+Search for terms like:
+
+Select-String -Path .\src\**\*.* -Pattern "prototype|next step|actual Live Board|TODO|dev only|test|harness|temporary" -CaseSensitive:$false
+
+Acceptance test:
+
+No normal operator screen contains misleading development-era wording.
+Browser-harness wording only appears when actually running in browser/dev mode.
+4. Fix booking-to-strip link completeness
+
+When a booking creates a movement strip, update the booking with the created strip ID immediately. At present, the movement gets bookingId, but the booking-side linkedStripId path is fragile/asymmetric.
+
+This should be fixed before UI polish because the Booking workflow is one of the core operational flows.
+
+Acceptance test:
+
+Create booking and strip.
+Open booking drawer/details.
+Confirm linked strip is visible or traceable.
+Cancel booking with linked strip.
+Delete/cancel linked strip.
+Run reconcile and confirm no stale links remain.
+5. Run a packaged-app crash/failure sweep
+
+After the dialog and booking-link fixes, run through every ordinary operator action in the installed Tauri app, not browser mode.
+
+Minimum smoke test:
+
+New LOC.
+New DEP.
+New ARR.
+New OVR.
+Edit strip.
+Complete strip.
+Return strip to planned.
+Cancel strip.
+Delete strip.
+Restore deleted strip.
+Create booking.
+Create booking and strip.
+Cancel booking.
+Delete booking.
+Add/delete calendar event.
+Save/clear report hours.
+Export CSV.
+Export XLSX.
+Build/copy METAR.
+Search VKB.
+Admin backup.
+Admin restore.
+
+Any crash, blank screen, failed permission, unhandled error toast, or stuck modal is a blocker.
+
+6. Resolve version/release hygiene
+
+Your local check confirmed package.json, Cargo.toml, and tauri.conf.json are still at 0.9.0, while updater-test artefacts have used later versions.
+
+Before V1:
+
+Decide the next version path.
+Align all version fields.
+Ensure the GitHub latest release does not point operational users at a test build.
+Keep test releases clearly marked or remove them from latest-channel exposure.
+Confirm the app reports the expected version in Admin > Version & Updates.
+
+Suggested scheme:
+
+0.9.x = pre-V1 internal hardening builds
+1.0.0-rc.1 = operational release candidate
+1.0.0 = EGOW V1 deployment build
+7. Rotate updater signing key
+
+Because the previous private key was pasted into the project/chat context, treat it as compromised for any operational deployment.
+
+Do this after version hygiene but before final update testing:
+
+Generate new Tauri updater signing key pair.
+Replace public key in tauri.conf.json.
+Store private key somewhere outside repo/chat.
+Build signed updater artefacts.
+Test update from old operational build to new signed build.
+Confirm old compromised key is no longer used.
+8. Clean Admin presentation for operational use
+
+Admin can remain available, but it should not look like a developer console first and an operator tool second.
+
+Work items:
+
+Rename or annotate Developer as clearly non-operational.
+Rename or annotate Danger Zone as “Do not use during live ops” or equivalent.
+Add explanatory text to Data Management explaining backup/restore.
+Keep update controls clear and non-automatic.
+Separate “System Health” from deeper diagnostics if possible.
+
+Admin currently exposes many sections, including Developer and Danger Zone. That is workable, but it needs clearer guardrails for colleagues.
+
+9. Clarify core workflow labels and screen purpose
+
+This is not visual polish; it is operational usability.
+
+Review the top-level tabs and internal sub-tabs to make sure a colleague can infer where to go:
+
+Live Board: current operational strips.
+Booking: visiting aircraft booking and planned strip creation.
+Calendar: non-strip event planning.
+History: completed movement lookup and retrospective entries.
+Cancelled: cancelled sorties and deleted-strip recovery.
+Reports: official monthly return and exports.
+VKB Lookup: operational reference lookup.
+Admin > Reference Data: editing local reference data.
+
+The app’s top-level breadth is already clear in structure. The remaining job is making sure labels and help text do not blur responsibilities.
+
+10. Add concise workflow help
+
+Add either an in-app Quick Guide panel or a pinned operational quick-start document. This should be done after labels are settled, otherwise the guide will describe unstable UI.
+
+Minimum guide sections:
+
+Start of day.
+Add a visiting aircraft booking.
+Add a local movement.
+Add an arrival/departure/overflight directly.
+Complete a movement.
+Cancel a movement.
+Delete and restore a strip.
+Find a past movement.
+Add retrospective entry.
+Build/copy METAR.
+Export monthly return.
+Backup data.
+What to do if something looks wrong.
+What not to touch during live ops.
+
+This should be written for EGOW colleagues, not developers.
+
+11. Improve action feedback consistency
+
+After major actions, the app should always tell the operator what happened.
+
+Standardise feedback for:
+
+Booking created.
+Booking created and strip added.
+Strip completed.
+Strip cancelled.
+Strip deleted.
+Strip restored.
+Calendar event saved/deleted.
+Report exported.
+Backup exported.
+Backup restored.
+METAR copied.
+Update available / no update / update failed.
+
+Use toasts for routine success, inline warnings for validation, and modals only for destructive confirmation.
+
+12. Clarify Cancelled vs Deleted behaviour
+
+The structure is good: Cancelled Sorties and Deleted Strips are separate, and Deleted Strips are recoverable for 24 hours.
+
+Still, add a little more operator-facing explanation:
+
+Cancelled = real sortie cancelled; retained as audit/history.
+Deleted = accidental/wrong strip removal; recoverable for 24 hours.
+Completed = normal flown/handled movement.
+
+This reduces the chance that colleagues use Delete when they should Cancel.
+
+13. Review History/Search duplication
+
+History currently has Strip Board, Calendar and Search/Table views, with overlapping filters.
+
+Do not remove functionality pre-V1 unless necessary. Instead, clarify purpose:
+
+Strip Board: recent operational review.
+Calendar: find movements by date.
+Search/Table: deep search and export.
+
+Add one-line descriptions if needed.
+
+14. Review Reports language and required workflows
+
+Reports has Official Monthly Return, Dashboard KPIs, Insights & Leaderboards and Cancellation Report.
+
+For V1, make sure the official workflow is obvious:
+
+How to select month.
+How to enter daily hours.
+How to export CSV/XLSX.
+What the monthly return counts mean.
+Difference between Monthly Return and Dashboard/Insights.
+
+Do not spend much time polishing “Insights” unless it is operationally required.
+
+15. Review METAR Builder operator flow
+
+The METAR Builder is feature-rich, with live output, validation, copy, recall, reset, structured fields and optional accordions.
+
+Pre-V1 focus should be:
+
+Invalid/incomplete report cannot be copied accidentally.
+Required fields are obvious.
+CAVOK behaviour is obvious.
+Colour-state behaviour is obvious if enabled.
+Recall Previous is predictable.
+Reset does not surprise the user.
+Copy feedback is clear.
+
+This is a specialist feature, so it needs correctness more than beauty.
+
+16. VKB/reference-data usability check
+
+The VKB Lookup page is correctly structured with global search and category tabs.
+
+Pre-V1 checks:
+
+Search is fast enough for operational use.
+Registrations grid no longer causes unacceptable lag.
+User understands difference between VKB Lookup and Admin Reference Data.
+Editing reference data gives clear confirmation.
+Hidden/overridden local data can be understood and recovered if needed.
+17. Package/install/update full drill
+
+After signing and version changes, do a complete install/update drill:
+
+Install current operational test build.
+Use app enough to create local data.
+Publish next test release.
+Check for updates from Admin.
+Download/install update.
+App restarts cleanly.
+Data persists.
+Version displays correctly.
+No stale update prompt remains.
+No toast error flashes during expected install/restart path.
+
+This must be tested in the installed Windows app.
+
+18. Create EGOW operational quick-start sheet
+
+This is separate from in-app help. It should be printable or saved as a local PDF/Markdown.
+
+Keep it short: probably 2–4 pages.
+
+Sections:
+
+Normal daily workflow.
+Movement statuses.
+Booking workflow.
+Cancel vs Delete.
+History lookup.
+METAR builder.
+Reports/monthly return.
+Backup/restore.
+Update procedure.
+“Call Stuart / revert to fallback process if…”
+
+This should be written after the UI text and labels are final.
+
+19. Colleague-on-leave simulation
+
+Run this before calling it V1.
+
+Give a colleague the app and the quick-start sheet. Do not walk them through it live unless they get stuck. Ask them to complete:
+
+Add a booking.
+Create strip from booking.
+Add local movement.
+Add FIS/OVR.
+Complete movement.
+Cancel movement.
+Delete and restore strip.
+Find a past movement.
+Add retrospective entry.
+Build/copy METAR.
+Export monthly return.
+Backup data.
+Check for updates.
+
+Record every point where they hesitate, misinterpret, or ask “where is that?”
+
+Those are V1 usability defects.
+
+20. Final V1 release branch and freeze
+
+Once the colleague simulation passes:
+
+Create release/v1.0.0 or equivalent.
+Only accept blockers onto that branch.
+Update version to 1.0.0.
+Build signed installer/updater artefacts.
+Install on the operational machine.
+Export a backup before first operational use.
+Record rollback procedure.
+Tag the release.
+Keep the exact installer artefact.
+Condensed order
+Backup/restore bookings.
+Remove native dialogs.
+Remove stale prototype copy.
+Fix booking/strip link symmetry.
+Packaged-app smoke test.
+Version/release hygiene.
+Rotate updater signing key.
+Admin operational safety cleanup.
+Clarify labels/screen purposes.
+Add workflow help.
+Standardise action feedback.
+Clarify Cancelled vs Deleted.
+Rationalise History/Search purpose.
+Reports workflow clarity.
+METAR Builder workflow check.
+VKB/reference-data usability check.
+Install/update drill.
+EGOW quick-start sheet.
+Colleague-on-leave simulation.
+Final V1 release branch, build, tag and deploy.
