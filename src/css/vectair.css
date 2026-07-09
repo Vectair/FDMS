@@ -504,6 +504,18 @@ body {
   background: color-mix(in srgb, var(--ft-ovr) 35%, #fff 65%);
 }
 
+/* Retrospective strip-type dropdown — stacks the same flight-type buttons/colours
+   used by the New DEP/ARR/LOC/OVR toolbar, just laid out vertically in a menu. */
+.js-retro-type-menu .btn-ft {
+  display: block;
+  width: 100%;
+  margin-bottom: 4px;
+  text-align: center;
+}
+.js-retro-type-menu .btn-ft:last-child {
+  margin-bottom: 0;
+}
+
 /* Table */
 .table-container {
   max-height: 520px;
