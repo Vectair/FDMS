@@ -1076,8 +1076,10 @@ function initAdminPanelHandlers() {
             try {
               for (const key of Object.keys(s)) {
                 if (!isGenericOverflightStorageKey(key)) continue;
-                const n = parseInt(s[key], 10);
-                if (Number.isFinite(n)) genericOverflightsTotal += n;
+                const raw = s[key];
+                if (typeof raw !== 'string' || !/^\d+$/.test(raw.trim())) continue;
+                const n = Number(raw.trim());
+                if (Number.isSafeInteger(n)) genericOverflightsTotal += n;
               }
             } catch (_) { /* keep partial total; never block the preview */ }
 
