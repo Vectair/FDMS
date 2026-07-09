@@ -183,6 +183,7 @@ function openDropdownPortal(menuEl, triggerBtn) {
 
   _portalOrigParent = menuEl.parentNode;                // remember where it came from
   _portalTrigger    = triggerBtn;
+  triggerBtn.setAttribute('aria-expanded', 'true');
 
   document.body.appendChild(menuEl);                    // reparent – escapes overflow
   _portalMenu = menuEl;
@@ -256,6 +257,10 @@ function closeDropdownPortal() {
   menu.style.overflowY  = '';
   menu.style.marginTop  = '';
   menu.style.marginBottom = '';
+
+  // Reset the trigger's expanded state regardless of how the menu was closed
+  // (option click, toggle click, outside click, Escape, resize, or scroll).
+  if (_portalTrigger) _portalTrigger.setAttribute('aria-expanded', 'false');
 
   _portalMenu       = null;
   _portalOrigParent = null;
@@ -4817,8 +4822,11 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     }
 
     // EGOW attribution + PIC — tracked autofill (overwrites previous autofill, preserves manual),
-    // resolved via the shared full-context helper (see resolvePicAutofillForContext).
-    if (fullCallsign) {
+    // resolved via the shared full-context helper (see resolvePicAutofillForContext). Always
+    // re-run (even when the callsign has been cleared entirely) so a stale tracked PIC that is
+    // no longer justified by the remaining context (e.g. registration alone) is correctly
+    // cleared or replaced, rather than surviving just because the callsign field is now blank.
+    {
       const captainEl = document.getElementById('newCaptain');
       const pilotDatalist = document.getElementById('newCaptainPilotSuggestions');
       const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput?.value || '');
@@ -5998,8 +6006,11 @@ function openNewLocFlightModal() {
       pobInput.value = '2';
     }
     // EGOW attribution + PIC — tracked autofill (overwrites previous autofill, preserves manual),
-    // resolved via the shared full-context helper (see resolvePicAutofillForContext).
-    if (fullCallsign) {
+    // resolved via the shared full-context helper (see resolvePicAutofillForContext). Always
+    // re-run (even when the callsign has been cleared entirely) so a stale tracked PIC that is
+    // no longer justified by the remaining context (e.g. registration alone) is correctly
+    // cleared or replaced, rather than surviving just because the callsign field is now blank.
+    {
       const captainEl = document.getElementById('newLocCaptain');
       const pilotDl = document.getElementById('newLocCaptainPilotSuggestions');
       const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput?.value || '');
@@ -7022,8 +7033,11 @@ function openEditMovementModal(m) {
     }
 
     // EGOW attribution + PIC — tracked autofill (overwrites previous autofill, preserves manual),
-    // resolved via the shared full-context helper (see resolvePicAutofillForContext).
-    if (fullCallsign) {
+    // resolved via the shared full-context helper (see resolvePicAutofillForContext). Always
+    // re-run (even when the callsign has been cleared entirely) so a stale tracked PIC that is
+    // no longer justified by the remaining context (e.g. registration alone) is correctly
+    // cleared or replaced, rather than surviving just because the callsign field is now blank.
+    {
       const captainEl = document.getElementById('editCaptain');
       const pilotDatalist = document.getElementById('editCaptainPilotSuggestions');
       const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput?.value || '');
@@ -8456,7 +8470,12 @@ function openRetrospectiveMovementModal(prefillDate, initialFlightType) {
       pobInput.value = '2';
     }
 
-    if (fullCallsign) {
+    // EGOW attribution + PIC — resolved via the shared full-context helper (see
+    // resolvePicAutofillForContext). Always re-run (even when the callsign has been
+    // cleared entirely) so a stale tracked PIC that is no longer justified by the
+    // remaining context (e.g. registration alone) is correctly cleared or replaced,
+    // rather than surviving just because the callsign field is now blank.
+    {
       const pilotDatalist = document.getElementById('retroCaptainPilotSuggestions');
       const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput?.value || '');
       if (pilotDatalist) {
@@ -8636,10 +8655,8 @@ export function initHistoryRetroEntry() {
     e.stopPropagation();
     if (_portalMenu === menu) {
       closeDropdownPortal();
-      btn.setAttribute("aria-expanded", "false");
     } else {
       openDropdownPortal(menu, btn);
-      btn.setAttribute("aria-expanded", "true");
     }
   });
 
@@ -8647,7 +8664,6 @@ export function initHistoryRetroEntry() {
     safeOn(optionBtn, "click", (e) => {
       e.stopPropagation();
       closeDropdownPortal();
-      btn.setAttribute("aria-expanded", "false");
       const flightType = optionBtn.dataset.flightType || "DEP";
       openRetrospectiveMovementModal(historyCalendarSelectedDate || getTodayDateString(), flightType);
     });
