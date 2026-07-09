@@ -1,355 +1,1561 @@
-Pre-V1 Flite hardening order
-1. Fix Admin backup/restore completeness
+Pre-V1 Master Todo
+Purpose
 
-Add vectair_fdms_bookings_v1 to the session backup/restore key list and ensure bookings are included in data counts. Your verification showed bookings are stored under that key but omitted from SESSION_BACKUP_KEYS.
+This list consolidates the remaining work required before Vectair Flite V1 operational deployment at EGOW.
 
-Acceptance test:
+The target is not public certification at V1. The target is a technically reliable, auditable, professional, usable VCR operations tool that is built in a way that does not obstruct future certification, assurance review, commercial sale, or formal safety-case work.
 
-Create booking.
-Create linked strip.
-Export backup.
-Clear/replace data.
-Restore backup.
-Confirm booking, linked strip, calendar/profile/reference data and reports data are all still present.
-2. Replace all remaining native confirm() / alert() calls
+Flite’s intended position:
 
-Do this early because native dialogs are a packaged-app reliability risk. Your search confirmed remaining native dialog calls in booking, reports, reporting export fallback, and return-to-planned.
+A lightweight airfield operations and flight-progress recording system for small aerodromes and Visual Control Room environments that need more structure, traceability and reporting than spreadsheets or ad-hoc Microsoft Office workflows, but do not require a full Copperchase/Redstone-style airport systems suite.
+
+Phase 1 — Data resilience and storage correctness
+1. Fix backup/restore completeness
+ Add vectair_fdms_bookings_v1 to Admin backup/restore.
+ Confirm all movement data is backed up.
+ Confirm all booking data is backed up.
+ Confirm all booking profiles are backed up.
+ Confirm all calendar events are backed up.
+ Confirm all cancelled sorties are backed up.
+ Confirm all deleted strips are backed up.
+ Confirm all hours log entries are backed up.
+ Confirm all config is backed up.
+ Confirm all VKB overrides are backed up.
+ Confirm all VKB audit records are backed up.
+ Confirm future operational audit records are backed up or separately exportable.
+ Confirm future technical logs are either backed up or included in diagnostic bundles.
+2. Create canonical data inventory
+
+Document every local data store Flite uses.
+
+Include:
+
+ storage key
+ purpose
+ owning module
+ schema version
+ whether it is operational data
+ whether it is included in backup
+ whether it is included in diagnostic bundle
+ whether it is safety/operationally significant
+
+Required inventory categories:
+
+ movements
+ bookings
+ booking profiles
+ calendar events
+ cancelled sorties
+ deleted strips
+ hours log
+ app config
+ VKB overrides
+ VKB audit
+ operational audit trail
+ technical logs
+ updater status/config
+ future operator identity/settings
+3. Add backup validation and restore summary
+
+Backup/restore should validate and report.
+
+ Add backup format version.
+ Add app version to backup.
+ Add backup timestamp.
+ Add included key list.
+ Add record counts per section.
+ Warn if expected keys are missing.
+ Warn if unknown keys are present.
+ Detect malformed JSON.
+ Detect incompatible backup versions.
+ Show restore preview before import.
+ Show restore summary after import.
+ Log/audit backup export.
+ Log/audit backup restore.
+ Recommend app reload after restore.
+
+Example restore summary:
+
+Restore complete:
+- Movements: 124
+- Bookings: 18
+- Booking profiles: 9
+- Calendar events: 4
+- Cancelled sorties: 3
+- Deleted strips: 1
+- Hours entries: 28
+- VKB overrides: 7
+- Audit events: 213
+4. Harden localStorage access
+ Create safe read wrapper.
+ Create safe write wrapper.
+ Log JSON parse failures.
+ Log localStorage write failures.
+ Log quota/storage-limit problems.
+ Return safe defaults on recoverable failure.
+ Prevent blank-screen failure from bad local data.
+ Add storage migration logging.
+ Add storage schema compatibility checks.
+ Add storage usage monitoring in Admin.
+Phase 2 — Audit, logging and diagnostic architecture
+5. Design operational audit schema
+
+Operational audit answers:
+
+what changed
+when it changed
+what entity was affected
+what the old value was
+what the new value is
+whether it was manual, automatic, imported, restored, or reconciled
+what screen/action caused it
+what app version/session performed it
+
+Audit record fields:
+
+ event ID
+ timestamp UTC
+ app version
+ build/source info
+ session ID
+ workstation ID
+ operator mode
+ optional operator ID, disabled by default for V1
+ action ID
+ event type
+ entity type
+ entity ID
+ screen/source module
+ summary
+ before values
+ after values
+ changed fields
+ severity
+ context metadata
+6. Design technical log schema
+
+Technical logs answer:
+
+what failed
+where it failed
+what the user/app was doing
+what the stack trace was
+what state the app was in
+what data counts existed
+whether the app recovered
+
+Log record fields:
+
+ log ID
+ timestamp UTC
+ level
+ app version
+ build/source info
+ session ID
+ workstation ID
+ current tab/screen
+ current action ID
+ message
+ error name
+ error message
+ stack trace
+ source file/line/column where available
+ Tauri availability
+ VKB load status
+ storage usage
+ movement count
+ booking count
+ current modal/dialog state
+ update-in-progress state
+ additional context
+7. Implement shared workstation session model
+
+Do not require operator identity for V1.
+
+ Generate session ID on app start.
+ Generate action IDs for significant actions.
+ Add workstation ID setting, defaulting to something like EGOW-VCR-01.
+ Add operatorMode: shared_vcr_workstation.
+ Support operatorId: null in schema.
+ Design future optional named-operator support without enabling it by default.
+ Document why V1 uses shared-workstation mode.
+
+Post-V1 optional:
+
+ operator initials
+ shift identity
+ PIN
+ roles
+ facility-configurable operator identity requirement
+8. Implement persistent technical logging
+
+Use Tauri/Rust-backed file logging.
+
+ Store logs in app data directory, not install directory.
+ Use JSONL format.
+ Rotate logs daily or by size.
+ Define retention policy.
+ Log app boot start.
+ Log app boot complete.
+ Log app boot failure.
+ Log global JavaScript errors.
+ Log unhandled promise rejections.
+ Log failed Tauri invokes.
+ Log localStorage failures.
+ Log VKB load failures.
+ Log CSV parse failures.
+ Log report/export failures.
+ Log updater failures.
+ Log backup/restore failures.
+ Log unexpected missing DOM elements.
+ Log invalid state transitions.
+ Log slow operations.
+ Log integrity-check results.
+9. Implement operational audit trail
+
+Add audit events for all operationally meaningful actions.
+
+Movement / strip lifecycle
+ movement created
+ movement edited
+ movement completed
+ movement returned to planned
+ movement cancelled
+ movement deleted
+ movement restored
+ deleted strip purged
+ retrospective movement added
+ formation updated
+ linked booking changed
+ movement status changed
+ actual/estimated times changed
+ route changed
+ callsign changed
+ registration changed
+ aircraft type changed
+ pilot changed
+ FIS/T&G/O/S counts changed
+ EGOW code/unit attribution changed
+Booking lifecycle
+ booking created
+ booking edited
+ booking linked to strip
+ booking cancelled
+ booking deleted
+ booking profile loaded
+ booking profile saved
+ booking profile imported
+ booking profile exported
+ booking profile deleted
+ charges calculated
+ booking-generated strip created
+Calendar
+ event created
+ event edited
+ event deleted
+METAR/weather
+ METAR generated
+ METAR copied
+ incomplete METAR copy blocked
+ previous METAR recalled
+ METAR reset
+ manual weather override used
+ recent weather manual mode used
+ colour state auto-calculated
+ colour state manually changed
+Reports
+ report viewed
+ report exported as CSV
+ report exported as XLSX
+ cancellation report exported
+ hours saved
+ hours cleared
+ export failed
+VKB/reference data
+ override added
+ override edited
+ record hidden
+ record restored
+ local reference row added
+ reference data changed from strip flow
+ reference data import/export
+ VKB load failed
+Admin/system
+ config changed
+ backup exported
+ backup restored
+ demo reset
+ update checked
+ update available
+ update install started
+ update install failed
+ update install completed
+ app restart requested
+ integrity check run
+ diagnostic bundle exported
+10. Add action correlation IDs
+ Generate actionId for every significant user action.
+ Attach same actionId to audit records.
+ Attach same actionId to technical logs.
+ Attach same actionId to Tauri invoke logs.
+ Attach same actionId to failed validation where useful.
+ Use action IDs in diagnostic bundles.
+11. Instrument global error handling
+ Persistently log global JS errors.
+ Persistently log unhandled promise rejections.
+ Capture stack/source/line/column.
+ Capture current tab.
+ Capture active modal.
+ Capture action ID.
+ Capture app version/session.
+ Capture data counts.
+ Keep user-facing error message simple.
+ Avoid raw technical dumps in normal operator UI.
+12. Add log redaction rules
+
+Do not log secrets or unnecessary personal data.
+
+ Redact signing keys.
+ Redact updater private material.
+ Redact full phone numbers in technical logs.
+ Avoid dumping free-text notes into technical logs unless needed.
+ Avoid including full backup data in ordinary diagnostic logs.
+ Define difference between operational audit data and technical diagnostic data.
+ Document redaction policy.
+Phase 3 — Integrity checking and self-diagnosis
+13. Add data integrity checker
+
+Create an integrity checker that validates current local state.
+
+Checks:
+
+ duplicate movement IDs
+ malformed movement records
+ missing booking records
+ movement linked to missing booking
+ booking linked to missing movement
+ completed movement missing actual time
+ active movement with impossible times
+ cancelled movement still active
+ deleted strip past purge window
+ deleted strip missing original status
+ booking-created strip missing reciprocal link
+ malformed VKB override
+ VKB override referencing missing base row
+ report count anomalies
+ missing expected backup keys
+ invalid config values
+ stale cached reporting classification
+14. Log all automatic reconciliation
+
+If Flite repairs data, it must log it.
+
+ log stale booking link cleared
+ log booking linkedStripId repaired
+ log expired deleted strip purged
+ log storage migration
+ log malformed field normalised
+ log stale autofill cleared
+ log report/VKB cache rebuilt
+ log failed reconciliation
+15. Add Admin integrity-check action
+ Add “Run integrity check”.
+ Show summary: pass/warnings/errors.
+ Show affected records.
+ Allow export of integrity report.
+ Include integrity result in diagnostic bundle.
+ Include last integrity status in System Health.
+Phase 4 — Remove technical failure paths
+16. Remove native confirm() / alert() calls
+
+No browser-native dialogs should remain in operational code.
 
 Replace with:
 
-in-app confirmation modal for destructive actions
-toast or inline validation message for simple success/failure
-no browser-native dialogs anywhere in operational code
+ in-app confirmation modal
+ inline validation message
+ toast for routine status
+ logged/audited action
 
-Specific areas:
+Known areas:
 
-Booking cancel linked strips.
-Booking delete.
-Calendar event delete.
-Booking profile delete.
-Reports hours save/clear validation.
-Reports hours clear confirmation.
-XLSX export fallback error.
-Live Board return-to-planned confirmation.
-3. Fix stale/prototype user-facing copy
+ booking cancel linked strips
+ booking delete
+ calendar event delete
+ booking profile delete
+ report hours validation
+ report hours clear confirmation
+ XLSX export fallback error
+ return-to-planned confirmation
+17. Wrap all Tauri invoke calls
 
-Remove or rewrite any text that suggests the app is still a prototype. The worst confirmed example is the Booking page text saying the strip wiring is a future step, even though booking-to-strip creation now exists.
+Create an invoke helper.
 
-Search for terms like:
+Log:
 
-Select-String -Path .\src\**\*.* -Pattern "prototype|next step|actual Live Board|TODO|dev only|test|harness|temporary" -CaseSensitive:$false
+ command name
+ action ID
+ start time
+ elapsed time
+ success/failure
+ error message
+ returned result where safe
 
-Acceptance test:
+Apply to:
 
-No normal operator screen contains misleading development-era wording.
-Browser-harness wording only appears when actually running in browser/dev mode.
-4. Fix booking-to-strip link completeness
+ save text file
+ save binary file
+ update check
+ download/install update
+ restart app
+ future log writing
+ future audit writing
+ diagnostic bundle export
+18. Harden export paths
+ Detect SheetJS availability.
+ Log XLSX export failure context.
+ Log CSV export failure context.
+ Log selected month/date range.
+ Log movement count included.
+ Log save-dialog result.
+ Show clear user-facing error if export fails.
+Phase 5 — Booking and strip workflow correctness
+19. Fix booking-to-strip link symmetry
 
-When a booking creates a movement strip, update the booking with the created strip ID immediately. At present, the movement gets bookingId, but the booking-side linkedStripId path is fragile/asymmetric.
+When booking creates a planned strip:
 
-This should be fixed before UI polish because the Booking workflow is one of the core operational flows.
+ movement gets bookingId
+ booking gets linkedStripId
+ audit records both creations
+ audit records link
+ integrity checker validates reciprocal link
+ reconciliation repairs/logs mismatches
+ booking detail/drawer shows linked strip
+ linked strip shows booking reference where useful
+20. Harden booking cancellation/deletion
+ clarify cancel booking vs delete booking
+ confirm linked strip handling
+ audit booking cancellation
+ audit linked strip cancellation
+ audit booking deletion
+ handle partially linked bookings
+ test booking deletion with and without strip
+ test booking cancellation with and without strip
+21. Clean Booking UI
+ Remove prototype text.
+ Replace fake preview values with “Awaiting…” states.
+ Explain that Booking is for pre-arranged visiting/local booking.
+ Explain that immediate live movements go via Live Board.
+ Move profile import/export to Admin or Data Management if not normal workflow.
+ Keep “Save profile for this registration” in Booking.
+ Confirm CAA/FIA registry button behaviour in packaged app.
+ Add booking empty/help state.
+ Add clear post-create feedback.
+Phase 6 — Live Board and movement lifecycle
+22. Audit all Live Board actions
+ New LOC
+ New DEP
+ New ARR
+ New OVR
+ edit strip
+ duplicate strip
+ complete strip
+ return to planned
+ cancel strip
+ delete strip
+ restore strip
+ update VKB from strip
+ FIS manual counter change
+ T&G/O/S/FIS count change
+23. Define movement state transition rules
 
-Acceptance test:
+Document and enforce allowed transitions.
 
-Create booking and strip.
-Open booking drawer/details.
-Confirm linked strip is visible or traceable.
-Cancel booking with linked strip.
-Delete/cancel linked strip.
-Run reconcile and confirm no stale links remain.
-5. Run a packaged-app crash/failure sweep
+Examples:
 
-After the dialog and booking-link fixes, run through every ordinary operator action in the installed Tauri app, not browser mode.
+ Planned → Active
+ Planned → Cancelled
+ Planned → Deleted
+ Active → Completed
+ Active → Cancelled
+ Active → Deleted
+ Completed → Planned, warning/audit required
+ Deleted → restored previous status
+ Deleted → purged
 
-Minimum smoke test:
+Invalid transitions:
 
-New LOC.
-New DEP.
-New ARR.
-New OVR.
-Edit strip.
-Complete strip.
-Return strip to planned.
-Cancel strip.
-Delete strip.
-Restore deleted strip.
-Create booking.
-Create booking and strip.
-Cancel booking.
-Delete booking.
-Add/delete calendar event.
-Save/clear report hours.
-Export CSV.
-Export XLSX.
-Build/copy METAR.
-Search VKB.
-Admin backup.
-Admin restore.
+ blocked or logged
+ user shown clear reason
+ audit/log event created
+24. Improve Live Board empty state
 
-Any crash, blank screen, failed permission, unhandled error toast, or stuck modal is a blocker.
+Current empty state is too informal.
 
-6. Resolve version/release hygiene
+Replace with action-oriented text:
 
-Your local check confirmed package.json, Cargo.toml, and tauri.conf.json are still at 0.9.0, while updater-test artefacts have used later versions.
+ no planned/active movements
+ explain selected timeframe
+ point to New LOC/DEP/ARR/OVR
+ point to Booking for visiting aircraft
+ avoid casual/congratulatory wording
+25. Improve Live Board counter clarity
 
-Before V1:
+Top-right counters are useful but cryptic.
 
-Decide the next version path.
-Align all version fields.
-Ensure the GitHub latest release does not point operational users at a test build.
-Keep test releases clearly marked or remove them from latest-channel exposure.
-Confirm the app reports the expected version in Admin > Version & Updates.
+ Add tooltips.
+ Add legend.
+ Define BM/BC/VM/VC/OVR/FIS Total.
+ Ensure counters update consistently.
+ Audit/log counter-relevant changes where appropriate.
+26. Review timeline behaviour
+ Empty timeline should feel intentional.
+ UTC/local rulers clearly labelled.
+ Timeline settings match operational day.
+ Movement bars are understandable.
+ Timeline performance logged if slow.
+ Timeline settings documented in Admin.
+Phase 7 — Cancelled and Deleted workflow
+27. Clarify Cancel vs Delete everywhere
+
+Use consistent language:
+
+Cancel = real movement did not proceed; retained as operational record.
+Delete = erroneous/duplicate/wrong strip removal; recoverable for 24 hours.
+Restore = recover deleted strip.
+Purge = permanently remove from deleted recovery.
+
+Apply to:
+
+ buttons
+ modals
+ screen text
+ Help
+ quick-start sheet
+ Admin settings
+ audit trail
+28. Finish Cancelled Admin section
+
+Do not leave placeholder text.
+
+Choose one:
+
+ build real settings, or
+ convert to final read-only policy, or
+ hide section.
+
+If read-only for V1, include:
+
+ cancelled sorties are immutable operational records
+ deleted strips are recoverable for 24 hours
+ deleted strips purge automatically
+ retention configuration is post-V1 if not configurable now
+29. Review Cancelled Sorties actions
+ Confirm what “Edit” means on immutable cancelled records.
+ Rename if editing only cancellation note/reason.
+ Ensure operational record itself cannot be corrupted.
+ Audit cancelled-entry edits.
+ Export cancelled log.
+ Add filter empty state.
+30. Review Deleted Strips recovery
+ Ensure restore button/action is obvious when records exist.
+ Show expires-in clearly.
+ Audit restore.
+ Audit purge.
+ Confirm deleted strips are included in backup.
+ Confirm restore after app restart.
+Phase 8 — Calendar workflow
+31. Clarify Calendar purpose
+
+Calendar needs screen-level purpose text.
+
+Add guidance:
+
+ Calendar is for non-strip planning events and airfield notes.
+ Use Booking for visiting aircraft bookings.
+ Use History Calendar for completed movement lookup.
+ Clarify whether Calendar events affect reports.
+ Clarify whether Calendar events appear on Live Board.
+32. Improve Calendar empty state
+ Add hint when month has no events.
+ Explain Add Event.
+ Add event colour/type legend if event types exist.
+ Clarify day click behaviour.
+ Audit event creation/edit/deletion.
+ Log event errors.
+Phase 9 — History workflow
+33. Clarify History subviews
+
+Add descriptions:
+
+ Strip Board = recent completed movements in strip format.
+ Calendar = movement totals by date.
+ Search/Table = detailed search/export of completed movements.
+34. Improve History empty states
+ Strip Board empty: suggest changing period or using Search/Table.
+ Calendar empty: explain no completed movements that month.
+ Search empty: suggest clearing filters.
+ Add retrospective entry guidance.
+35. Improve Search/Table layout
+
+Current form is too vertically raw.
+
+Group fields:
+
+ Date range
+ Aircraft/callsign
+ Classification
+ Route
+ Results/export
+
+Use grid layout where practical.
+
+36. Audit retrospective entry
+ Add audit event for retrospective creation.
+ Mark record as retrospective.
+ Show retrospective marker in History/detail.
+ Ensure retrospective entries count correctly in Reports.
+ Document when to use retrospective entry.
+Phase 10 — Reports workflow
+37. Finish Reports Admin section
+
+Do not leave placeholder text.
+
+Choose one:
+
+ build real settings, or
+ convert to final read-only policy, or
+ hide section.
+
+If real settings, include:
+
+ default report view
+ export defaults
+ hours log defaults
+ cancellation report date defaults
+ report assumption display
+
+If read-only, explain fixed V1 behaviour.
+
+38. Explain Reports assumptions
+
+Add visible help for:
+
+ what “Official Monthly Return” includes
+ how movement categories are classified
+ how daily hours affect the report
+ what “movements in scope” means
+ CSV vs XLSX export contents
+ Cancellation Report purpose
+ Dashboard/Insights purpose if retained
+39. Audit Reports actions
+ report view selected
+ month selected
+ hours saved
+ hours cleared
+ CSV export started/succeeded/failed
+ XLSX export started/succeeded/failed
+ cancellation report exported
+40. Improve Reports empty/no-data states
+ No movements for selected month.
+ No cancelled sorties for selected range.
+ Hours not entered for some days.
+ Export unavailable reason if blocked.
+ Clear validation if hours invalid.
+Phase 11 — METAR / Weather workflow
+41. Refine initial METAR validation state
+
+Current blank/incomplete report can look like an error state.
+
+ Distinguish incomplete from invalid.
+ Use softer blank-state guidance.
+ Show field warnings after interaction or copy attempt where possible.
+ Keep Copy disabled until valid.
+ Make Copy failure reason clear.
+42. Audit METAR actions
+ report generated
+ report copied
+ copy blocked
+ time set to Now
+ previous recalled
+ reset
+ manual override used
+ CAVOK toggled
+ colour state auto/manual changed
+ optional sections expanded/used
+43. Review Weather Admin settings
+
+Weather Admin is relatively mature, but still verify:
+
+ observation schedule applies correctly
+ hourly/bi-hourly behaviour clear
+ military/civilian mode clear
+ optional section visibility works
+ hidden sections are not validated/output
+ settings persist
+ settings changes audited
+Phase 12 — VKB / Reference Data workflow
+44. Improve VKB Lookup default UX
+
+Current table is database-like.
+
+Options:
+
+ make VKB search-first
+ show examples before search
+ hide all-results table until query/category chosen
+ clarify “Use” action
+ hide “Use” outside modal/form context if meaningless
+ explain categories
+45. Clarify VKB Lookup vs Admin Reference Data
+ VKB Lookup = operational lookup.
+ Admin Reference Data = edit local reference-data overrides.
+ Add help text to both screens.
+ Ensure operators know where to add/update registrations.
+46. Audit VKB/reference changes
+ override added
+ override edited
+ override hidden
+ override restored
+ registration changed
+ pilot autofill changed
+ EGOW attribution changed
+ VKB quick update from strip flow
+ VKB load failure
+47. Add VKB/reporting cache invalidation
+ invalidate reporting registration index after VKB override change
+ rebuild caches when necessary
+ log cache rebuild
+ audit classification-affecting changes
+ test report classification after VKB edit
+48. Improve VKB load resilience
+ avoid all-or-nothing failure if possible
+ identify failed dataset
+ allow unaffected datasets where safe
+ show clear warning if degraded
+ log dataset/file failure
+ include VKB status in System Health
+49. Confirm Reference Data performance
+
+Specifically test:
+
+ open Aircraft Registrations
+ search registrations
+ edit registrations
+ save override
+ switch away/back
+ open after many records
+ measure lag
+ log slow render
+ confirm no 5–15 second hang remains
+Phase 13 — Admin productisation
+50. Replace Admin Overview with System Health
+
+Admin Overview should answer:
+
+Is Flite ready for operations?
+
+Add:
+
+ Ready / Needs Attention status
+ app version
+ build/source
+ startup status
+ VKB status
+ data integrity status
+ last backup status
+ storage usage
+ recent errors
+ update status
+ logging status
+ audit status
+ data counts
+ “Run integrity check”
+ “Export diagnostic bundle”
+51. Add Admin → System Logs
+ show recent technical logs
+ filter by level
+ filter by date/session
+ filter by screen/action
+ view stack/context
+ export logs
+ copy last error summary
+ show log file status
+ show retention status
+52. Add Admin → Audit Trail
+ search audit events
+ filter by entity type
+ filter by action/event type
+ filter by callsign/registration/entity ID
+ view before/after diff
+ show all events for a strip
+ show all events for a booking
+ export audit CSV
+ export audit JSON
+53. Add Admin → Diagnostic Bundle
+
+Two modes:
+
+ Technical diagnostic bundle
+ Full operational support bundle
+
+Technical bundle includes:
+
+ app version/build
+ config snapshot
+ data counts
+ integrity result
+ recent technical logs
+ VKB status/counts
+ updater status
+ recent errors
+ environment metadata
+
+Full bundle additionally includes:
+
+ operational audit trail
+ current operational data snapshot
+ stronger confirmation due to sensitive content
+54. Reframe Developer section
+ Rename to System Diagnostics / Support / Advanced Diagnostics.
+ Hide raw developer counters unless advanced mode enabled.
+ Keep diagnostic report capability.
+ Remove “Developer” from normal operator-facing language if possible.
+ Ensure diagnostic tooling is professional, not development-scaffolding.
+55. Guard Danger Zone
+ Rename/label as “Advanced destructive actions”.
+ Mark “Not for live operations”.
+ Require typed confirmation for destructive resets.
+ Warn to back up first.
+ Audit every destructive action.
+ Hide future destructive actions until implemented.
+ Consider hiding Reset to Demo Data from operational builds.
+56. Remove placeholder Admin content
+
+No operator-visible page should say:
+
+ “will be added here”
+ “planned settings”
+ “prototype”
+ “next step”
+ “actual Live Board data model”
+ “future destructive actions” unless clearly in developer-only area
+
+Every Admin section should be:
+
+ functional
+ final read-only policy
+ hidden
+Phase 14 — General UX, copy and styling
+57. Add useful empty states
+
+Add professional empty states to:
+
+ Live Board
+ Calendar
+ Booking
+ History Strip Board
+ History Calendar
+ History Search/Table
+ Reports
+ Cancelled Sorties
+ Deleted Strips
+ VKB Lookup
+ Admin logs
+ Audit Trail
+
+Each empty state should answer:
+
+ what this screen is for
+ why it is empty
+ what the user can do next
+58. Add screen-purpose microcopy
+
+Clarify:
+
+ Live Board
+ Weather
+ Calendar
+ Booking
+ History
+ Reports
+ Cancelled
+ VKB Lookup
+ Admin
+ Admin Reference Data
+ Admin Data Management
+59. Standardise terminology
+
+Define and apply:
+
+ movement
+ strip
+ sortie
+ flight
+ booking
+ cancelled
+ deleted
+ restored
+ completed
+ retrospective
+ operational record
+ audit record
+
+Suggested convention:
+
+Movement = data record
+Strip = operational display of a movement
+Booking = pre-arranged aircraft visit/training booking
+Sortie = use only where EGOW reporting/cancellation convention requires it
+Cancelled = real movement did not proceed
+Deleted = erroneous/duplicate removal, recoverable
+History = completed/past movement records
+60. Standardise date/time terminology
+ UTC
+ Local
+ LT
+ BST/GMT
+ DDHHMMZ for METAR
+ date formats
+ report dates
+ booking arrival time
+ timeline ruler labels
+ modal time toggle text
+
+Choose one convention and apply consistently.
+
+61. Add top counter legend/tooltips
+ BM
+ BC
+ VM
+ VC
+ OVR
+ Total
+ FIS Total
+62. Run button/action consistency pass
+
+Check:
+
+ primary buttons
+ secondary buttons
+ danger buttons
+ ghost buttons
+ disabled buttons
+ destructive action wording
+ export button wording
+ reset/clear/delete/cancel wording
+ modals
+ toasts
+ inline validation
+63. Run visual styling consistency pass
+
+Review:
+
+ panel spacing
+ table density
+ section headers
+ form grouping
+ empty state design
+ warning/error colours
+ success colours
+ Vectair palette use
+ admin sidebar styling
+ top nav styling
+ scroll behaviour
+ table headers
+ modal styling
+ typography
+ dark METAR output panel
+ consistency between sparse and dense screens
+64. Add in-app Quick Guide / Help
+
+Include:
+
+ start of day
+ add visiting aircraft booking
+ add local movement
+ add departure
+ add arrival
+ add overflight/FIS
+ complete movement
+ cancel movement
+ delete/restore strip
+ find past movement
+ add retrospective entry
+ build/copy METAR
+ export monthly return
+ backup data
+ restore data
+ check updates
+ what to do if something looks wrong
+Phase 15 — Start-of-day, end-of-day and fallback process
+65. Add Start-of-Day checklist
+
+Could be in Admin Overview/System Health or Help.
+
+Checklist:
+
+ app started/running
+ correct version
+ UTC/local clock correct
+ VKB loaded
+ no critical errors
+ data integrity OK
+ last backup acceptable
+ current board reviewed
+ update not pending during live ops
+ logging/audit running
+66. Add End-of-Day / Handover checklist
+
+Checklist:
+
+ active/planned strips reviewed
+ unresolved movements completed/cancelled/carried forward
+ deleted strips checked
+ cancelled sorties reviewed
+ reports/hours updated if needed
+ backup taken if required
+ errors reviewed
+ app left running
+ fallback notes passed on
+67. Define fallback procedure
+
+Document what to do if Flite fails.
+
+Include:
+
+ use existing/manual process
+ do not uninstall/clear data
+ take screenshot if possible
+ export diagnostic bundle if possible
+ note time/action/problem
+ restart procedure
+ restore from backup procedure
+ rollback installer procedure
+ who to contact
+Phase 16 — Security and release integrity
+68. Review Tauri capabilities
+
+Keep permissions minimal.
+
+ document current permissions
+ add only permissions required for logs/diagnostics
+ add only permissions required for save/export
+ add only permissions required for updater
+ avoid unnecessary filesystem/shell/network permissions
+ document why each permission exists
+69. Maintain restrictive CSP
+ keep self-only scripts
+ keep no object/frame remote content
+ verify CSP after logging changes
+ verify CSP after diagnostic UI changes
+ verify CSP after any library changes
+70. Rotate updater signing key
+
+Because previous updater private key was exposed in project/chat context:
+
+ generate new Tauri updater keypair
+ replace public key in config
+ store private key outside repo/chat
+ document key custody
+ rebuild signed updater artefacts
+ test update from old build to new build
+ ensure old key is no longer used
+71. Resolve version/release hygiene
+
+Align:
+
+ package.json
+ src-tauri/Cargo.toml
+ src-tauri/tauri.conf.json
+ installer version
+ updater version
+ latest.json
+ release tag
+ Admin version display
 
 Suggested scheme:
 
-0.9.x = pre-V1 internal hardening builds
-1.0.0-rc.1 = operational release candidate
-1.0.0 = EGOW V1 deployment build
-7. Rotate updater signing key
+ 0.9.x = hardening builds
+ 1.0.0-rc.1 = EGOW release candidate
+ 1.0.0 = operational V1
+72. Clean update channel
+ Ensure updater latest does not point to old test build.
+ Decide whether v0.9.3-updater-test remains published.
+ Ensure operational users only see intended release.
+ Test check-on-launch.
+ Test manual update check.
+ Test install/restart flow.
+ Confirm no misleading toast/error flashes during expected update.
+73. Define release/rollback procedure
 
-Because the previous private key was pasted into the project/chat context, treat it as compromised for any operational deployment.
+Document:
 
-Do this after version hygiene but before final update testing:
+ build command
+ signing process
+ updater artefact process
+ release notes process
+ install process
+ update process
+ rollback process
+ backup before update
+ restore after rollback
+ where installers are retained
+ who can publish releases
+Phase 17 — Assurance baseline and documentation
+74. Maintain Flite Assurance Baseline
 
-Generate new Tauri updater signing key pair.
-Replace public key in tauri.conf.json.
-Store private key somewhere outside repo/chat.
-Build signed updater artefacts.
-Test update from old operational build to new signed build.
-Confirm old compromised key is no longer used.
-8. Clean Admin presentation for operational use
+Document:
 
-Admin can remain available, but it should not look like a developer console first and an operator tool second.
+ system definition
+ intended use
+ non-intended use
+ system boundary
+ EGOW VCR operating model
+ shared workstation model
+ no mandatory V1 operator identity
+ fallback process
+ local-first model
+ no AFTN/AMHS integration at V1
+ no surveillance/separation assurance
+ standards-informed approach
+75. Create requirements register
 
-Work items:
+Categories:
 
-Rename or annotate Developer as clearly non-operational.
-Rename or annotate Danger Zone as “Do not use during live ops” or equivalent.
-Add explanatory text to Data Management explaining backup/restore.
-Keep update controls clear and non-automatic.
-Separate “System Health” from deeper diagnostics if possible.
+ Live Board
+ Booking
+ Calendar
+ History
+ Cancelled/Deleted
+ Reports
+ METAR
+ VKB
+ Admin
+ Backup/Restore
+ Audit Trail
+ Technical Logging
+ Integrity Checking
+ Updates
+ Security
+ Diagnostics
+ Usability/Help
 
-Admin currently exposes many sections, including Developer and Danger Zone. That is workable, but it needs clearer guardrails for colleagues.
+Each requirement:
 
-9. Clarify core workflow labels and screen purpose
+ ID
+ text
+ rationale
+ source
+ implementation reference
+ test reference
+ status
+ operational/safety relevance
+76. Create hazard log
 
-This is not visual polish; it is operational usability.
+Include hazards:
 
-Review the top-level tabs and internal sub-tabs to make sure a colleague can infer where to go:
+ strip lost
+ strip not saved
+ booking not linked to strip
+ incomplete METAR copied
+ wrong report count
+ wrong classification
+ wrong/stale VKB reference data
+ backup restore incomplete
+ app crash during ops
+ update failure
+ user deletes instead of cancels
+ data corruption
+ audit/logging failure
+ time UTC/local confusion
+ report export failure
+ reference data edit mistake
+ stale active/planned movement
 
-Live Board: current operational strips.
-Booking: visiting aircraft booking and planned strip creation.
-Calendar: non-strip event planning.
-History: completed movement lookup and retrospective entries.
-Cancelled: cancelled sorties and deleted-strip recovery.
-Reports: official monthly return and exports.
-VKB Lookup: operational reference lookup.
-Admin > Reference Data: editing local reference data.
+For each:
 
-The app’s top-level breadth is already clear in structure. The remaining job is making sure labels and help text do not blur responsibilities.
+ cause
+ consequence
+ severity
+ mitigation
+ verification
+ residual risk
+77. Create verification matrix
 
-10. Add concise workflow help
+Map requirements to tests.
 
-Add either an in-app Quick Guide panel or a pinned operational quick-start document. This should be done after labels are settled, otherwise the guide will describe unstable UI.
+Include:
 
-Minimum guide sections:
+ manual test
+ automated test where available
+ packaged-app test
+ result
+ evidence
+ date tested
+ build/version tested
+78. Create logging/audit specification
 
-Start of day.
-Add a visiting aircraft booking.
-Add a local movement.
-Add an arrival/departure/overflight directly.
-Complete a movement.
-Cancel a movement.
-Delete and restore a strip.
-Find a past movement.
-Add retrospective entry.
-Build/copy METAR.
-Export monthly return.
-Backup data.
-What to do if something looks wrong.
-What not to touch during live ops.
+Document:
 
-This should be written for EGOW colleagues, not developers.
+ audit event types
+ technical log event types
+ schemas
+ retention
+ redaction
+ export formats
+ diagnostic bundle contents
+ shared workstation identity model
+ future optional named operator module
+79. Create change-control and release-control process
 
-11. Improve action feedback consistency
+Document:
 
-After major actions, the app should always tell the operator what happened.
+ branch process
+ PR/review process
+ Claude/Codex ticket process
+ test before merge
+ versioning
+ release candidate process
+ release notes
+ known issues
+ sign-off checklist
+ evidence storage
+ rollback process
+80. Create security baseline
 
-Standardise feedback for:
+Document:
 
-Booking created.
-Booking created and strip added.
-Strip completed.
-Strip cancelled.
-Strip deleted.
-Strip restored.
-Calendar event saved/deleted.
-Report exported.
-Backup exported.
-Backup restored.
-METAR copied.
-Update available / no update / update failed.
+ local-first data model
+ no secrets in repo/chat
+ updater signing-key custody
+ CSP
+ Tauri permissions
+ backup/export handling
+ log redaction
+ diagnostic bundle sensitivity
+ future code signing
+ future optional operator identity
+ future network/integration considerations
+81. Create EGOW quick-start sheet
 
-Use toasts for routine success, inline warnings for validation, and modals only for destructive confirmation.
-
-12. Clarify Cancelled vs Deleted behaviour
-
-The structure is good: Cancelled Sorties and Deleted Strips are separate, and Deleted Strips are recoverable for 24 hours.
-
-Still, add a little more operator-facing explanation:
-
-Cancelled = real sortie cancelled; retained as audit/history.
-Deleted = accidental/wrong strip removal; recoverable for 24 hours.
-Completed = normal flown/handled movement.
-
-This reduces the chance that colleagues use Delete when they should Cancel.
-
-13. Review History/Search duplication
-
-History currently has Strip Board, Calendar and Search/Table views, with overlapping filters.
-
-Do not remove functionality pre-V1 unless necessary. Instead, clarify purpose:
-
-Strip Board: recent operational review.
-Calendar: find movements by date.
-Search/Table: deep search and export.
-
-Add one-line descriptions if needed.
-
-14. Review Reports language and required workflows
-
-Reports has Official Monthly Return, Dashboard KPIs, Insights & Leaderboards and Cancellation Report.
-
-For V1, make sure the official workflow is obvious:
-
-How to select month.
-How to enter daily hours.
-How to export CSV/XLSX.
-What the monthly return counts mean.
-Difference between Monthly Return and Dashboard/Insights.
-
-Do not spend much time polishing “Insights” unless it is operationally required.
-
-15. Review METAR Builder operator flow
-
-The METAR Builder is feature-rich, with live output, validation, copy, recall, reset, structured fields and optional accordions.
-
-Pre-V1 focus should be:
-
-Invalid/incomplete report cannot be copied accidentally.
-Required fields are obvious.
-CAVOK behaviour is obvious.
-Colour-state behaviour is obvious if enabled.
-Recall Previous is predictable.
-Reset does not surprise the user.
-Copy feedback is clear.
-
-This is a specialist feature, so it needs correctness more than beauty.
-
-16. VKB/reference-data usability check
-
-The VKB Lookup page is correctly structured with global search and category tabs.
-
-Pre-V1 checks:
-
-Search is fast enough for operational use.
-Registrations grid no longer causes unacceptable lag.
-User understands difference between VKB Lookup and Admin Reference Data.
-Editing reference data gives clear confirmation.
-Hidden/overridden local data can be understood and recovered if needed.
-17. Package/install/update full drill
-
-After signing and version changes, do a complete install/update drill:
-
-Install current operational test build.
-Use app enough to create local data.
-Publish next test release.
-Check for updates from Admin.
-Download/install update.
-App restarts cleanly.
-Data persists.
-Version displays correctly.
-No stale update prompt remains.
-No toast error flashes during expected install/restart path.
-
-This must be tested in the installed Windows app.
-
-18. Create EGOW operational quick-start sheet
-
-This is separate from in-app help. It should be printable or saved as a local PDF/Markdown.
-
-Keep it short: probably 2–4 pages.
+Printable/local PDF or Markdown.
 
 Sections:
 
-Normal daily workflow.
-Movement statuses.
-Booking workflow.
-Cancel vs Delete.
-History lookup.
-METAR builder.
-Reports/monthly return.
-Backup/restore.
-Update procedure.
-“Call Stuart / revert to fallback process if…”
+ normal daily workflow
+ start of day
+ Live Board basics
+ Booking workflow
+ movement statuses
+ Cancel vs Delete
+ History lookup
+ METAR Builder
+ Reports/monthly return
+ Backup/restore
+ Updates
+ What to do if something looks wrong
+ fallback process
+ contact/support route
+Phase 18 — Packaged-app testing
+82. Full installed-app smoke test
 
-This should be written after the UI text and labels are final.
+Run in installed Tauri app, not browser/dev.
 
-19. Colleague-on-leave simulation
+Test:
 
-Run this before calling it V1.
+ app startup
+ System Health
+ Live Board render
+ New LOC
+ New DEP
+ New ARR
+ New OVR
+ edit strip
+ complete strip
+ return strip to planned
+ cancel strip
+ delete strip
+ restore strip
+ create booking
+ create booking and strip
+ cancel booking
+ delete booking
+ add/edit/delete calendar event
+ search History
+ History Calendar
+ Search/Table filters
+ add retrospective entry
+ export History CSV
+ save report hours
+ clear report hours
+ export monthly CSV
+ export monthly XLSX
+ build/copy METAR
+ recall previous METAR
+ reset METAR
+ search VKB
+ edit Reference Data
+ backup export
+ restore backup
+ integrity check
+ view system logs
+ view audit trail
+ export diagnostic bundle
+ check update
+ install test update
+ confirm data persists after update
+83. Review logs after smoke test
 
-Give a colleague the app and the quick-start sheet. Do not walk them through it live unless they get stuck. Ask them to complete:
+Confirm:
 
-Add a booking.
-Create strip from booking.
-Add local movement.
-Add FIS/OVR.
-Complete movement.
-Cancel movement.
-Delete and restore strip.
-Find a past movement.
-Add retrospective entry.
-Build/copy METAR.
-Export monthly return.
-Backup data.
-Check for updates.
+ expected audit events exist
+ expected technical logs exist
+ no unhandled errors
+ no unexplained warnings
+ no silent reconciliation
+ no sensitive data over-logged
+ diagnostic bundle contains useful evidence
+ integrity check passes
+84. Run backup/restore drill
+ create representative data
+ export backup
+ record counts
+ clear/reset local data
+ restore backup
+ compare counts
+ compare linked booking/strip records
+ compare reports
+ compare VKB overrides
+ compare audit trail
+ run integrity check
+ verify logs/audit of restore
+85. Run update drill
+ install current operational test build
+ create local data
+ publish newer signed test release
+ check for update
+ download/install
+ restart
+ confirm version
+ confirm data persists
+ confirm audit/logs persist
+ confirm no stale update prompts
+ confirm no false error flash
+86. Run colleague-on-leave simulation
 
-Record every point where they hesitate, misinterpret, or ask “where is that?”
+Give a colleague:
 
-Those are V1 usability defects.
+installed app
+quick-start sheet
+no live coaching unless stuck
 
-20. Final V1 release branch and freeze
+Ask them to:
 
-Once the colleague simulation passes:
+ add booking
+ create strip from booking
+ add local movement
+ add departure/arrival/overflight
+ complete movement
+ cancel movement
+ delete and restore strip
+ find past movement
+ use History Calendar
+ use Search/Table
+ add retrospective entry
+ build/copy METAR
+ export monthly return
+ backup data
+ check System Health
+ check logs
+ check for update
 
-Create release/v1.0.0 or equivalent.
-Only accept blockers onto that branch.
-Update version to 1.0.0.
-Build signed installer/updater artefacts.
-Install on the operational machine.
-Export a backup before first operational use.
-Record rollback procedure.
-Tag the release.
-Keep the exact installer artefact.
-Condensed order
-Backup/restore bookings.
+Record:
+
+ hesitation
+ wrong screen chosen
+ misunderstood wording
+ missing guidance
+ failed action
+ UI annoyance
+ performance issue
+
+Treat these as V1 usability defects.
+
+Phase 19 — Final V1 release
+87. Create release candidate branch
+ create release/v1.0.0-rc.1
+ freeze feature work
+ allow only blocker fixes
+ update version to RC
+ produce RC installer
+ produce RC updater artefacts
+ run release acceptance checklist
+88. Final release acceptance checklist
+
+Confirm:
+
+ backup/restore complete
+ bookings included in backup
+ audit trail working
+ technical logs working
+ diagnostic bundle working
+ integrity checker working
+ native dialogs removed
+ booking/strip link symmetry fixed
+ stale prototype copy removed
+ placeholder Admin pages removed/resolved
+ System Health implemented
+ Calendar purpose clarified
+ Reports assumptions clarified
+ Cancel/Delete clarified
+ VKB lookup clarified
+ METAR validation acceptable
+ reports export acceptable
+ update path tested
+ signing key rotated
+ version fields aligned
+ release notes written
+ quick-start complete
+ fallback process documented
+ colleague simulation passed
+ known issues documented
+89. Build signed V1 artefacts
+ NSIS installer
+ updater artefacts
+ signatures
+ latest.json
+ release notes
+ retained installer copy
+ retained rollback installer
+90. Tag V1 release
+ tag v1.0.0
+ attach artefacts
+ attach release notes
+ record build hash
+ record signing key ID/public key
+ record known issues
+91. Deploy to EGOW operational machine
+
+Before operational use:
+
+ export existing backup
+ install V1
+ launch app
+ confirm version
+ confirm System Health
+ confirm VKB loaded
+ run integrity check
+ confirm logging
+ confirm audit trail
+ confirm update setting
+ place quick-start sheet
+ confirm fallback process available
+92. First operational monitoring period
+
+For first live period:
+
+ review logs daily
+ review audit trail
+ review integrity status
+ note operator confusion
+ note slow screens
+ note missing guidance
+ record defects
+ avoid non-essential feature additions
+ plan first post-V1 patch
+Post-V1 roadmap items already identified
+
+These are not required for EGOW V1, but should remain in the repo roadmap.
+
+A. Optional operator identity module
+ operator initials
+ shift identity
+ PIN
+ role-based permissions
+ facility-level enable/disable
+ admin-only action identity requirement
+B. SQLite/local database migration
+ design local database schema
+ migrate from localStorage
+ file-level backup
+ stronger transactional integrity
+ long-term data resilience
+ possible multi-client path
+C. Full code signing
+ Windows code-signing certificate
+ SmartScreen reputation
+ signed installer/executable
+ public distribution readiness
+D. ISO 9001-style QMS maturity
+ formal document control
+ corrective action process
+ customer feedback loop
+ controlled release evidence
+ certification consideration only if commercially useful
+E. ED-109A / DO-278A-informed assurance maturity
+ deeper safety classification
+ requirements traceability tooling
+ independent verification practices
+ formal problem reporting
+ change impact analysis
+ stronger verification evidence
+F. CAP 670-informed operational safety case
+ facility-specific operational safety assessment
+ hazard review with users
+ failure mode review
+ fallback procedure validation
+ human factors review
+G. Future integrations
+
+Only if product direction requires:
+
+ AFTN/AMHS/ICAO Doc 9880 relevance review
+ external weather source integration
+ flight-plan import
+ NOTAM integration
+ multi-position operation
+ networked deployment
+ Redstone/Copperchase-style broader airport ops modules
+Condensed execution order
+Fix backup/restore completeness.
+Create canonical data inventory.
+Add backup validation/restore summary.
+Harden localStorage.
+Design audit/log schemas.
+Add session/workstation/action ID model.
+Implement technical file logging.
+Implement operational audit trail.
+Add integrity checker and logged reconciliation.
 Remove native dialogs.
-Remove stale prototype copy.
+Wrap Tauri invokes.
+Harden exports.
 Fix booking/strip link symmetry.
-Packaged-app smoke test.
-Version/release hygiene.
+Clean Booking UI and remove prototype text.
+Audit/harden Live Board lifecycle.
+Clarify Cancel/Delete workflow.
+Clarify Calendar.
+Clarify History.
+Finish Reports workflow/settings.
+Refine METAR validation/audit.
+Improve VKB lookup/reference data.
+Replace Admin Overview with System Health.
+Add System Logs, Audit Trail, Diagnostic Bundle.
+Reframe Developer and guard Danger Zone.
+Remove all placeholder UI.
+Add empty states and microcopy.
+Standardise terminology, time labels, buttons and styling.
+Add in-app Help and quick-start sheet.
+Add start/end-of-day and fallback procedures.
+Review security/capabilities/CSP.
 Rotate updater signing key.
-Admin operational safety cleanup.
-Clarify labels/screen purposes.
-Add workflow help.
-Standardise action feedback.
-Clarify Cancelled vs Deleted.
-Rationalise History/Search purpose.
-Reports workflow clarity.
-METAR Builder workflow check.
-VKB/reference-data usability check.
-Install/update drill.
-EGOW quick-start sheet.
-Colleague-on-leave simulation.
-Final V1 release branch, build, tag and deploy.
+Fix version/release/update hygiene.
+Complete assurance baseline, requirements, hazard log, verification matrix and release-control docs.
+Run installed-app smoke test.
+Review logs/audit/integrity after smoke test.
+Run backup/restore and update drills.
+Run colleague-on-leave simulation.
+Create release candidate.
+Complete final release acceptance.
+Build, sign, tag and deploy V1.
+Monitor first operational period.
