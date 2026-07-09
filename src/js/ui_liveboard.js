@@ -183,6 +183,7 @@ function openDropdownPortal(menuEl, triggerBtn) {
 
   _portalOrigParent = menuEl.parentNode;                // remember where it came from
   _portalTrigger    = triggerBtn;
+  triggerBtn.setAttribute('aria-expanded', 'true');
 
   document.body.appendChild(menuEl);                    // reparent – escapes overflow
   _portalMenu = menuEl;
@@ -256,6 +257,10 @@ function closeDropdownPortal() {
   menu.style.overflowY  = '';
   menu.style.marginTop  = '';
   menu.style.marginBottom = '';
+
+  // Reset the trigger's expanded state regardless of how the menu was closed
+  // (option click, toggle click, outside click, Escape, resize, or scroll).
+  if (_portalTrigger) _portalTrigger.setAttribute('aria-expanded', 'false');
 
   _portalMenu       = null;
   _portalOrigParent = null;
@@ -4283,6 +4288,69 @@ function resolveCaptainAttribution(category, egowAttrib, pilots) {
 }
 
 /**
+ * Central PIC/captain autofill resolver, shared by every strip-creation and edit flow
+ * (standard new-strip, new LOC strip, retrospective entry, edit movement) so that the
+ * callsign-driven handler and the registration-driven handler can never blindly clear a
+ * valid result produced by the other.
+ *
+ * Precedence: a callsign-derived pilot (EGOW_CODES attribution via resolveCaptainAttribution,
+ * or an exact fixed-callsign aircraft-pilot match) always wins and is resolved without
+ * regard to the registration field. Registration is only used to independently resolve a
+ * PIC when the callsign doesn't already justify one, and exactly one aircraft-pilot row
+ * matches that registration. Visiting EGOW categories never get an auto-filled PIC.
+ *
+ * @param {string} fullCallsign - Combined callsign code + flight number (may be empty).
+ * @param {string} registration - Current registration field value (may be empty).
+ * @param {HTMLInputElement|null} egowCodeInput - The current EGOW code field element, used
+ *   (via its .value) as the category fallback when callsign attribution doesn't independently
+ *   supply one. Passing the element (rather than a raw string) lets the resolver tell a stale
+ *   callsign-tracked-autofill value — left over from a callsign that no longer resolves any
+ *   attribution — apart from a manual entry or a registration-derived value (which is applied
+ *   as a plain .value assignment, never tracked), so a stale visiting category can't suppress
+ *   a still-valid registration-only PIC.
+ * @returns {{ name: string|null, egowAttrib: object|null, suggestionPilots: Array }}
+ */
+function resolvePicAutofillForContext(fullCallsign, registration, egowCodeInput) {
+  const cs = String(fullCallsign || '').toUpperCase().trim();
+  const reg = String(registration || '').trim();
+  const egowAttrib = cs ? lookupEgowAttributionFromCallsign(cs) : null;
+  const suggestionPilots = lookupAircraftPilots(reg, cs);
+
+  // Only trust the EGOW-code field's current value as a category fallback when it isn't a
+  // stale callsign-tracked-autofill leftover (i.e. the callsign no longer justifies it via
+  // egowAttrib, yet the field still holds exactly the value applyTrackedAutofill last wrote).
+  // Manual entries and registration-derived codes (set via plain .value assignment, never
+  // tracked) always pass through untouched.
+  const rawEgowCodeValue = egowCodeInput?.value || '';
+  const trackedEgowCodeValue = egowCodeInput?.dataset?.autofillValue || '';
+  const isStaleCallsignEgowCode = !egowAttrib && rawEgowCodeValue !== '' && rawEgowCodeValue === trackedEgowCodeValue;
+  const egowCodeValue = isStaleCallsignEgowCode ? '' : rawEgowCodeValue;
+  const category = (egowAttrib?.egowCode || egowCodeValue || '').toUpperCase().trim();
+
+  if (VISITING_EGOW_CATEGORIES.includes(category)) {
+    return { name: null, egowAttrib, suggestionPilots };
+  }
+
+  // Callsign-derived attribution takes precedence: EGOW_CODES table, or an exact
+  // fixed-callsign aircraft-pilot match (resolved without regard to registration).
+  const callsignOnlyPilots = cs ? lookupAircraftPilots('', cs) : [];
+  let name = null;
+  if (egowAttrib) {
+    name = resolveCaptainAttribution(egowAttrib.egowCode, egowAttrib, callsignOnlyPilots);
+  } else if (callsignOnlyPilots.length === 1) {
+    name = callsignOnlyPilots[0].displayName;
+  }
+
+  // No usable callsign-derived pilot — fall back to a registration-only resolution.
+  if (!name && reg) {
+    const regOnlyPilots = lookupAircraftPilots(reg, '');
+    if (regOnlyPilots.length === 1) name = regOnlyPilots[0].displayName;
+  }
+
+  return { name, egowAttrib, suggestionPilots };
+}
+
+/**
  * Allow the full pilot datalist to be browsed even when the input already has an
  * autofilled value. Browsers filter <datalist> options to those matching the current
  * input text, so a pre-filled name hides all alternative pilots.
@@ -4735,20 +4803,20 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
         }
       }
 
-      // Aircraft pilot suggestions from registration
+      // Aircraft pilot suggestions from registration, resolved via the shared
+      // full-context helper so an already-valid callsign-derived PIC is never
+      // erased just because registration-only lookup is inconclusive.
       const captainInput = document.getElementById('newCaptain');
       const pilotDatalist = document.getElementById('newCaptainPilotSuggestions');
       if (captainInput && pilotDatalist) {
-        const pilots = lookupAircraftPilots(regInput.value, '');
-        pilotDatalist.innerHTML = pilots.length > 0
-          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+        const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
+        const number = flightNumberInput?.value?.trim() || '';
+        const fullCallsign = code + number;
+        const { name: captainName, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput.value, egowCodeInput);
+        pilotDatalist.innerHTML = suggestionPilots.length > 0
+          ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
-        const category = (egowCodeInput?.value || '').toUpperCase().trim();
-        if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
-          applyTrackedAutofill(captainInput, pilots[0].displayName);
-        } else {
-          clearTrackedAutofill(captainInput);
-        }
+        captainName ? applyTrackedAutofill(captainInput, captainName) : clearTrackedAutofill(captainInput);
       }
       _refreshNewFlightVkbButton();
     };
@@ -4768,30 +4836,28 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       pobInput.value = '2';
     }
 
-    // EGOW attribution: code, unit, PIC — tracked autofill (overwrites previous autofill, preserves manual)
-    if (fullCallsign) {
-      const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
+    // EGOW attribution + PIC — tracked autofill (overwrites previous autofill, preserves manual),
+    // resolved via the shared full-context helper (see resolvePicAutofillForContext). Always
+    // re-run (even when the callsign has been cleared entirely) so a stale tracked PIC that is
+    // no longer justified by the remaining context (e.g. registration alone) is correctly
+    // cleared or replaced, rather than surviving just because the callsign field is now blank.
+    {
       const captainEl = document.getElementById('newCaptain');
       const pilotDatalist = document.getElementById('newCaptainPilotSuggestions');
-      const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
+      const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput);
       if (pilotDatalist) {
-        pilotDatalist.innerHTML = pilots.length > 0
-          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+        pilotDatalist.innerHTML = suggestionPilots.length > 0
+          ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
       }
       if (egowAttrib) {
         egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
         egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
-        const captainName = resolveCaptainAttribution(egowAttrib.egowCode, egowAttrib, pilots);
-        captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
       } else {
         clearTrackedAutofill(egowCodeInput);
         clearTrackedAutofill(unitCodeInput);
-        // No EGOW attribution for this callsign — fall back to pilot-list-only attribution
-        // (covers fixed-callsign-only BC matches not present in FDMS_EGOW_CODES).
-        if (pilots.length === 1) applyTrackedAutofill(captainEl, pilots[0].displayName);
-        else clearTrackedAutofill(captainEl);
       }
+      captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
     }
 
     // If callsign matches a fixed callsign, auto-fill registration (only if registration is empty)
@@ -5923,20 +5989,20 @@ function openNewLocFlightModal() {
         }
       }
 
-      // Aircraft pilot suggestions from registration
+      // Aircraft pilot suggestions from registration, resolved via the shared
+      // full-context helper so an already-valid callsign-derived PIC is never
+      // erased just because registration-only lookup is inconclusive.
       const captainEl = document.getElementById('newLocCaptain');
       const pilotDl = document.getElementById('newLocCaptainPilotSuggestions');
       if (captainEl && pilotDl) {
-        const pilots = lookupAircraftPilots(regInput.value, '');
-        pilotDl.innerHTML = pilots.length > 0
-          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+        const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
+        const number = flightNumberInput?.value?.trim() || '';
+        const fullCallsign = code + number;
+        const { name: captainName, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput.value, egowCodeInput);
+        pilotDl.innerHTML = suggestionPilots.length > 0
+          ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
-        const category = (egowCodeInput?.value || '').toUpperCase().trim();
-        if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
-          applyTrackedAutofill(captainEl, pilots[0].displayName);
-        } else {
-          clearTrackedAutofill(captainEl);
-        }
+        captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
       }
       _refreshLocVkbButton();
     };
@@ -5954,28 +6020,28 @@ function openNewLocFlightModal() {
     if (code.startsWith('UAM') && pobInput && (pobInput.value === '0' || !pobInput.value)) {
       pobInput.value = '2';
     }
-    // EGOW attribution: code, unit, PIC — tracked autofill (overwrites previous autofill, preserves manual)
-    if (fullCallsign) {
-      const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
+    // EGOW attribution + PIC — tracked autofill (overwrites previous autofill, preserves manual),
+    // resolved via the shared full-context helper (see resolvePicAutofillForContext). Always
+    // re-run (even when the callsign has been cleared entirely) so a stale tracked PIC that is
+    // no longer justified by the remaining context (e.g. registration alone) is correctly
+    // cleared or replaced, rather than surviving just because the callsign field is now blank.
+    {
       const captainEl = document.getElementById('newLocCaptain');
       const pilotDl = document.getElementById('newLocCaptainPilotSuggestions');
-      const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
+      const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput);
       if (pilotDl) {
-        pilotDl.innerHTML = pilots.length > 0
-          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+        pilotDl.innerHTML = suggestionPilots.length > 0
+          ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
       }
       if (egowAttrib) {
         egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
         egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
-        const captainName = resolveCaptainAttribution(egowAttrib.egowCode, egowAttrib, pilots);
-        captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
       } else {
         clearTrackedAutofill(egowCodeInput);
         clearTrackedAutofill(unitCodeInput);
-        if (pilots.length === 1) applyTrackedAutofill(captainEl, pilots[0].displayName);
-        else clearTrackedAutofill(captainEl);
       }
+      captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
     }
 
     if (fullCallsign && regInput && (!regInput.value || regInput.value === '')) {
@@ -6948,20 +7014,20 @@ function openEditMovementModal(m) {
         }
       }
 
-      // Aircraft pilot suggestions from registration
+      // Aircraft pilot suggestions from registration, resolved via the shared
+      // full-context helper so an already-valid callsign-derived PIC is never
+      // erased just because registration-only lookup is inconclusive.
       const captainInput = document.getElementById('editCaptain');
       const pilotDatalist = document.getElementById('editCaptainPilotSuggestions');
       if (captainInput && pilotDatalist) {
-        const pilots = lookupAircraftPilots(regInput.value, '');
-        pilotDatalist.innerHTML = pilots.length > 0
-          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+        const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
+        const number = flightNumberInput?.value?.trim() || '';
+        const fullCallsign = code + number;
+        const { name: captainName, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput.value, egowCodeInput);
+        pilotDatalist.innerHTML = suggestionPilots.length > 0
+          ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
-        const category = (egowCodeInput?.value || '').toUpperCase().trim();
-        if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
-          applyTrackedAutofill(captainInput, pilots[0].displayName);
-        } else {
-          clearTrackedAutofill(captainInput);
-        }
+        captainName ? applyTrackedAutofill(captainInput, captainName) : clearTrackedAutofill(captainInput);
       }
       _refreshEditVkbButton();
     };
@@ -6981,28 +7047,28 @@ function openEditMovementModal(m) {
       pobInput.value = '2';
     }
 
-    // EGOW attribution: code, unit, PIC — tracked autofill (overwrites previous autofill, preserves manual)
-    if (fullCallsign) {
-      const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
+    // EGOW attribution + PIC — tracked autofill (overwrites previous autofill, preserves manual),
+    // resolved via the shared full-context helper (see resolvePicAutofillForContext). Always
+    // re-run (even when the callsign has been cleared entirely) so a stale tracked PIC that is
+    // no longer justified by the remaining context (e.g. registration alone) is correctly
+    // cleared or replaced, rather than surviving just because the callsign field is now blank.
+    {
       const captainEl = document.getElementById('editCaptain');
       const pilotDatalist = document.getElementById('editCaptainPilotSuggestions');
-      const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
+      const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput);
       if (pilotDatalist) {
-        pilotDatalist.innerHTML = pilots.length > 0
-          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+        pilotDatalist.innerHTML = suggestionPilots.length > 0
+          ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
       }
       if (egowAttrib) {
         egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
         egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
-        const captainName = resolveCaptainAttribution(egowAttrib.egowCode, egowAttrib, pilots);
-        captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
       } else {
         clearTrackedAutofill(egowCodeInput);
         clearTrackedAutofill(unitCodeInput);
-        if (pilots.length === 1) applyTrackedAutofill(captainEl, pilots[0].displayName);
-        else clearTrackedAutofill(captainEl);
       }
+      captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
     }
 
     // If callsign matches a fixed callsign, auto-fill registration (only if registration is empty)
@@ -8088,8 +8154,11 @@ function openDuplicateMovementModal(m) {
  * @param {string} prefillDate - YYYY-MM-DD date to prefill DOF with (History
  *   Calendar selected date, or today when no date filter is active).
  */
-function openRetrospectiveMovementModal(prefillDate) {
+function openRetrospectiveMovementModal(prefillDate, initialFlightType) {
   const dof = prefillDate || getTodayDateString();
+  const initFt = ["DEP", "ARR", "LOC", "OVR"].includes((initialFlightType || "").toUpperCase())
+    ? initialFlightType.toUpperCase()
+    : "DEP";
 
   openModal(`
     <div class="modal-header">
@@ -8136,10 +8205,10 @@ function openRetrospectiveMovementModal(prefillDate) {
           <div class="modal-field">
             <label class="modal-label">Movement Type</label>
             <select id="retroFlightType" class="modal-select">
-              <option value="DEP" selected>DEP</option>
-              <option value="ARR">ARR</option>
-              <option value="LOC">LOC</option>
-              <option value="OVR">OVR</option>
+              <option value="DEP" ${initFt === "DEP" ? "selected" : ""}>DEP</option>
+              <option value="ARR" ${initFt === "ARR" ? "selected" : ""}>ARR</option>
+              <option value="LOC" ${initFt === "LOC" ? "selected" : ""}>LOC</option>
+              <option value="OVR" ${initFt === "OVR" ? "selected" : ""}>OVR</option>
             </select>
           </div>
           <div class="modal-field">
@@ -8373,20 +8442,17 @@ function openRetrospectiveMovementModal(prefillDate) {
         if (inferredType) typeInput.value = inferredType;
       }
 
-      // Aircraft pilot suggestions from registration — non-destructive PIC autofill
-      // when exactly one known pilot and the EGOW category isn't a visiting one.
+      // Aircraft pilot suggestions from registration, resolved via the shared
+      // full-context helper so an already-valid callsign-derived PIC is never
+      // erased just because registration-only lookup is inconclusive.
       const pilotDatalist = document.getElementById('retroCaptainPilotSuggestions');
       if (captainInput && pilotDatalist) {
-        const pilots = lookupAircraftPilots(regInput.value, callsignInput?.value || '');
-        pilotDatalist.innerHTML = pilots.length > 0
-          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+        const fullCallsign = (callsignInput?.value || '').toUpperCase().trim();
+        const { name: captainName, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput.value, egowCodeInput);
+        pilotDatalist.innerHTML = suggestionPilots.length > 0
+          ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
-        const category = (egowCodeInput?.value || '').toUpperCase().trim();
-        if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
-          applyTrackedAutofill(captainInput, pilots[0].displayName);
-        } else {
-          clearTrackedAutofill(captainInput);
-        }
+        captainName ? applyTrackedAutofill(captainInput, captainName) : clearTrackedAutofill(captainInput);
       }
     };
     regInput.addEventListener("input", applyRetroRegAutofill);
@@ -8419,26 +8485,27 @@ function openRetrospectiveMovementModal(prefillDate) {
       pobInput.value = '2';
     }
 
-    if (fullCallsign) {
-      const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
+    // EGOW attribution + PIC — resolved via the shared full-context helper (see
+    // resolvePicAutofillForContext). Always re-run (even when the callsign has been
+    // cleared entirely) so a stale tracked PIC that is no longer justified by the
+    // remaining context (e.g. registration alone) is correctly cleared or replaced,
+    // rather than surviving just because the callsign field is now blank.
+    {
       const pilotDatalist = document.getElementById('retroCaptainPilotSuggestions');
-      const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
+      const { name: captainName, egowAttrib, suggestionPilots } = resolvePicAutofillForContext(fullCallsign, regInput?.value || '', egowCodeInput);
       if (pilotDatalist) {
-        pilotDatalist.innerHTML = pilots.length > 0
-          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+        pilotDatalist.innerHTML = suggestionPilots.length > 0
+          ? suggestionPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
           : '';
       }
       if (egowAttrib) {
         egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
         egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
-        const captainName = resolveCaptainAttribution(egowAttrib.egowCode, egowAttrib, pilots);
-        captainName ? applyTrackedAutofill(captainInput, captainName) : clearTrackedAutofill(captainInput);
       } else {
         clearTrackedAutofill(egowCodeInput);
         clearTrackedAutofill(unitCodeInput);
-        if (pilots.length === 1) applyTrackedAutofill(captainInput, pilots[0].displayName);
-        else clearTrackedAutofill(captainInput);
       }
+      captainName ? applyTrackedAutofill(captainInput, captainName) : clearTrackedAutofill(captainInput);
       updateUnitCodeRequiredMarker();
     }
 
@@ -8587,15 +8654,34 @@ function openRetrospectiveMovementModal(prefillDate) {
 }
 
 /**
- * Wire the "Add retrospective entry" button in the History Strip Board actions
- * row. Opens the retrospective entry modal prefilled with the active History
- * Calendar date filter, or today when no date filter is selected.
+ * Wire the "Add Retrospective Strip" dropdown in the History Strip Board actions
+ * row. Clicking the launcher reveals DEP/ARR/LOC/OVR (portal-based, escapes
+ * overflow, same as the strip Edit ▾ menus); choosing one opens the retrospective
+ * entry modal prefilled with the active History Calendar date filter (or today)
+ * and already initialised to the chosen flight type. The flight-type selector
+ * inside the modal remains available to correct an accidental choice.
  */
 export function initHistoryRetroEntry() {
   const btn = byId("btnAddRetrospectiveEntry");
-  if (!btn) return;
-  safeOn(btn, "click", () => {
-    openRetrospectiveMovementModal(historyCalendarSelectedDate || getTodayDateString());
+  const menu = byId("historyStripBoardActions")?.querySelector(".js-retro-type-menu");
+  if (!btn || !menu) return;
+
+  safeOn(btn, "click", (e) => {
+    e.stopPropagation();
+    if (_portalMenu === menu) {
+      closeDropdownPortal();
+    } else {
+      openDropdownPortal(menu, btn);
+    }
+  });
+
+  menu.querySelectorAll(".js-retro-type-option").forEach((optionBtn) => {
+    safeOn(optionBtn, "click", (e) => {
+      e.stopPropagation();
+      closeDropdownPortal();
+      const flightType = optionBtn.dataset.flightType || "DEP";
+      openRetrospectiveMovementModal(historyCalendarSelectedDate || getTodayDateString(), flightType);
+    });
   });
 }
 

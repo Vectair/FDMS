@@ -459,7 +459,15 @@
               <div class="history-view-actions" id="historyStripBoardActions">
                 <button class="btn btn-secondary" id="btnToggleHistoryFilters" type="button" aria-expanded="false">Show filters</button>
                 <button class="btn btn-secondary" id="btnExportHistoryCsv" type="button">Export as CSV</button>
-                <button class="btn btn-primary" id="btnAddRetrospectiveEntry" type="button">Add retrospective entry</button>
+                <div class="retro-entry-dropdown-wrap" style="position: relative; display: inline-block;">
+                  <button class="btn btn-primary js-retro-dropdown-toggle" id="btnAddRetrospectiveEntry" type="button" aria-haspopup="true" aria-expanded="false">Add Retrospective Strip ▾</button>
+                  <div class="js-retro-type-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 9999; min-width: 120px; margin-top: 2px; padding: 4px;">
+                    <button class="btn btn-ft btn-ft-dep js-retro-type-option" type="button" data-flight-type="DEP">DEP</button>
+                    <button class="btn btn-ft btn-ft-arr js-retro-type-option" type="button" data-flight-type="ARR">ARR</button>
+                    <button class="btn btn-ft btn-ft-loc js-retro-type-option" type="button" data-flight-type="LOC">LOC</button>
+                    <button class="btn btn-ft btn-ft-ovr js-retro-type-option" type="button" data-flight-type="OVR">OVR</button>
+                  </div>
+                </div>
               </div>
             </div>
 
