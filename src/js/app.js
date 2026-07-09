@@ -50,6 +50,7 @@ import {
   getGenericOverflightsCount,
   incrementGenericOverflights,
   decrementGenericOverflights,
+  isGenericOverflightStorageKey,
   getMovements,
   getOperationalTimezoneOffsetHours
 } from "./datamodel.js";
@@ -785,6 +786,7 @@ function generateDiagnosticReport() {
     f('schema_version:', storageInfo.version),
     f('storage_key:', storageInfo.key),
     f('movements:', counts.movements),
+    f('bookings:', counts.bookings),
     f('cancelled_sorties:', counts.cancelledSorties),
     f('deleted_strips:', counts.deletedStrips),
     f('booking_profiles:', counts.bookingProfiles),
@@ -886,6 +888,7 @@ function refreshDeveloperSection() {
   set('devSchemaVersion',    String(storageInfo.version));
   set('devStorageKey',       storageInfo.key);
   set('devMovementCount',    String(counts.movements));
+  set('devBookings',         String(counts.bookings));
   set('devCancelledSorties', String(counts.cancelledSorties));
   set('devDeletedStrips',    String(counts.deletedStrips));
   set('devBookingProfiles',  String(counts.bookingProfiles));
@@ -1055,6 +1058,31 @@ function initAdminPanelHandlers() {
             const hoursCount      = parseStorageCount(s['vectair_fdms_hours_v1'], false);
             const hasConfig       = (s['vectair_fdms_config'] != null) ? 'Yes' : 'No';
 
+            // Bookings: count booking records inside the booking envelope
+            // (a plain object-key count would be wrong here).
+            function parseBookingsCount(raw) {
+              if (raw === null || raw === undefined) return '—';
+              try {
+                const v = JSON.parse(raw);
+                return (v && Array.isArray(v.bookings)) ? v.bookings.length : '—';
+              } catch (_) { return '—'; }
+            }
+            const bookingsCount = parseBookingsCount(s['vectair_fdms_bookings_v1']);
+
+            // Generic overflights: sum values across all recognised dated keys.
+            // Malformed/non-numeric matched values are skipped rather than
+            // allowed to break the preview.
+            let genericOverflightsTotal = 0;
+            try {
+              for (const key of Object.keys(s)) {
+                if (!isGenericOverflightStorageKey(key)) continue;
+                const raw = s[key];
+                if (typeof raw !== 'string' || !/^\d+$/.test(raw.trim())) continue;
+                const n = Number(raw.trim());
+                if (Number.isSafeInteger(n)) genericOverflightsTotal += n;
+              }
+            } catch (_) { /* keep partial total; never block the preview */ }
+
             // VKB overrides: count entries across all datasets
             let vkbOverrideCount = '—';
             try {
@@ -1107,11 +1135,13 @@ function initAdminPanelHandlers() {
                 <div><span style="color:#555;display:inline-block;width:160px;">Created (UTC):</span><strong>${escapeHtml(createdAtStr)}</strong></div>
                 <div><span style="color:#555;display:inline-block;width:160px;">Format:</span><strong>Full backup (v${parsed.formatVersion ?? 1})</strong></div>
                 <div><span style="color:#555;display:inline-block;width:160px;">Movements:</span><strong>${movementsCount}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Bookings:</span><strong>${bookingsCount}</strong></div>
                 <div><span style="color:#555;display:inline-block;width:160px;">Cancelled sorties:</span><strong>${cancelledCount}</strong></div>
                 <div><span style="color:#555;display:inline-block;width:160px;">Deleted strips:</span><strong>${deletedCount}</strong></div>
                 <div><span style="color:#555;display:inline-block;width:160px;">Booking profiles:</span><strong>${profilesCount}</strong></div>
                 <div><span style="color:#555;display:inline-block;width:160px;">Calendar events:</span><strong>${calendarCount}</strong></div>
                 <div><span style="color:#555;display:inline-block;width:160px;">Hours log entries:</span><strong>${hoursCount}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Generic overflights:</span><strong>${genericOverflightsTotal}</strong></div>
                 <div><span style="color:#555;display:inline-block;width:160px;">Config present:</span><strong>${hasConfig}</strong></div>
                 <div><span style="color:#555;display:inline-block;width:160px;">VKB overrides:</span><strong>${vkbOverrideCount}</strong></div>
                 <div><span style="color:#555;display:inline-block;width:160px;">Audit events:</span><strong>${auditEventsCount}</strong></div>
@@ -1136,7 +1166,7 @@ function initAdminPanelHandlers() {
 
             let warningHtml = `
               <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
-                ⚠ Legacy backup format — only movement data will be restored. Cancelled sorties, deleted strips, booking profiles, calendar events, and hours log are not included.
+                ⚠ Legacy backup format — only movement data will be restored. Bookings, cancelled sorties, deleted strips, booking profiles, calendar events, hours log, and generic overflights are not included.
               </div>`;
             if (movementsCount === 0 || movementsCount === '0') {
               warningHtml += `
