@@ -27,7 +27,8 @@ export const SESSION_BACKUP_KEYS = [
   "vectair_fdms_calendar_events_v1",
   "vectair_fdms_hours_v1",
   "vectair_fdms_vkb_overrides_v1",
-  "vectair_flite_audit_log_v1"
+  "vectair_flite_audit_log_v1",
+  "vectair_fdms_bookings_v1"
 ];
 
 // Default configuration
@@ -1821,6 +1822,9 @@ export function exportSessionJSON() {
     const val = window.localStorage.getItem(key);
     storage[key] = val !== null ? val : null;
   }
+  for (const key of getGenericOverflightStorageKeys()) {
+    storage[key] = window.localStorage.getItem(key);
+  }
   return {
     app: "Vectair Flite",
     format: "vectair-flite-session-backup",
@@ -1841,6 +1845,14 @@ export function importSessionJSON(parsed) {
       const restoredKeys = [];
       for (const key of SESSION_BACKUP_KEYS) {
         if (Object.prototype.hasOwnProperty.call(parsed.storage, key) && parsed.storage[key] !== null) {
+          window.localStorage.setItem(key, parsed.storage[key]);
+          restoredKeys.push(key);
+        }
+      }
+      // Dynamic dated generic-overflight keys: restore only strictly-recognised
+      // keys, never arbitrary unknown keys found in the backup's storage object.
+      for (const key of Object.keys(parsed.storage)) {
+        if (isGenericOverflightStorageKey(key) && parsed.storage[key] !== null && parsed.storage[key] !== undefined) {
           window.localStorage.setItem(key, parsed.storage[key]);
           restoredKeys.push(key);
         }
@@ -1883,6 +1895,17 @@ export function getStorageInfo() {
   };
 }
 
+function countBookingRecords() {
+  try {
+    const raw = window.localStorage.getItem('vectair_fdms_bookings_v1');
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw);
+    return (parsed && Array.isArray(parsed.bookings)) ? parsed.bookings.length : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
 export function getDataCounts() {
   function countKey(key) {
     try {
@@ -1898,6 +1921,7 @@ export function getDataCounts() {
   }
   return {
     movements:        movementsInitialised ? movements.length : 0,
+    bookings:         countBookingRecords(),
     calendarEvents:   countKey('vectair_fdms_calendar_events_v1'),
     bookingProfiles:  countKey('fdms_booking_profiles_v1'),
     cancelledSorties: countKey('vectair_fdms_cancelled_sorties_v1'),
@@ -2299,6 +2323,31 @@ export function hasEnoughStorageSpace(estimatedSize = 100000) {
 ------------------------------ */
 
 const GENERIC_OVR_STORAGE_KEY = "fdms_generic_overflights";
+const GENERIC_OVR_KEY_PATTERN = /^fdms_generic_overflights_\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Strictly recognise a dated generic-overflight storage key
+ * (e.g. "fdms_generic_overflights_2026-07-09"). Used by backup/restore
+ * so dynamic per-date keys can be captured without matching unrelated keys.
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function isGenericOverflightStorageKey(key) {
+  return GENERIC_OVR_KEY_PATTERN.test(key);
+}
+
+/**
+ * Collect all currently-present dated generic-overflight storage keys.
+ * @returns {string[]}
+ */
+function getGenericOverflightStorageKeys() {
+  const keys = [];
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i);
+    if (key && isGenericOverflightStorageKey(key)) keys.push(key);
+  }
+  return keys;
+}
 
 /**
  * Get the storage key for today's generic overflights
