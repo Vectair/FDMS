@@ -1038,26 +1038,34 @@ function initAdminPanelHandlers() {
         }
 
         // Only record a successful-export audit event once the file has
-        // actually been saved/downloaded — never on cancel or failure.
+        // actually been saved/downloaded — never on cancel or failure. This
+        // is isolated in its own try/catch: the file is already saved to
+        // disk by this point, so a failure here must not surface as
+        // "Backup export failed" and mislead the operator into thinking the
+        // export itself didn't happen.
         if (result === 'saved' || result === 'downloaded' || result === 'fallback') {
-          appendAuditEvent({
-            action: 'backup-exported',
-            entity: { domain: 'system', dataset: 'session-backup', type: 'backup-file', id: filename, label: filename },
-            source: { module: 'admin-backup', uiAction: 'export-session' },
-            before: {},
-            after: {},
-            changedFields: [],
-            reason: { code: 'manual-backup-export', note: '' },
-            metadata: {
-              formatVersion: backup.formatVersion,
-              appVersion: backup.appVersion,
-              backupTimestamp: backup.exportedAt,
-              exportedKeyCount: backup.includedKeys.length,
-              recordCounts: backup.recordCounts,
-              saveResult: result
-            },
-            reversible: false
-          });
+          try {
+            appendAuditEvent({
+              action: 'backup-exported',
+              entity: { domain: 'system', dataset: 'session-backup', type: 'backup-file', id: filename, label: filename },
+              source: { module: 'admin-backup', uiAction: 'export-session' },
+              before: {},
+              after: {},
+              changedFields: [],
+              reason: { code: 'manual-backup-export', note: '' },
+              metadata: {
+                formatVersion: backup.formatVersion,
+                appVersion: backup.appVersion,
+                backupTimestamp: backup.exportedAt,
+                exportedKeyCount: backup.includedKeys.length,
+                recordCounts: backup.recordCounts,
+                saveResult: result
+              },
+              reversible: false
+            });
+          } catch (auditErr) {
+            console.warn("FDMS: failed to record backup-exported audit event", auditErr);
+          }
         }
       } catch (e) {
         showToast("Backup export failed.", 'error');
@@ -1221,24 +1229,32 @@ function initAdminPanelHandlers() {
                 // Audit only after the restore has fully completed — including
                 // restoration of the audit-log dataset itself, so the resulting
                 // audit trail records that current state came from a restore.
-                appendAuditEvent({
-                  action: 'backup-restored',
-                  entity: { domain: 'system', dataset: 'session-backup', type: 'backup-file', id: file.name, label: file.name },
-                  source: { module: 'admin-backup', uiAction: 'restore-session' },
-                  before: {},
-                  after: {},
-                  changedFields: [],
-                  reason: { code: 'manual-backup-restore', note: '' },
-                  metadata: {
-                    format: result.format,
-                    formatVersion: result.inspection?.formatVersion ?? null,
-                    backupAppVersion: result.inspection?.appVersion ?? null,
-                    backupTimestamp: result.inspection?.exportedAt ?? result.inspection?.createdAtUtc ?? null,
-                    restoredKeyCount: (result.restoredKeys || []).length,
-                    recordCounts: result.inspection?.recordCounts ?? null
-                  },
-                  reversible: false
-                });
+                // Isolated in its own try/catch: the restore has already
+                // succeeded and rendered by this point, so a failure here must
+                // not surface as "Restore failed" and mislead the operator
+                // into thinking the restore itself didn't happen.
+                try {
+                  appendAuditEvent({
+                    action: 'backup-restored',
+                    entity: { domain: 'system', dataset: 'session-backup', type: 'backup-file', id: file.name, label: file.name },
+                    source: { module: 'admin-backup', uiAction: 'restore-session' },
+                    before: {},
+                    after: {},
+                    changedFields: [],
+                    reason: { code: 'manual-backup-restore', note: '' },
+                    metadata: {
+                      format: result.format,
+                      formatVersion: result.inspection?.formatVersion ?? null,
+                      backupAppVersion: result.inspection?.appVersion ?? null,
+                      backupTimestamp: result.inspection?.exportedAt ?? result.inspection?.createdAtUtc ?? null,
+                      restoredKeyCount: (result.restoredKeys || []).length,
+                      recordCounts: result.inspection?.recordCounts ?? null
+                    },
+                    reversible: false
+                  });
+                } catch (auditErr) {
+                  console.warn("FDMS: failed to record backup-restored audit event", auditErr);
+                }
 
                 if (result.format === 'full') {
                   adminInfo(
@@ -2103,14 +2119,19 @@ function initLiveboardCounters() {
  * Resolve the real running application version from the packaged Tauri app
  * (via the same flite_get_app_version command the updater panel uses) and
  * cache it in datamodel.js for backup metadata and backup/restore audit
- * events. Non-fatal and fire-and-forget — the cached value defaults to and
- * falls back to 'dev' when no packaged version is available (browser/dev
- * harness), which is the existing updater-panel fallback convention.
+ * events. Non-fatal — the cached value defaults to and falls back to 'dev'
+ * when no packaged version is available (browser/dev harness), which is the
+ * existing updater-panel fallback convention. Awaited (not fire-and-forget)
+ * in bootstrap(), before the Admin panel's Backup/Restore handlers are
+ * wired up, so exported backups can never race ahead of the real version
+ * resolving — flite_get_app_version is a fast local Tauri IPC call with no
+ * network I/O, so this adds negligible startup delay.
+ * @returns {Promise<void>}
  */
 function initAppVersion() {
   const invoke = window.__TAURI__?.core?.invoke;
-  if (typeof invoke !== 'function') return;
-  invoke('flite_get_app_version').then(info => {
+  if (typeof invoke !== 'function') return Promise.resolve();
+  return invoke('flite_get_app_version').then(info => {
     if (info && typeof info.version === 'string' && info.version) {
       setRunningAppVersion(info.version);
     }
@@ -2405,7 +2426,7 @@ async function bootstrap() {
 
   try {
     initErrorOverlay();
-    initAppVersion();
+    await initAppVersion();
 
     runStage('tabs:init',  () => initTabs());
     runStage('clock:init', () => initClock());

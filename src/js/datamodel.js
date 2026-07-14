@@ -1843,7 +1843,7 @@ export function getRunningAppVersion() {
 const DATASET_VALIDATORS = {
   vectair_fdms_movements_v3: {
     label: 'movements',
-    checkShape: (v) => !!v && typeof v === 'object' && !Array.isArray(v) && v.version === 3 && Array.isArray(v.movements),
+    checkShape: (v) => !!v && typeof v === 'object' && !Array.isArray(v) && v.version === SCHEMA_VERSION && Array.isArray(v.movements),
     countRecords: (v) => v.movements.length
   },
   vectair_fdms_config: {
@@ -1952,15 +1952,27 @@ export function inspectSessionBackup(parsed) {
     result.appVersion = (typeof parsed.appVersion === "string" && parsed.appVersion) ? parsed.appVersion : null;
 
     const fv = parsed.formatVersion;
-    result.formatVersion = (typeof fv === "number" && Number.isFinite(fv) && fv >= 1) ? fv : 1;
-
-    if (result.formatVersion > CURRENT_BACKUP_FORMAT_VERSION) {
-      result.formatSupported = false;
-      result.errors.push(
-        `This backup was created using a newer backup format (v${result.formatVersion}) than this version of Vectair Flite supports (v${CURRENT_BACKUP_FORMAT_VERSION}). Restore is blocked — a compatible or newer version of Vectair Flite is required to restore this backup.`
-      );
-    } else {
+    if (fv === undefined || fv === null) {
+      // Never actually produced by this exporter (formatVersion has always
+      // been stamped), but tolerated defensively as the oldest known shape.
+      result.formatVersion = 1;
       result.formatSupported = true;
+    } else if (typeof fv === "number" && Number.isFinite(fv) && fv >= 1) {
+      result.formatVersion = fv;
+      if (fv > CURRENT_BACKUP_FORMAT_VERSION) {
+        result.formatSupported = false;
+        result.errors.push(
+          `This backup was created using a newer backup format (v${fv}) than this version of Vectair Flite supports (v${CURRENT_BACKUP_FORMAT_VERSION}). Restore is blocked — a compatible or newer version of Vectair Flite is required to restore this backup.`
+        );
+      } else {
+        result.formatSupported = true;
+      }
+    } else {
+      // Present but not a valid version number (e.g. a string or negative
+      // number) — cannot confirm compatibility, so treat as unsupported.
+      result.formatVersion = fv;
+      result.formatSupported = false;
+      result.errors.push(`This backup has an unrecognised "formatVersion" value and cannot be validated for restore compatibility.`);
     }
 
     const storage = parsed.storage;
@@ -2006,7 +2018,7 @@ export function inspectSessionBackup(parsed) {
       const entry = { key, label: 'genericOverflights', present: raw !== null && raw !== undefined, valid: true, recordCount: null, error: null, dynamic: true };
       if (entry.present) {
         anyGenericOverflightPresent = true;
-        if (typeof raw !== "string" || !/^\d+$/.test(raw.trim())) {
+        if (!isValidGenericOverflightValue(raw)) {
           entry.valid = false;
           entry.error = `"${key}" has a malformed overflight count and will be skipped.`;
           result.warnings.push(entry.error);
@@ -2110,7 +2122,7 @@ export function exportSessionJSON() {
     format: "vectair-flite-session-backup",
     formatVersion: CURRENT_BACKUP_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
-    appVersion: runningAppVersion,
+    appVersion: getRunningAppVersion(),
     storage
   };
 
@@ -2148,9 +2160,10 @@ export function importSessionJSON(parsed) {
         }
       }
       // Dynamic dated generic-overflight keys: restore only strictly-recognised
-      // keys, never arbitrary unknown keys found in the backup's storage object.
+      // keys with a valid value, never arbitrary unknown keys or the malformed
+      // values inspectSessionBackup() already flagged as skip-worthy above.
       for (const key of Object.keys(parsed.storage)) {
-        if (isGenericOverflightStorageKey(key) && parsed.storage[key] !== null && parsed.storage[key] !== undefined) {
+        if (isGenericOverflightStorageKey(key) && isValidGenericOverflightValue(parsed.storage[key])) {
           window.localStorage.setItem(key, parsed.storage[key]);
           restoredKeys.push(key);
         }
@@ -2631,6 +2644,22 @@ const GENERIC_OVR_KEY_PATTERN = /^fdms_generic_overflights_\d{4}-\d{2}-\d{2}$/;
  */
 export function isGenericOverflightStorageKey(key) {
   return GENERIC_OVR_KEY_PATTERN.test(key);
+}
+
+/**
+ * A generic-overflight storage value must be a plain non-negative-integer
+ * digit string within the safe integer range. Shared by inspectSessionBackup()
+ * (to decide whether to count/include a dated key) and importSessionJSON()
+ * (to decide whether to actually write it) so the two can never disagree
+ * about which dated keys are safe to restore.
+ * @param {*} raw
+ * @returns {boolean}
+ */
+function isValidGenericOverflightValue(raw) {
+  if (typeof raw !== "string") return false;
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return false;
+  return Number.isSafeInteger(Number(trimmed));
 }
 
 /**
