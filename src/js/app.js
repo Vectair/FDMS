@@ -41,6 +41,8 @@ import { reconcileLinks } from "./services/bookingSync.js";
 import {
   exportSessionJSON,
   importSessionJSON,
+  inspectSessionBackup,
+  setRunningAppVersion,
   resetMovementsToDemo,
   getStorageInfo,
   getStorageQuota,
@@ -50,10 +52,11 @@ import {
   getGenericOverflightsCount,
   incrementGenericOverflights,
   decrementGenericOverflights,
-  isGenericOverflightStorageKey,
   getMovements,
   getOperationalTimezoneOffsetHours
 } from "./datamodel.js";
+
+import { appendAuditEvent } from "./audit.js";
 
 import {
   loadVKBData,
@@ -667,6 +670,45 @@ function adminConfirm(message, onConfirm, detailsHtml = '', confirmEnabled = tru
 }
 
 /**
+ * Show a lightweight inline info dialog (single OK button, no cancel/confirm
+ * semantics). Used for operator-facing summaries such as the post-restore
+ * report, where there is nothing left to confirm.
+ * @param {string} message       - Plain-text message (safely escaped)
+ * @param {string} [detailsHtml] - Optional pre-sanitised HTML rendered below message
+ */
+function adminInfo(message, detailsHtml = '') {
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;display:flex;align-items:center;justify-content:center;';
+
+  const dialog = document.createElement('div');
+  dialog.style.cssText = 'background:#fff;border-radius:6px;padding:24px 24px 20px;max-width:480px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.25);';
+
+  const messageDiv = document.createElement('div');
+  messageDiv.style.cssText = 'font-size:13px;line-height:1.5;margin-bottom:' + (detailsHtml ? '12px' : '18px') + ';';
+  messageDiv.textContent = message;
+  dialog.appendChild(messageDiv);
+
+  if (detailsHtml) {
+    const detailsDiv = document.createElement('div');
+    detailsDiv.style.cssText = 'margin-bottom:18px;';
+    detailsDiv.innerHTML = detailsHtml; // caller is responsible for safe content
+    dialog.appendChild(detailsDiv);
+  }
+
+  const buttonsDiv = document.createElement('div');
+  buttonsDiv.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+  buttonsDiv.innerHTML = `<button class="btn btn-primary" id="_adminInfoOk">OK</button>`;
+  dialog.appendChild(buttonsDiv);
+
+  backdrop.appendChild(dialog);
+  document.body.appendChild(backdrop);
+
+  const cleanup = () => { if (backdrop.parentNode) document.body.removeChild(backdrop); };
+  dialog.querySelector('#_adminInfoOk').addEventListener('click', cleanup);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) cleanup(); });
+}
+
+/**
  * Initialise Cancelled tab sub-view switching (HIST-LAYOUT-002).
  * Two subpages: Cancelled Sorties (default), Deleted Strips.
  */
@@ -994,6 +1036,37 @@ function initAdminPanelHandlers() {
         } else {
           showToast("Native Save As failed; browser download fallback was used. Check your Downloads folder.", 'warning');
         }
+
+        // Only record a successful-export audit event once the file has
+        // actually been saved/downloaded — never on cancel or failure. This
+        // is isolated in its own try/catch: the file is already saved to
+        // disk by this point, so a failure here must not surface as
+        // "Backup export failed" and mislead the operator into thinking the
+        // export itself didn't happen.
+        if (result === 'saved' || result === 'downloaded' || result === 'fallback') {
+          try {
+            appendAuditEvent({
+              action: 'backup-exported',
+              entity: { domain: 'system', dataset: 'session-backup', type: 'backup-file', id: filename, label: filename },
+              source: { module: 'admin-backup', uiAction: 'export-session' },
+              before: {},
+              after: {},
+              changedFields: [],
+              reason: { code: 'manual-backup-export', note: '' },
+              metadata: {
+                formatVersion: backup.formatVersion,
+                appVersion: backup.appVersion,
+                backupTimestamp: backup.exportedAt,
+                exportedKeyCount: backup.includedKeys.length,
+                recordCounts: backup.recordCounts,
+                saveResult: result
+              },
+              reversible: false
+            });
+          } catch (auditErr) {
+            console.warn("FDMS: failed to record backup-exported audit event", auditErr);
+          }
+        }
       } catch (e) {
         showToast("Backup export failed.", 'error');
         console.error("FDMS: backup export error", e);
@@ -1012,6 +1085,97 @@ function initAdminPanelHandlers() {
     // Open file picker directly — confirmation comes after file selection
     btnImport.addEventListener("click", () => { fileInput.click(); });
 
+    // Dataset labels shared by the restore preview and the post-restore
+    // summary, keyed by the same labels inspectSessionBackup() computes.
+    const DATASET_DISPLAY_LABELS = {
+      movements: 'Movements',
+      bookings: 'Bookings',
+      cancelledSorties: 'Cancelled sorties',
+      deletedStrips: 'Deleted strips',
+      bookingProfiles: 'Booking profiles',
+      calendarEvents: 'Calendar events',
+      hoursEntries: 'Hours log entries',
+      vkbOverrides: 'VKB overrides',
+      auditEvents: 'Audit events',
+      genericOverflights: 'Generic overflights'
+    };
+
+    function recordCountRowsHtml(recordCounts) {
+      const rc = recordCounts || {};
+      return Object.entries(DATASET_DISPLAY_LABELS)
+        .filter(([k]) => Object.prototype.hasOwnProperty.call(rc, k))
+        .map(([k, label]) =>
+          `<div><span style="color:#555;display:inline-block;width:180px;">${escapeHtml(label)}:</span><strong>${escapeHtml(String(rc[k]))}</strong></div>`
+        ).join('');
+    }
+
+    // Build the restore preflight preview from the authoritative inspection
+    // result — this is the single validation path shared with importSessionJSON().
+    function buildRestorePreviewHtml(fileName, inspection) {
+      let html = '';
+      for (const err of inspection.errors) {
+        html += `<div style="background:#fff3f3;border:1px solid #ffcdd2;border-radius:4px;padding:8px 12px;font-size:12px;color:#c62828;margin-bottom:6px;">⚠ ${escapeHtml(err)}</div>`;
+      }
+      for (const warn of inspection.warnings) {
+        html += `<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">⚠ ${escapeHtml(warn)}</div>`;
+      }
+
+      if (!inspection.recognised) {
+        html += `<div style="background:#fff3f3;border:1px solid #ffcdd2;border-radius:4px;padding:10px 12px;font-size:12px;color:#c62828;">Unrecognized file structure — this does not appear to be a Vectair Flite backup. Confirm is blocked.</div>`;
+        return html;
+      }
+
+      const formatLabel = {
+        full: `Full backup (v${inspection.formatVersion ?? 1})`,
+        envelope: `Legacy envelope (schema v${inspection.schemaVersion ?? '—'})`,
+        v2: `Legacy v2 (schema v${inspection.schemaVersion ?? '—'})`,
+        v1: `Legacy v1 (bare array)`
+      }[inspection.format] || inspection.format;
+
+      const timestamp = inspection.exportedAt || inspection.createdAtUtc;
+      let createdAtStr = '—';
+      if (timestamp) {
+        try { createdAtStr = new Date(timestamp).toUTCString(); } catch (_) { createdAtStr = timestamp; }
+      }
+
+      const rows = [
+        ['File', fileName],
+        ['Created (UTC)', createdAtStr],
+        ['Format', formatLabel]
+      ];
+      if (inspection.format === 'full') {
+        rows.push(['Backup app version', inspection.appVersion || '—']);
+        rows.push(['Restorable keys', String(inspection.includedKeys.length)]);
+      }
+
+      const rowsHtml = rows.map(([label, value]) =>
+        `<div><span style="color:#555;display:inline-block;width:180px;">${escapeHtml(label)}:</span><strong>${escapeHtml(value)}</strong></div>`
+      ).join('') + recordCountRowsHtml(inspection.recordCounts);
+
+      const configExtra = inspection.format === 'full'
+        ? (() => {
+            const cfg = inspection.datasets.find(d => d.key === 'vectair_fdms_config');
+            const present = !!(cfg && cfg.present && cfg.valid);
+            return `<div><span style="color:#555;display:inline-block;width:180px;">Config present:</span><strong>${present ? 'Yes' : 'No'}</strong></div>`;
+          })()
+        : '';
+
+      html += `<div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">${rowsHtml}${configExtra}</div>`;
+      return html;
+    }
+
+    function buildRestoreSummaryHtml(result) {
+      const inspection = result.inspection || {};
+      let rows = '';
+      if (result.format === 'full') {
+        rows += `<div><span style="color:#555;display:inline-block;width:180px;">Storage keys restored:</span><strong>${(result.restoredKeys || []).length}</strong></div>`;
+        rows += recordCountRowsHtml(inspection.recordCounts);
+      } else {
+        rows += `<div><span style="color:#555;display:inline-block;width:180px;">Movements restored:</span><strong>${result.count}</strong></div>`;
+      }
+      return `<div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">${rows}</div>`;
+    }
+
     fileInput.addEventListener("change", (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -1021,206 +1185,17 @@ function initAdminPanelHandlers() {
       reader.onload = (ev) => {
         let parsedForImport = null; // full parsed object passed to importSessionJSON
         let summaryHtml = '';
-        let confirmEnabled = true;
+        let confirmEnabled = false;
+        let inspection = null;
 
         try {
           const parsed = JSON.parse(ev.target.result);
-
-          // ── Format detection ──────────────────────────────────────
-          // Full backup:  { app, format:"vectair-flite-session-backup", formatVersion, storage }
-          // Old envelope: { fdmsBackup: {...}, payload: {...} }
-          // Old v2:       { version: number, movements: [...] }
-          // Old v1:       bare array of movements
-          // Anything else: unrecognized → block confirm
-          let format = 'unrecognized';
-
-          function parseStorageCount(raw, expectArray) {
-            if (raw === null || raw === undefined) return '—';
-            try {
-              const v = JSON.parse(raw);
-              if (Array.isArray(v)) return v.length;
-              if (!expectArray && v && typeof v === 'object') return Object.keys(v).length;
-              return '—';
-            } catch (_) { return '—'; }
-          }
-
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-              && parsed.format === 'vectair-flite-session-backup' && parsed.storage) {
-            format = 'fullbackup';
-            parsedForImport = parsed;
-
-            const s = parsed.storage;
-            const movementsCount  = parseStorageCount(s['vectair_fdms_movements_v3'], true);
-            const cancelledCount  = parseStorageCount(s['vectair_fdms_cancelled_sorties_v1'], true);
-            const deletedCount    = parseStorageCount(s['vectair_fdms_deleted_strips_v1'], true);
-            const profilesCount   = parseStorageCount(s['fdms_booking_profiles_v1'], true);
-            const calendarCount   = parseStorageCount(s['vectair_fdms_calendar_events_v1'], true);
-            const hoursCount      = parseStorageCount(s['vectair_fdms_hours_v1'], false);
-            const hasConfig       = (s['vectair_fdms_config'] != null) ? 'Yes' : 'No';
-
-            // Bookings: count booking records inside the booking envelope
-            // (a plain object-key count would be wrong here).
-            function parseBookingsCount(raw) {
-              if (raw === null || raw === undefined) return '—';
-              try {
-                const v = JSON.parse(raw);
-                return (v && Array.isArray(v.bookings)) ? v.bookings.length : '—';
-              } catch (_) { return '—'; }
-            }
-            const bookingsCount = parseBookingsCount(s['vectair_fdms_bookings_v1']);
-
-            // Generic overflights: sum values across all recognised dated keys.
-            // Malformed/non-numeric matched values are skipped rather than
-            // allowed to break the preview.
-            let genericOverflightsTotal = 0;
-            try {
-              for (const key of Object.keys(s)) {
-                if (!isGenericOverflightStorageKey(key)) continue;
-                const raw = s[key];
-                if (typeof raw !== 'string' || !/^\d+$/.test(raw.trim())) continue;
-                const n = Number(raw.trim());
-                if (Number.isSafeInteger(n)) genericOverflightsTotal += n;
-              }
-            } catch (_) { /* keep partial total; never block the preview */ }
-
-            // VKB overrides: count entries across all datasets
-            let vkbOverrideCount = '—';
-            try {
-              const vkbRaw = s['vectair_fdms_vkb_overrides_v1'];
-              if (vkbRaw) {
-                const vkbParsed = JSON.parse(vkbRaw);
-                const eg = Object.keys(vkbParsed?.egowCodes || {}).length;
-                const reg = Object.keys(vkbParsed?.registrations || {}).length;
-                vkbOverrideCount = eg + reg;
-              } else {
-                vkbOverrideCount = '0';
-              }
-            } catch (_) { vkbOverrideCount = '—'; }
-
-            // Audit events count
-            let auditEventsCount = '—';
-            try {
-              const auditRaw = s['vectair_flite_audit_log_v1'];
-              if (auditRaw) {
-                const auditParsed = JSON.parse(auditRaw);
-                auditEventsCount = Array.isArray(auditParsed?.events) ? auditParsed.events.length : '—';
-              } else {
-                auditEventsCount = '0';
-              }
-            } catch (_) { auditEventsCount = '—'; }
-
-            let createdAtStr = '—';
-            if (parsed.exportedAt) {
-              try { createdAtStr = new Date(parsed.exportedAt).toUTCString(); } catch (_) { createdAtStr = parsed.exportedAt; }
-            }
-
-            let warningHtml = '';
-            if (typeof parsed.formatVersion === 'number' && parsed.formatVersion > 1) {
-              warningHtml += `
-              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
-                ⚠ This backup was created by a newer version of Vectair Flite (format v${parsed.formatVersion}). Some data may not be restored.
-              </div>`;
-            }
-            if (movementsCount === 0 || movementsCount === '0') {
-              warningHtml += `
-              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
-                ⚠ This backup contains 0 movements.
-              </div>`;
-            }
-
-            summaryHtml = `
-              ${warningHtml}
-              <div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">
-                <div><span style="color:#555;display:inline-block;width:160px;">File:</span><strong>${escapeHtml(file.name)}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Created (UTC):</span><strong>${escapeHtml(createdAtStr)}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Format:</span><strong>Full backup (v${parsed.formatVersion ?? 1})</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Movements:</span><strong>${movementsCount}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Bookings:</span><strong>${bookingsCount}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Cancelled sorties:</span><strong>${cancelledCount}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Deleted strips:</span><strong>${deletedCount}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Booking profiles:</span><strong>${profilesCount}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Calendar events:</span><strong>${calendarCount}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Hours log entries:</span><strong>${hoursCount}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Generic overflights:</span><strong>${genericOverflightsTotal}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Config present:</span><strong>${hasConfig}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">VKB overrides:</span><strong>${vkbOverrideCount}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Audit events:</span><strong>${auditEventsCount}</strong></div>
-              </div>`;
-
-          } else if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-              && parsed.fdmsBackup && parsed.payload) {
-            format = 'envelope';
-            parsedForImport = parsed;
-            const meta = parsed.fdmsBackup;
-            const payload = parsed.payload;
-
-            const movementsCount = meta?.counts?.movements != null
-              ? meta.counts.movements
-              : (Array.isArray(payload?.movements) ? payload.movements.length : '—');
-
-            let createdAtStr = '—';
-            if (meta?.createdAtUtc) {
-              try { createdAtStr = new Date(meta.createdAtUtc).toUTCString(); } catch (_) { createdAtStr = meta.createdAtUtc; }
-            }
-            const schemaVersion = meta?.schemaVersion != null ? meta.schemaVersion : '—';
-
-            let warningHtml = `
-              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
-                ⚠ Legacy backup format — only movement data will be restored. Bookings, cancelled sorties, deleted strips, booking profiles, calendar events, hours log, and generic overflights are not included.
-              </div>`;
-            if (movementsCount === 0 || movementsCount === '0') {
-              warningHtml += `
-              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
-                ⚠ This backup contains 0 movements.
-              </div>`;
-            }
-
-            summaryHtml = `
-              ${warningHtml}
-              <div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">
-                <div><span style="color:#555;display:inline-block;width:160px;">File:</span><strong>${escapeHtml(file.name)}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Created (UTC):</span><strong>${escapeHtml(createdAtStr)}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Format:</span><strong>Legacy envelope (schema v${schemaVersion})</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Movements:</span><strong>${movementsCount}</strong></div>
-              </div>`;
-
-          } else if (Array.isArray(parsed)) {
-            format = 'v1';
-            parsedForImport = parsed;
-
-            summaryHtml = `
-              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
-                ⚠ Legacy backup format — only movement data will be restored.
-              </div>
-              <div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">
-                <div><span style="color:#555;display:inline-block;width:160px;">File:</span><strong>${escapeHtml(file.name)}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Format:</span><strong>Legacy v1 (bare array)</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Movements:</span><strong>${parsed.length}</strong></div>
-              </div>`;
-
-          } else if (parsed && typeof parsed === 'object'
-                     && typeof parsed.version === 'number'
-                     && Array.isArray(parsed.movements)) {
-            format = 'v2';
-            parsedForImport = parsed;
-
-            summaryHtml = `
-              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
-                ⚠ Legacy backup format — only movement data will be restored.
-              </div>
-              <div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">
-                <div><span style="color:#555;display:inline-block;width:160px;">File:</span><strong>${escapeHtml(file.name)}</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Format:</span><strong>Legacy v2 (schema v${parsed.version})</strong></div>
-                <div><span style="color:#555;display:inline-block;width:160px;">Movements:</span><strong>${parsed.movements.length}</strong></div>
-              </div>`;
-
-          } else {
-            confirmEnabled = false;
-            summaryHtml = `
-              <div style="background:#fff3f3;border:1px solid #ffcdd2;border-radius:4px;padding:10px 12px;font-size:12px;color:#c62828;">
-                Unrecognized file structure — this does not appear to be a Vectair Flite backup. Confirm is blocked.
-              </div>`;
-          }
+          // Single authoritative validation path — the same inspection
+          // result importSessionJSON() re-derives defensively before writing.
+          inspection = inspectSessionBackup(parsed);
+          parsedForImport = inspection.recognised ? parsed : null;
+          confirmEnabled = inspection.restorable;
+          summaryHtml = buildRestorePreviewHtml(file.name, inspection);
         } catch (_parseErr) {
           confirmEnabled = false;
           summaryHtml = `
@@ -1229,10 +1204,17 @@ function initAdminPanelHandlers() {
             </div>`;
         }
 
+        let dialogMessage;
+        if (!inspection || !inspection.recognised) {
+          dialogMessage = `"${file.name}" cannot be restored as a Vectair Flite backup.`;
+        } else if (!inspection.restorable) {
+          dialogMessage = `"${file.name}" was recognised but failed validation and cannot be restored — see details below.`;
+        } else {
+          dialogMessage = `Restore recognised Vectair Flite backup data from "${file.name}" into this app profile. Existing local data for restored sections will be replaced.`;
+        }
+
         adminConfirm(
-          parsedForImport
-            ? `Restore recognised Vectair Flite backup data from "${file.name}" into this app profile. Existing local data for restored sections will be replaced. Reload the app after import.`
-            : `"${file.name}" cannot be restored as a Vectair Flite backup.`,
+          dialogMessage,
           () => {
             try {
               const result = importSessionJSON(parsedForImport);
@@ -1243,10 +1225,45 @@ function initAdminPanelHandlers() {
                 refreshVkbAdminDisplay();
                 diagnostics.lastRenderTime = new Date().toISOString();
                 updateDiagnostics();
-                const detail = result.format === 'full'
-                  ? `${result.count} movements loaded — reload the app to apply all restored data`
-                  : `${result.count} movements loaded`;
-                showToast(`Restore applied from "${file.name}" — ${detail}`, 'success');
+
+                // Audit only after the restore has fully completed — including
+                // restoration of the audit-log dataset itself, so the resulting
+                // audit trail records that current state came from a restore.
+                // Isolated in its own try/catch: the restore has already
+                // succeeded and rendered by this point, so a failure here must
+                // not surface as "Restore failed" and mislead the operator
+                // into thinking the restore itself didn't happen.
+                try {
+                  appendAuditEvent({
+                    action: 'backup-restored',
+                    entity: { domain: 'system', dataset: 'session-backup', type: 'backup-file', id: file.name, label: file.name },
+                    source: { module: 'admin-backup', uiAction: 'restore-session' },
+                    before: {},
+                    after: {},
+                    changedFields: [],
+                    reason: { code: 'manual-backup-restore', note: '' },
+                    metadata: {
+                      format: result.format,
+                      formatVersion: result.inspection?.formatVersion ?? null,
+                      backupAppVersion: result.inspection?.appVersion ?? null,
+                      backupTimestamp: result.inspection?.exportedAt ?? result.inspection?.createdAtUtc ?? null,
+                      restoredKeyCount: (result.restoredKeys || []).length,
+                      recordCounts: result.inspection?.recordCounts ?? null
+                    },
+                    reversible: false
+                  });
+                } catch (auditErr) {
+                  console.warn("FDMS: failed to record backup-restored audit event", auditErr);
+                }
+
+                if (result.format === 'full') {
+                  adminInfo(
+                    `Restore succeeded from "${file.name}". Reload Vectair Flite now so every restored subsystem and configuration value is applied.`,
+                    buildRestoreSummaryHtml(result)
+                  );
+                } else {
+                  showToast(`Restore applied from "${file.name}" — ${result.count} movements loaded (legacy format: only movement data was restored).`, 'success', 7000);
+                }
               } else {
                 showToast(`Restore failed: ${result.error}`, 'error');
               }
@@ -2096,6 +2113,31 @@ function initLiveboardCounters() {
   });
 }
 
+// ── Application version ──────────────────────────────────────────────────────
+
+/**
+ * Resolve the real running application version from the packaged Tauri app
+ * (via the same flite_get_app_version command the updater panel uses) and
+ * cache it in datamodel.js for backup metadata and backup/restore audit
+ * events. Non-fatal — the cached value defaults to and falls back to 'dev'
+ * when no packaged version is available (browser/dev harness), which is the
+ * existing updater-panel fallback convention. Awaited (not fire-and-forget)
+ * in bootstrap(), before the Admin panel's Backup/Restore handlers are
+ * wired up, so exported backups can never race ahead of the real version
+ * resolving — flite_get_app_version is a fast local Tauri IPC call with no
+ * network I/O, so this adds negligible startup delay.
+ * @returns {Promise<void>}
+ */
+function initAppVersion() {
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (typeof invoke !== 'function') return Promise.resolve();
+  return invoke('flite_get_app_version').then(info => {
+    if (info && typeof info.version === 'string' && info.version) {
+      setRunningAppVersion(info.version);
+    }
+  }).catch(() => { /* keep the 'dev' fallback */ });
+}
+
 // ── Updater panel ─────────────────────────────────────────────────────────────
 
 const UPDATER_CHECK_ON_LAUNCH_KEY = 'vectair_flite_check_updates_on_launch_v1';
@@ -2384,6 +2426,7 @@ async function bootstrap() {
 
   try {
     initErrorOverlay();
+    await initAppVersion();
 
     runStage('tabs:init',  () => initTabs());
     runStage('clock:init', () => initClock());
