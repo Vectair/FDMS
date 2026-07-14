@@ -1816,6 +1816,285 @@ export function resetMovementsToDemo() {
   saveToStorage();
 }
 
+// Current supported full-backup format version. A full backup whose
+// formatVersion is greater than this was created by a newer Flite release
+// and must be blocked from restore — see inspectSessionBackup().
+export const CURRENT_BACKUP_FORMAT_VERSION = 1;
+
+// Application version stamped into newly generated full backups and into
+// backup/restore audit events. Populated at runtime by app.js from the
+// packaged app (Tauri) where available; stays at the 'dev' fallback in the
+// browser/dev harness where no packaged version exists. Intentionally not a
+// second hardcoded version constant — this is just a cache for the real
+// runtime-reported value.
+let runningAppVersion = 'dev';
+export function setRunningAppVersion(version) {
+  runningAppVersion = (typeof version === "string" && version.trim()) ? version.trim() : 'dev';
+}
+export function getRunningAppVersion() {
+  return runningAppVersion;
+}
+
+// Per-dataset conservative shape checks for SESSION_BACKUP_KEYS, mirroring
+// the top-level shape each dataset's own loader already expects elsewhere in
+// the codebase (see DATA_INVENTORY.md §3 "Validation" column for the source
+// of each rule). Used only to decide whether a backup is safe to restore —
+// this is not a general-purpose integrity checker.
+const DATASET_VALIDATORS = {
+  vectair_fdms_movements_v3: {
+    label: 'movements',
+    checkShape: (v) => !!v && typeof v === 'object' && !Array.isArray(v) && v.version === 3 && Array.isArray(v.movements),
+    countRecords: (v) => v.movements.length
+  },
+  vectair_fdms_config: {
+    label: 'config',
+    checkShape: (v) => !!v && typeof v === 'object' && !Array.isArray(v),
+    countRecords: () => null
+  },
+  vectair_fdms_cancelled_sorties_v1: {
+    label: 'cancelledSorties',
+    checkShape: (v) => Array.isArray(v),
+    countRecords: (v) => v.length
+  },
+  vectair_fdms_deleted_strips_v1: {
+    label: 'deletedStrips',
+    checkShape: (v) => Array.isArray(v),
+    countRecords: (v) => v.length
+  },
+  fdms_booking_profiles_v1: {
+    label: 'bookingProfiles',
+    checkShape: (v) => !!v && typeof v === 'object' && !Array.isArray(v) && !!v.profiles && typeof v.profiles === 'object',
+    countRecords: (v) => Object.keys(v.profiles).length
+  },
+  vectair_fdms_calendar_events_v1: {
+    label: 'calendarEvents',
+    checkShape: (v) => !!v && typeof v === 'object' && !Array.isArray(v) && Array.isArray(v.events),
+    countRecords: (v) => v.events.length
+  },
+  vectair_fdms_hours_v1: {
+    label: 'hoursEntries',
+    checkShape: (v) => !!v && typeof v === 'object' && !Array.isArray(v),
+    countRecords: (v) => Object.keys(v).length
+  },
+  vectair_fdms_vkb_overrides_v1: {
+    label: 'vkbOverrides',
+    checkShape: (v) => !!v && typeof v === 'object' && !Array.isArray(v),
+    countRecords: (v) => {
+      const ds = (v.datasets && typeof v.datasets === 'object') ? v.datasets : v;
+      const countOf = (o) => (o && typeof o === 'object') ? Object.keys(o).length : 0;
+      return countOf(ds.egowCodes) + countOf(ds.registrations) + countOf(ds.aircraftPilots);
+    }
+  },
+  vectair_flite_audit_log_v1: {
+    label: 'auditEvents',
+    checkShape: (v) => !!v && typeof v === 'object' && !Array.isArray(v) && Array.isArray(v.events),
+    countRecords: (v) => v.events.length
+  },
+  vectair_fdms_bookings_v1: {
+    label: 'bookings',
+    checkShape: (v) => !!v && typeof v === 'object' && !Array.isArray(v) && Array.isArray(v.bookings),
+    countRecords: (v) => v.bookings.length
+  }
+};
+
+/**
+ * Read-only inspection of a parsed backup file. Detects the recognised
+ * format (current full backup, or one of the three legacy movement-only
+ * formats), validates current-full-backup compatibility and per-dataset
+ * shape/JSON validity, and computes record counts. Makes no storage changes.
+ *
+ * This is the single authoritative validation path shared by the Admin
+ * restore preview (app.js) and importSessionJSON() below, so the two can
+ * never disagree about whether a backup is safe to restore.
+ *
+ * @param {*} parsed - Already-JSON-parsed backup file contents
+ * @returns {{
+ *   recognised: boolean, format: ('full'|'envelope'|'v2'|'v1'|null), isLegacy: boolean,
+ *   formatVersion: (number|null), formatSupported: (boolean|null), appVersion: (string|null),
+ *   exportedAt: (string|null), createdAtUtc: (string|null), schemaVersion: (number|null),
+ *   datasets: Array<{key:string, label:string, present:boolean, valid:boolean, recordCount:(number|null), error:(string|null), dynamic:boolean}>,
+ *   includedKeys: string[], recordCounts: Object<string, number|null>, movementCount: (number|null),
+ *   errors: string[], warnings: string[], restorable: boolean
+ * }}
+ */
+export function inspectSessionBackup(parsed) {
+  const result = {
+    recognised: false,
+    format: null,
+    isLegacy: false,
+    formatVersion: null,
+    formatSupported: null,
+    appVersion: null,
+    exportedAt: null,
+    createdAtUtc: null,
+    schemaVersion: null,
+    datasets: [],
+    includedKeys: [],
+    recordCounts: {},
+    movementCount: null,
+    errors: [],
+    warnings: [],
+    restorable: false
+  };
+
+  if (!parsed || typeof parsed !== "object") {
+    result.errors.push('Unrecognized file structure — this does not appear to be a Vectair Flite backup.');
+    return result;
+  }
+
+  // ── Current full backup: { app, format, formatVersion, exportedAt, storage } ──
+  if (!Array.isArray(parsed) && parsed.format === "vectair-flite-session-backup"
+      && parsed.storage && typeof parsed.storage === "object" && !Array.isArray(parsed.storage)) {
+    result.recognised = true;
+    result.format = 'full';
+    result.isLegacy = false;
+    result.exportedAt = parsed.exportedAt || null;
+    result.appVersion = (typeof parsed.appVersion === "string" && parsed.appVersion) ? parsed.appVersion : null;
+
+    const fv = parsed.formatVersion;
+    result.formatVersion = (typeof fv === "number" && Number.isFinite(fv) && fv >= 1) ? fv : 1;
+
+    if (result.formatVersion > CURRENT_BACKUP_FORMAT_VERSION) {
+      result.formatSupported = false;
+      result.errors.push(
+        `This backup was created using a newer backup format (v${result.formatVersion}) than this version of Vectair Flite supports (v${CURRENT_BACKUP_FORMAT_VERSION}). Restore is blocked — a compatible or newer version of Vectair Flite is required to restore this backup.`
+      );
+    } else {
+      result.formatSupported = true;
+    }
+
+    const storage = parsed.storage;
+    const recordCounts = {};
+
+    for (const key of SESSION_BACKUP_KEYS) {
+      const validator = DATASET_VALIDATORS[key];
+      const present = Object.prototype.hasOwnProperty.call(storage, key) && storage[key] !== null && storage[key] !== undefined;
+      const entry = { key, label: validator.label, present, valid: present, recordCount: null, error: null, dynamic: false };
+
+      if (present) {
+        let parsedVal;
+        try {
+          parsedVal = JSON.parse(storage[key]);
+        } catch (e) {
+          entry.valid = false;
+          entry.error = `"${key}" contains malformed JSON and cannot be restored.`;
+        }
+        if (entry.valid && !validator.checkShape(parsedVal)) {
+          entry.valid = false;
+          entry.error = `"${key}" failed validation — unexpected data shape.`;
+        }
+        if (entry.valid) {
+          entry.recordCount = validator.countRecords(parsedVal);
+          recordCounts[validator.label] = entry.recordCount;
+        }
+      }
+
+      if (present && !entry.valid) result.errors.push(entry.error);
+      if (present && entry.valid) result.includedKeys.push(key);
+      result.datasets.push(entry);
+    }
+
+    // Dynamic dated generic-overflight keys — strict allow-list, never
+    // arbitrary unknown keys. Values are plain digit strings, not JSON, so a
+    // malformed value here is a warning (skip that key) rather than a
+    // blocking error.
+    let genericOverflightsTotal = 0;
+    let anyGenericOverflightPresent = false;
+    for (const key of Object.keys(storage)) {
+      if (!isGenericOverflightStorageKey(key)) continue;
+      const raw = storage[key];
+      const entry = { key, label: 'genericOverflights', present: raw !== null && raw !== undefined, valid: true, recordCount: null, error: null, dynamic: true };
+      if (entry.present) {
+        anyGenericOverflightPresent = true;
+        if (typeof raw !== "string" || !/^\d+$/.test(raw.trim())) {
+          entry.valid = false;
+          entry.error = `"${key}" has a malformed overflight count and will be skipped.`;
+          result.warnings.push(entry.error);
+        } else {
+          entry.recordCount = Number(raw.trim());
+          genericOverflightsTotal += entry.recordCount;
+          result.includedKeys.push(key);
+        }
+      }
+      result.datasets.push(entry);
+    }
+    if (anyGenericOverflightPresent) recordCounts.genericOverflights = genericOverflightsTotal;
+
+    result.recordCounts = recordCounts;
+    result.movementCount = recordCounts.movements != null ? recordCounts.movements : 0;
+    if (!result.movementCount) result.warnings.push('This backup contains 0 movements.');
+
+    result.restorable = result.errors.length === 0;
+    return result;
+  }
+
+  // ── Legacy envelope: { fdmsBackup, payload } ─────────────────────────────
+  if (!Array.isArray(parsed) && parsed.fdmsBackup && parsed.payload) {
+    result.recognised = true;
+    result.format = 'envelope';
+    result.isLegacy = true;
+
+    const meta = parsed.fdmsBackup;
+    const payload = parsed.payload;
+    result.createdAtUtc = meta?.createdAtUtc || null;
+    result.schemaVersion = meta?.schemaVersion != null ? meta.schemaVersion : null;
+
+    let legacyMovements = null;
+    if (Array.isArray(payload)) {
+      legacyMovements = payload;
+    } else if (payload && typeof payload === "object" && payload.version && Array.isArray(payload.movements)) {
+      legacyMovements = payload.movements;
+    }
+
+    if (!legacyMovements) {
+      result.errors.push('Legacy envelope payload is not a recognised movements format.');
+      return result;
+    }
+
+    result.movementCount = meta?.counts?.movements != null ? meta.counts.movements : legacyMovements.length;
+    result.recordCounts = { movements: result.movementCount };
+    result.includedKeys = [STORAGE_KEY];
+
+    result.warnings.push('Legacy backup format — only movement data will be restored. Bookings, cancelled sorties, deleted strips, booking profiles, calendar events, hours log, and generic overflights are not included.');
+    if (!result.movementCount) result.warnings.push('This backup contains 0 movements.');
+
+    result.restorable = true;
+    return result;
+  }
+
+  // ── Legacy v1: bare array of movements ───────────────────────────────────
+  if (Array.isArray(parsed)) {
+    result.recognised = true;
+    result.format = 'v1';
+    result.isLegacy = true;
+    result.movementCount = parsed.length;
+    result.recordCounts = { movements: parsed.length };
+    result.includedKeys = [STORAGE_KEY];
+    result.warnings.push('Legacy backup format — only movement data will be restored.');
+    if (!result.movementCount) result.warnings.push('This backup contains 0 movements.');
+    result.restorable = true;
+    return result;
+  }
+
+  // ── Legacy v2: { version:number, movements:[] } ──────────────────────────
+  if (typeof parsed.version === "number" && Array.isArray(parsed.movements)) {
+    result.recognised = true;
+    result.format = 'v2';
+    result.isLegacy = true;
+    result.schemaVersion = parsed.version;
+    result.movementCount = parsed.movements.length;
+    result.recordCounts = { movements: parsed.movements.length };
+    result.includedKeys = [STORAGE_KEY];
+    result.warnings.push('Legacy backup format — only movement data will be restored.');
+    if (!result.movementCount) result.warnings.push('This backup contains 0 movements.');
+    result.restorable = true;
+    return result;
+  }
+
+  result.errors.push('Unrecognized file structure — this does not appear to be a Vectair Flite backup.');
+  return result;
+}
+
 export function exportSessionJSON() {
   const storage = {};
   for (const key of SESSION_BACKUP_KEYS) {
@@ -1825,23 +2104,42 @@ export function exportSessionJSON() {
   for (const key of getGenericOverflightStorageKeys()) {
     storage[key] = window.localStorage.getItem(key);
   }
-  return {
+
+  const backup = {
     app: "Vectair Flite",
     format: "vectair-flite-session-backup",
-    formatVersion: 1,
+    formatVersion: CURRENT_BACKUP_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
+    appVersion: runningAppVersion,
     storage
   };
+
+  // Derive included-key list and record-count summary from the same
+  // authoritative inspection path used for restore, so exported metadata
+  // can never drift from what restore would actually compute.
+  const inspection = inspectSessionBackup(backup);
+  backup.includedKeys = inspection.includedKeys;
+  backup.recordCounts = inspection.recordCounts;
+
+  return backup;
 }
 
 export function importSessionJSON(parsed) {
   try {
-    if (!parsed || typeof parsed !== "object") {
-      throw new Error("Invalid import data");
+    const inspection = inspectSessionBackup(parsed);
+
+    if (!inspection.recognised) {
+      throw new Error(inspection.errors[0] || "Unrecognized import format");
+    }
+    if (!inspection.restorable) {
+      throw new Error(inspection.errors[0] || "Backup failed validation and cannot be restored.");
     }
 
     // Current format: { app, format, formatVersion, exportedAt, storage }
-    if (parsed.format === "vectair-flite-session-backup" && parsed.storage && typeof parsed.storage === "object") {
+    if (inspection.format === 'full') {
+      // Validation above already confirmed every present dataset parses and
+      // matches its expected shape, so it is now safe to start writing.
+      // Nothing is written to localStorage until this point is reached.
       const restoredKeys = [];
       for (const key of SESSION_BACKUP_KEYS) {
         if (Object.prototype.hasOwnProperty.call(parsed.storage, key) && parsed.storage[key] !== null) {
@@ -1860,13 +2158,12 @@ export function importSessionJSON(parsed) {
       // Reload in-memory movements from restored localStorage
       movementsInitialised = false;
       ensureInitialised();
-      return { success: true, count: movements.length, format: 'full', restoredKeys };
+      return { success: true, count: movements.length, format: 'full', restoredKeys, inspection };
     }
 
-    // Legacy envelope format: { fdmsBackup, payload }
+    // Legacy envelope / v1 / v2 formats: movements only
     const payload = (parsed.fdmsBackup && parsed.payload) ? parsed.payload : parsed;
 
-    // Legacy v1 (bare array) or v2 (versioned object with movements array)
     let importedMovements;
     if (Array.isArray(payload)) {
       importedMovements = payload;
@@ -1880,7 +2177,7 @@ export function importSessionJSON(parsed) {
     nextId = computeNextId();
     movementsInitialised = true;
     saveToStorage();
-    return { success: true, count: movements.length, format: 'legacy' };
+    return { success: true, count: movements.length, format: 'legacy', inspection };
   } catch (e) {
     console.error("FDMS: import failed", e);
     return { success: false, error: e.message };
