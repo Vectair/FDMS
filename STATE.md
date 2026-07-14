@@ -1,96 +1,72 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-06-09 (Europe/London, rev 24 — LIVEBOARD-INLINE-ARRIVAL-PAST-TIME-ATA-001 complete: past inline arrival-side ETA edits on ARR/LOC strips now write to ATA, preserving ETA and promoting PLANNED strips to ACTIVE; existing DEP/LOC historical ETD→ATD behaviour preserved)
+Last updated: 2026-07-14 (Europe/London, rev 25 — Phase 1 Item 3 complete and merged: backup validation, metadata, restore preview/summary, compatibility enforcement and backup/restore audit events)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
-- **Product Owner / SME:** Stuart
-- **Solutions Architect & QA Lead:** ChatGPT
-- **Production Engineer:** Claude Code
+* **Product Owner / SME:** Stuart
+* **Solutions Architect & QA Lead:** ChatGPT
+* **Production Engineer:** Claude Code
 
-ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maintains the documentation/continuity layer. Claude implements precise tickets only. Claude must not be asked to diagnose root cause, infer product direction, or choose architecture independently.
+ChatGPT investigates the repository, diagnoses problems, determines architecture, writes precise implementation tickets, reviews implementation and maintains the documentation/continuity layer.
+
+Claude Code implements precise tickets. Claude should not be asked to independently infer product direction, reopen settled product decisions or perform broad exploratory implementation without a defined scope.
+
+The working rule is:
+
+> Investigate first. Define the smallest correct change. Implement narrowly. Verify against the repository rather than trusting documentation or summaries alone.
 
 ---
 
 ## 0. Current headline status
 
-- **Main branch is the authoritative baseline.**
-- **Current confirmed `main`:** `41a97d2 Apply METAR admin visibility settings immediately`.
-- **Vectair Flite** (“Flite”) is the current product name.
-- Legacy references to **FDMS**, **FDMS Lite**, **Vectair FDMS**, or **Vectair FDMS Lite** refer to the same product unless explicitly stated otherwise.
-- The current phase is **V1 closeout / main roadmap resumption**.
-- The recent V1 snag list is **cleared**.
-- **Known V1 snags remaining:** `0`.
-- **DP-09c — NSIS hook execution repair** was completed, confirmed, and superseded by **REL-POLISH-001**.
-- **REL-POLISH-001** removed the temporary `dp09c-hook-ran.txt` installer diagnostic marker from `src-tauri/nsis-hooks.nsh` while preserving the desktop and Start Menu shortcut icon repair logic.
-- The project should now resume the main planned roadmap/task list rather than reopening the cleared snag list.
+* **Main branch is the authoritative baseline.**
+* **Current confirmed `main`:** `143ab12 Merge pull request #157 from Vectair/claude/wizardly-einstein-l5752h`
+* **Current released version:** `0.9.4`
+* **Vectair Flite** (“Flite”) is the current product name.
+* Legacy references to **FDMS**, **FDMS Lite**, **Vectair FDMS**, or **Vectair FDMS Lite** refer to the same product unless explicitly stated otherwise.
+* Flite is approaching its first V1 operational deployment at EGOW.
+* Major feature development is sufficiently mature that current work is focused on resilience, auditability, maintainability, operational robustness and final UX closeout.
+* The current programme is the **Pre-V1 resilience and robustness roadmap**.
+* The recent V1 snag list is cleared.
+* **Known V1 snags remaining from the cleared snag list:** `0`
+* Completed work must not be reopened without evidence that implementation has changed or a regression has occurred.
 
-Recently closed / consolidated:
+### Current Pre-V1 programme status
 
-- **Live Board summary counter aggregation and computed tooltips** is complete and merged.
-- **Monthly Return ghost-count contamination** is complete and merged.
-- **Desktop Productization audit** is complete as the planning baseline. See `docs/DESKTOP_PRODUCTIZATION_AUDIT.md`.
-- **DP-03 — Vendor SheetJS for offline operation** is complete and merged. SheetJS `xlsx` 0.18.5 is vendored at `src/lib/xlsx.full.min.js`; the CDN reference has been removed.
-- **DP-04 — package.json identity and Tauri dev/build scripts** is complete and merged. `package.json` uses `vectair-flite` and includes `tauri:dev` / `tauri:build` scripts.
-- **DP-05 — README / Getting Started rewrite for desktop launch and release build** is complete and pushed.
-- **DP-06 — Enable and smoke-test CSP after SheetJS is vendored** is complete and pushed.
-- **DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys** is complete and pushed.
-- **DP-08 — Release build smoke test** version alignment and build validation are complete and pushed; release-build behaviour is part of final acceptance sweep rather than a current standalone blocker.
-- **DP-09 / DP-09b / DP-09c — Windows shortcut icon repair sequence** is complete/superseded. The final accepted logic is preserved; the temporary diagnostic marker has been removed by REL-POLISH-001.
-- **EGOW-COUNT-001** — manual `movement.egowCode` now takes precedence over VKB registration-derived EGOW flight type in reporting classification.
-- **DUP-REG-001** — duplicate modal no longer overwrites submitted planned times with fresh UTC defaults.
-- **DUP-REG-001b** — duplicate modal suggestions now respect configured movement offsets/durations.
-- **INPUT-NORM-001** — operational text fields are normalized to uppercase at save boundary across New, LOC, Edit, Duplicate, and Formation paths; human-name fields remain unforced.
-- **HIST-FILTER-UX-001 / 001a / 001b** — Historic Strip Board filter toolbar/collapse/configurable visibility completed.
-- **HIST-LAYOUT-002 / 002a** — History toolbar/layout refactor completed and Admin filter config re-linked.
-- **History/Cancelled IA relocation** — Cancelled Sorties and Deleted Strips moved out of History into a top-level `Cancelled` tab.
-- **REL-POLISH-001** — DP-09c installer diagnostic marker removed from `src-tauri/nsis-hooks.nsh`; actual shortcut icon fix logic retained.
-- **UPDATER-001** — Manual in-app updater added to Admin → System Status. Update checking is operator-initiated only; no launch-time or auto-check occurs. Tauri v2 `tauri-plugin-updater` registered; four Rust commands exposed via `invoke`; Updates panel added to Admin → System Status; browser-harness notice shown when not running in Tauri. Signing keypair generated by Stuart; public key embedded in `tauri.conf.json`; private key is never committed.
-- **VERSION-RESET-001** — Pre-launch versioning reset to `0.9.0` in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`. Pre-launch builds use `0.x.x`; `1.0.0` is reserved for launch. Any locally installed `1.0.3` build requires one manual uninstall before installing `0.9.0` due to Windows version downgrade semantics.
-- **DEV-INSTALL-001** — `scripts/install-latest-dev-build.ps1` added: pulls `main`, runs `npm run tauri:build`, locates the newest NSIS installer, and launches it. For Stuart / internal development use only. Does not publish a release or update via GitHub Releases.
-- **METAR-BUILDER-001 through METAR-BUILDER-004a** — Weather / METAR Builder implemented and complete. Structured METAR/SPECI builder with CAP 746-guided validation, Civilian/Military reporting mode, Admin-configurable section visibility, colour state auto-population, and mixed-precipitation grouping. See sections 26–34.
-- **DOCS-FLITE-001** — Weather/METAR Builder documentation complete. No app code changed. `docs/quick-start.md`, `docs/user-guide.md`, and `docs/install-update-backup-troubleshooting.md` created. README updated with key features list including Weather/METAR Builder. STATE.md updated.
-- **UX-V1-001** — Expanded desktop app shell to use available window width; removed artificial 1280px centred shell constraint.
-- **BRAND-V1-001** — Replaced placeholder VA header mark with existing VF branding asset.
-- **BRAND-V1-002** — Repointed header and Tauri icons to dual asset set. Header uses `flite-logo-vf-transparent-full-128.png`. Standard Tauri icon filenames (`32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.ico`, `icon.png`) replaced with background variants. Dual transparent/background assets retained alongside.
-- **BRAND-V1-003** — Increased displayed header logo scale within existing header height. `.va-logo-box` widened from 40×32 to 48×40; header height unchanged.
-- **UX-V1-002** — Moved read-only movement/FIS totals to nav/status row, relocated Manual FIS editor to Live Board action row, and added FIS Total Military/Civilian hover breakdown.
-- **UX-V1-003** — Removed redundant page title/subtitle blocks from primary tabs; strengthened active nav tab with white background, brown top accent, and content-attached appearance.
-- **UX-V1-003A** — Refined active nav tab to fully merge into page content area. Nav bar bottom border moved to `::after` pseudo-element (z-index 0); active tab uses `position: relative; z-index: 1` with white background and visible left/right border (`var(--va-border)`), covering the pseudo-element line so the tab visually opens into the page. Inactive tabs remain flat with transparent borders.
-- **LIVEBOARD-INLINE-ARRIVAL-PAST-TIME-ATA-001** implemented. Past inline arrival-side ETA edits on ARR/LOC strips now write to ATA, preserving ETA and promoting PLANNED strips to ACTIVE. Existing DEP/LOC historical ETD→ATD behaviour preserved.
-- Admin UI cleanup: Reference Data editor labels clarified; inactive Admin sections no longer bleed into other Admin views; staged-save "All changes saved" status is now transient after save rather than permanently displayed.
-- Reference Data table refinement: removed user-facing Status and Reset controls; added Last Updated column before Actions while retaining Edit/History/Hide/Delete behaviour and internal status logic where required.
-- Reference Data action wording refined: user-facing Hide action replaced with Delete to reflect the long-term local/user-curated Reference Data model; internal suppression behaviour for bundled baseline rows remains unchanged.
+```text
+Phase 1 — Data Safety, Persistence and Audit Foundations
 
-### Pre-launch versioning policy
+✅ Item 1 — Backup / Restore Completeness
+✅ Item 2 — Canonical Data Inventory
+✅ Item 3 — Backup Validation & Restore Summary
+▶ Next — continue with the next defined Pre-V1 roadmap item
+```
 
-- **Current version: `0.9.0`** — reset from `1.0.3` to reflect pre-launch / internal development status.
-- Pre-launch / internal development builds use `0.x.x` versioning.
-- Future internal pre-launch builds should increment `0.9.x` or, if needed, `0.10.x`.
-- **`1.0.0` is reserved for launch.** `1.x.x` must not be used again until launch / post-launch.
-- Any locally installed `1.0.3` build (Windows) requires a manual uninstall before `0.9.0` can be installed: `Apps & features → Vectair Flite → Uninstall`.
+### Immediate engineering baseline
 
+The following are now proven or complete:
 
-Current remaining planned V1 sequence:
+```text
+Windows updater                     Proven
+Signed update pipeline              Proven
+In-app update from 0.9.3 to 0.9.4   Proven
+Check for updates on launch         Implemented
+Backup / Restore completeness       Proven
+Canonical persistence inventory     Complete
+Backup validation                   Complete
+Restore preview and summary         Complete
+Backup/restore audit events          Complete
+History improvements                Proven
+Formation system                    Proven
+PIC/VKB fixes                       Proven
+```
 
-1. ~~Create From workflow.~~ **Complete — merged.**
-2. ~~METAR Builder.~~ **Complete — merged (METAR-BUILDER-001 through 004a).**
-3. ~~Weather/METAR Builder documentation.~~ **Complete — DOCS-FLITE-001.**
-4. **Final V1 regression and acceptance sweep.**
+### Current project rule
 
-Other current anchors:
+Do not resume broad feature expansion before the outstanding Pre-V1 resilience, audit, maintainability and UX closeout work is complete.
 
-- The EGOW / LOC / timing regression cluster is **resolved and merged**. It is now a regression baseline, not active work.
-- History Retrieval and the recent History/Cancelled layout/filter relocation are **complete and smoke-tested**. Remaining Search/Table and wider IA polish is post-V1 backlog unless a specific launch-blocking defect appears.
-- Formation implementation through **FR-15** is complete for launch purposes. Further formation refinement is post-launch unless a specific launch-blocking defect appears.
-- Native **Save As** export behaviour is implemented for the relevant CSV/XLSX export paths in the Tauri desktop environment.
-- Browser/download fallback remains available for non-Tauri/local-browser harness use.
-- `FDMS_REGISTRATIONS.csv` has been restored and verified at **25,713 lines**.
-- V1 release scope is confirmed as including:
-  - Create From workflow;
-  - METAR Builder;
-  - full offline standalone Desktop Productization.
-- MAB package filtering is confirmed as **post-V1**.
+---
 
 ## 1. Product identity and naming
 
@@ -106,7 +82,7 @@ Short form:
 Flite
 ```
 
-Older development material may refer to the same application as:
+Older development material may refer to:
 
 ```text
 FDMS
@@ -115,15 +91,15 @@ Vectair FDMS
 Vectair FDMS Lite
 ```
 
-These are legacy names for the same product unless the context explicitly distinguishes them.
+These are legacy names for the same product unless context explicitly distinguishes them.
 
-Flite is a deliberate contraction of FDMS + light. New tickets, documentation, release notes, screenshots, and architecture summaries should use **Vectair Flite** or **Flite** by default.
+New tickets, documentation, releases and architecture material should use **Vectair Flite** or **Flite** by default.
 
-Do not casually revert to older FDMS naming in new material.
+Do not casually reintroduce legacy FDMS naming into new user-facing material.
 
 ---
 
-## 2. Repository, branch, and historical anchors
+## 2. Repository, ownership and branch model
 
 ### 2.1 Repository
 
@@ -147,9 +123,37 @@ main
 
 `main` is the authoritative working baseline unless explicitly stated otherwise.
 
-### 2.3 Known historical anchors
+Before beginning new implementation:
 
-The following branches/tags may exist as intentional history/fallback points:
+1. Confirm the relevant previous work has been merged.
+2. Inspect the current `main` implementation.
+3. Do not rely only on handovers, `STATE.md`, roadmap text or Claude summaries.
+4. Use repository implementation as the final source of truth for actual behaviour.
+
+### 2.3 Current main anchor
+
+At this revision:
+
+```text
+143ab12 Merge pull request #157 from Vectair/claude/wizardly-einstein-l5752h
+```
+
+This merge contains Phase 1 Item 3:
+
+```text
+1004abd Add backup validation, richer metadata, and restore summaries (Phase 1 Item 3)
+c7e23b0 Fix backup-validation edge cases found in review
+```
+
+The preceding Phase 1 Item 2 baseline was merged as:
+
+```text
+18e3813 Merge pull request #156 from Vectair/claude/data-inventory-persistence-audit-ddb01v
+```
+
+### 2.4 Historical anchors
+
+The following branches/tags may exist as intentional history or fallback points:
 
 ```text
 legacy/pre-desktop-main
@@ -157,78 +161,136 @@ baseline/pre-desktop-productization
 flite-pre-desktop-baseline-2026-03
 ```
 
-Do not delete or reinterpret these casually.
-
-### 2.4 Latest important merged EGOW baseline
-
-The latest closed EGOW consolidation work was merged to `main` at:
-
-```text
-73023df Fix EGOW Unit provenance, add change listeners, trigger derivation from reg autofill
-```
-
-Relevant recent EGOW commits include:
-
-```text
-73023df Fix EGOW Unit provenance, add change listeners, trigger derivation from reg autofill
-17f19cf Add stale autofill clearing, UAM family fallback, and malformed-input safeguard
-339a7c7 Correct LOC PIC layout, tracked autofill, and single-digit callsign guard
-a11918e Consolidate EGOW attribution and timing fixes
-cd343bc Fix EGOW schema spelling and flight-number lookup normalisation
-```
+Do not delete or reinterpret historical anchors casually.
 
 ---
 
-## 3. Runtime and delivery model
+## 3. Version and release model
 
-### 3.1 Product definition
-
-Vectair Flite is **not** a website and **not** a hosted web app.
-
-Flite is a local flight-data management application for Windows and Linux. It currently uses HTML/CSS/JS internally and is being productized through Tauri.
-
-The local Python server is a development/runtime convenience only and must not be required for normal V1 operation.
-
-### 3.2 V1 desktop productization requirement
-
-V1 Desktop Productization means:
+### 3.1 Current version
 
 ```text
-Flite must be a fully independent, offline-capable, installable desktop application.
-It must not depend on a browser, a Python development server, or internet connectivity for normal core operation.
+0.9.4
 ```
 
-V1 desktop productization must include, at minimum:
+Pre-launch development uses `0.x.x`.
 
-- packaged application build;
-- local asset/data loading inside the installed app;
-- normal offline operation using bundled/saved critical data;
-- no dependency on `python -m http.server` for normal use;
-- verified native Save As/export behaviour;
-- clear local data persistence and backup/restore expectations;
-- installation/update/troubleshooting documentation;
-- sufficient crash/error visibility for internal operational use.
+```text
+1.0.0
+```
 
-Signed installers, automatic updates, and polished public distribution infrastructure may be deferred unless they become necessary for the first release.
+is reserved for actual V1 launch.
 
-### 3.3 Current development environment
+Do not use `1.x.x` for further internal pre-launch builds.
 
-Development OS:
+### 3.2 Version alignment
+
+Release version changes must remain aligned across the applicable project files, including:
+
+```text
+package.json
+src-tauri/Cargo.toml
+src-tauri/tauri.conf.json
+```
+
+### 3.3 Current updater/release baseline
+
+The Windows Tauri updater is implemented and proven.
+
+The successful release/update sequence includes:
+
+```text
+0.9.2 — updater validation work
+0.9.3 — PIC/autofill and retrospective dropdown work
+0.9.4 — published updater release successfully installed through Flite
+```
+
+The `0.9.4` GitHub release contained the expected updater assets, including:
+
+```text
+latest.json
+NSIS installer
+installer signature
+MSI package where produced
+```
+
+The installed application successfully updated through the in-app updater.
+
+### 3.4 Update UX
+
+Implemented:
+
+* Admin → System Status → Updates.
+* Manual update check.
+* Download/install workflow.
+* Inline confirmation rather than unsupported native `confirm()`.
+* Update-install teardown error suppression.
+* Fallback recovery if Windows installer handoff does not close the application as expected.
+* Optional check for updates on application launch.
+* Last update-check timestamp display.
+
+The current updater is a regression baseline. Do not modify it casually.
+
+### 3.5 Signing
+
+The updater signing public key is embedded in project configuration.
+
+The signing private key must never be committed.
+
+Signing-key rotation is planned later as post-launch preparation and is not a blocker for the current Pre-V1 engineering sequence unless circumstances change.
+
+---
+
+## 4. Runtime and delivery model
+
+### 4.1 Product definition
+
+Vectair Flite is:
+
+```text
+a local, offline-first, installable desktop flight-data management application
+```
+
+It is not a hosted web service.
+
+It currently uses:
+
+```text
+HTML
+CSS
+JavaScript
+Tauri v2 desktop shell
+```
+
+### 4.2 Desktop requirement
+
+Normal operational use must not depend on:
+
+```text
+a browser
+a Python development server
+internet connectivity for core operation
+a hosted backend
+cloud storage
+```
+
+### 4.3 Development environment
+
+Primary development OS:
 
 ```text
 Windows
 ```
 
-Operational target:
-
-```text
-Linux, with Windows development/testing
-```
-
-Current browser harness:
+Local repository:
 
 ```powershell
 cd C:\Users\dmshs\FDMS
+```
+
+Browser development harness:
+
+```powershell
 python -m http.server 8000 --directory src
 ```
 
@@ -238,10 +300,9 @@ Browser URL:
 http://localhost:8000/
 ```
 
-Current Tauri development run:
+Tauri development:
 
 ```powershell
-cd C:\Users\dmshs\FDMS
 npm run tauri:dev
 ```
 
@@ -251,37 +312,88 @@ Equivalent direct command:
 cargo tauri dev
 ```
 
-Tauri development mode currently waits for the frontend dev server at:
+The Python server is a development convenience only. It is not an acceptable V1 runtime dependency.
+
+### 4.4 Internal development installer workflow
+
+The internal script:
 
 ```text
-http://localhost:8000/
+scripts/install-latest-dev-build.ps1
 ```
 
-This is acceptable for development only. It is not acceptable as the V1 product runtime. A packaged release build bundles `src/` directly and must not require the Python development server.
+pulls the current code, builds the Tauri application, locates the latest NSIS installer and launches it.
 
-### 3.4 Known binary / launcher references
+This is an internal development convenience. It is separate from the published updater release workflow.
 
-Known app binary path from prior context:
+---
+
+## 5. Persistence architecture
+
+### 5.1 Authoritative reference
+
+The authoritative persistence reference is:
 
 ```text
-C:\Users\dmshs\FDMS\target\debug\vectair-flite.exe
+docs/architecture/DATA_INVENTORY.md
 ```
 
-Known launcher from prior context:
+That document was produced under Phase 1 Item 2 and corrected under Item 2A.
 
-```text
-launch-flite.ps1
-```
+It should be treated as the definitive reference for:
 
-### 3.5 Persistence model
+* persisted datasets;
+* ownership;
+* storage classes;
+* lifecycle;
+* backup coverage;
+* restore coverage;
+* integrity coverage;
+* migration stores;
+* persistence relationships;
+* future SQLite planning;
+* future diagnostic/integrity work.
 
-Current persistence model:
+### 5.2 Current persistence model
+
+All current application state is stored in browser/WebView:
 
 ```text
 localStorage
 ```
 
-Confirmed V1 localStorage keys covered by Admin backup/restore (SESSION_BACKUP_KEYS):
+There is currently:
+
+* no backend server;
+* no hosted/cloud storage;
+* no SQL database;
+* no multi-user concurrency model;
+* no Tauri-side application-data persistence layer;
+* no plugin-store persistence;
+* no application-managed filesystem database.
+
+### 5.3 Storage inventory
+
+The canonical inventory identifies:
+
+```text
+16 localStorage keys/key-families
+```
+
+Reconciliation:
+
+```text
+10 static backup keys
+1 dynamic generic-overflight key family
+3 intentionally excluded current keys
+2 legacy migration-only keys
+---------------------------------------
+16 total keys/key-families
+```
+
+### 5.4 Static backup keys
+
+The approved `SESSION_BACKUP_KEYS` baseline is:
 
 ```text
 vectair_fdms_movements_v3
@@ -291,62 +403,345 @@ vectair_fdms_deleted_strips_v1
 fdms_booking_profiles_v1
 vectair_fdms_calendar_events_v1
 vectair_fdms_hours_v1
+vectair_fdms_vkb_overrides_v1
+vectair_flite_audit_log_v1
+vectair_fdms_bookings_v1
 ```
 
-Current app model:
+### 5.5 Dynamic backup family
+
+Generic overflights are persisted by date:
 
 ```text
-single-client local state
+fdms_generic_overflights_YYYY-MM-DD
 ```
 
-There is currently:
+All recognised present dated keys are included dynamically in backup/restore.
 
-- no backend;
-- no hosted/cloud storage model;
-- no multi-user concurrency model;
-- no server-side database in the V1 baseline.
+### 5.6 Current intentional exclusions
 
-SQLite / SQL-backed persistence is **not automatically V1**. It should only be promoted into V1 if Desktop Productization exposes a hard reliability, backup, migration, or packaging problem that cannot be responsibly solved with the current storage model.
-
-Longer-term persistence should move toward an explicit storage-adapter architecture, likely including SQLite or another robust local store.
-
-### 3.6 Cache warning
-
-Browser/WebView cache can show stale JS/CSS.
-
-When validating JS/CSS behaviour:
+The following are not currently included in session backup:
 
 ```text
-DevTools → Network → Disable cache → Reload
+vectair_fdms_metar_builder_last_v1
+vectair_flite_check_updates_on_launch_v1
+vectair_flite_last_update_check_v1
 ```
 
-In the Tauri app, use:
+Do not change this coverage casually.
+
+The METAR Builder draft exclusion is currently treated as an accepted product decision because it is regenerable cache/convenience data rather than critical operational data.
+
+The updater keys are machine-local preference/diagnostic state and are appropriately excluded.
+
+### 5.7 Bundled reference data
+
+Bundled reference CSVs under:
 
 ```text
-Admin → System Status → Reload App
+src/data/*.csv
 ```
 
-where available.
+are not localStorage and are not included in backup/restore.
 
-### 3.7 Local-only files
+They travel with the application bundle.
 
-The following file is local-only and must remain untracked:
+Locally edited mutable reference data is stored in:
 
 ```text
-Vectair Flite.lnk
+vectair_fdms_vkb_overrides_v1
 ```
 
-`.gitignore` should exclude local Windows shortcut files:
+and is backed up.
 
-```text
-*.lnk
-```
+### 5.8 Future storage direction
 
-Do not commit local shortcuts or local-only investigation scratch files.
+SQLite migration remains a future workstream.
+
+Do not introduce SQL casually as an isolated optimisation.
+
+Any future migration should be based on:
+
+* the canonical Data Inventory;
+* explicit storage adapters/wrappers;
+* migration/version contracts;
+* backup compatibility;
+* operational data protection;
+* rollback/recovery strategy.
 
 ---
 
-## 4. Current source layout and architecture map
+## 6. Phase 1 — Pre-V1 persistence and data-safety programme
+
+### 6.1 Item 1 — Backup / Restore Completeness
+
+Status:
+
+```text
+COMPLETE — MERGED
+```
+
+Objective:
+
+Ensure the Admin backup system captures all approved V1 persistent operational/configuration/reference/audit datasets.
+
+Completed outcome:
+
+* `SESSION_BACKUP_KEYS` expanded to the approved 10-key static baseline.
+* Dynamic dated generic-overflight keys included.
+* Current-format full backup restores approved datasets.
+* Arbitrary unknown keys are never restored.
+* Legacy movement-only formats remain supported.
+* Existing approved coverage was verified against repository persistence.
+
+Merge baseline:
+
+```text
+0e7d3fb Merge pull request #154 from Vectair/claude/backup-restore-completeness-dmg7gl
+```
+
+### 6.2 Item 2 — Canonical Data Inventory
+
+Status:
+
+```text
+COMPLETE — MERGED
+```
+
+Produced:
+
+```text
+docs/architecture/DATA_INVENTORY.md
+```
+
+The inventory covers:
+
+* persistent datasets;
+* owners;
+* storage classes;
+* canonical status;
+* backup coverage;
+* restore coverage;
+* validation;
+* regenerability;
+* diagnostic-bundle coverage;
+* operational/safety significance;
+* relationships;
+* migration stores;
+* gap analysis;
+* planned future persistent data.
+
+Corrections completed under Item 2A included:
+
+* localStorage total corrected from 17 to 16 keys/key-families;
+* persistence matrix completed;
+* Diagnostic Bundle column added;
+* Operational / Safety Significance column added;
+* Hours Log reclassified as Supporting Operational Data;
+* METAR wording softened to avoid treating a product decision as an implementation defect;
+* planned future persistence section added;
+* terminology standardised.
+
+Merge baseline:
+
+```text
+18e3813 Merge pull request #156 from Vectair/claude/data-inventory-persistence-audit-ddb01v
+```
+
+### 6.3 Item 3 — Backup Validation & Restore Summary
+
+Status:
+
+```text
+COMPLETE — MERGED
+```
+
+Merge baseline:
+
+```text
+143ab12 Merge pull request #157 from Vectair/claude/wizardly-einstein-l5752h
+```
+
+Implementation commits:
+
+```text
+1004abd Add backup validation, richer metadata, and restore summaries (Phase 1 Item 3)
+c7e23b0 Fix backup-validation edge cases found in review
+```
+
+Delivered:
+
+#### Authoritative backup inspection
+
+Added a single read-only inspection path:
+
+```text
+inspectSessionBackup()
+```
+
+It is used by:
+
+* Admin restore preview;
+* `importSessionJSON()` defensive validation;
+* export metadata derivation.
+
+The preview and importer therefore use one authoritative interpretation of backup structure.
+
+#### Backup metadata
+
+New full backups include:
+
+```text
+app
+format
+formatVersion
+exportedAt
+appVersion
+includedKeys
+recordCounts
+storage
+```
+
+#### Full-backup validation
+
+Recognised static datasets are validated for:
+
+* valid JSON;
+* expected basic top-level shape;
+* known supported backup-format version.
+
+A malformed recognised static dataset blocks full restore.
+
+#### No partial full restore
+
+The central safety invariant is:
+
+> No full-backup localStorage mutation begins until the complete recognised static restore payload has passed validation.
+
+#### Compatibility policy
+
+Current supported backup format:
+
+```text
+1
+```
+
+A backup with a newer unsupported `formatVersion` is blocked.
+
+A present but malformed/non-numeric version is blocked.
+
+Older current-format v1 backups that lack the new optional metadata remain supported.
+
+#### Restore preview
+
+The Admin restore preview shows available:
+
+* filename;
+* creation timestamp;
+* backup application version;
+* backup format version;
+* restorable key count;
+* per-dataset record counts;
+* validation errors;
+* warnings.
+
+#### Restore summary
+
+Successful full restore now reports:
+
+* success;
+* number of storage keys restored;
+* record-count summary;
+* clear instruction to reload Flite before operational use so all subsystems and configuration values are refreshed.
+
+#### Backup/restore audit events
+
+Successful operations append:
+
+```text
+backup-exported
+backup-restored
+```
+
+Audit writes occur after the successful operation they describe.
+
+Audit-write failures are isolated and do not falsely report an already-successful backup or restore as failed.
+
+#### Generic-overflight validation
+
+Dynamic dated generic-overflight values must be non-negative integer digit strings within JavaScript safe-integer range.
+
+Malformed dynamic overflight values are skipped with a warning rather than written.
+
+This is an accepted pragmatic exception to strict all-or-nothing full-backup treatment because the malformed daily counter is omitted safely and does not prevent restoration of otherwise valid operational data.
+
+#### Legacy restore support
+
+Preserved:
+
+* legacy envelope format;
+* legacy v2 movement object;
+* legacy v1 bare movement array.
+
+Legacy formats remain movement-only restores and continue to warn the operator accordingly.
+
+---
+
+## 7. Current active engineering priority
+
+### 7.1 Immediate status
+
+Phase 1 Items 1–3 are complete.
+
+The next task must be taken from the authoritative Pre-V1 roadmap rather than invented from this file.
+
+Likely remaining Pre-V1 work includes:
+
+* storage wrappers / persistence abstraction;
+* operational audit schema expansion;
+* operator identity where required;
+* workstation/session identity where required;
+* remaining UX closeout items;
+* final installer/release documentation;
+* final regression and acceptance work.
+
+Before beginning the next implementation:
+
+1. Inspect the authoritative roadmap item.
+2. Inspect current repository implementation.
+3. Define the smallest correct ticket.
+4. Avoid bundling later phases into the active item.
+
+### 7.2 Known major remaining V1-readiness themes
+
+```text
+Storage abstraction / wrappers
+Operational audit schema
+Error visibility / diagnostic hardening
+Remaining operator-facing UX polish
+Final installer and release documentation
+Final regression and acceptance sweep
+```
+
+### 7.3 Post-launch or later preparation
+
+Unless promoted by evidence:
+
+```text
+SQLite migration
+Signing-key rotation
+MAB package filtering
+Learned PIC ranking
+Advanced historical lifecycle analytics
+Broad multi-user concurrency
+Hosted/cloud persistence
+```
+
+remain later work.
+
+---
+
+## 8. Current source architecture
 
 Known source layout:
 
@@ -358,9 +753,11 @@ src/js/datamodel.js
 src/js/ui_liveboard.js
 src/js/ui_booking.js
 src/js/vkb.js
+src/js/audit.js
 src/js/reporting.js
 src/js/ui_reports.js
 src/js/export_utils.js
+src/js/metar_builder.js
 src/js/services/bookingSync.js
 src/js/stores/bookingsStore.js
 src/data/*.csv
@@ -369,7 +766,7 @@ docs/
 STATE.md
 ```
 
-### 4.1 Loading invariant
+### 8.1 Entry-point invariant
 
 `src/index.html` must load:
 
@@ -377,57 +774,108 @@ STATE.md
 js/app.js
 ```
 
-as the single application entry point.
+as the application entry point.
 
-Do not regress to a state where the UI appears but buttons, filters, sorting, colour logic, or feature wiring are non-functional because `app.js` is not loaded.
+Do not regress to a state where the interface renders but behaviour is unwired because the application entry point is missing or broken.
 
-### 4.2 Major code responsibilities
+### 8.2 Major responsibilities
 
-`src/index.html`
+#### `src/index.html`
 
-- Shell, tab structure, major panels.
+* Application shell.
+* Navigation.
+* Major panels.
+* Admin surfaces.
+* Modals and static UI structure.
 
-`src/js/app.js`
+#### `src/js/app.js`
 
-- Boot/wiring, tab initialization, high-level rendering hooks.
+* Application bootstrap.
+* Tab wiring.
+* Admin handlers.
+* Diagnostics.
+* Backup/restore UI orchestration.
+* Updater panel orchestration.
+* High-level render hooks.
 
-`src/js/ui_liveboard.js`
+#### `src/js/datamodel.js`
 
-- Live Board, History, lifecycle actions, modals, inline editing, strip renderers, formation expanded display, formation child-strip UI.
+* Movement persistence.
+* Configuration.
+* Initialization.
+* Timing helpers.
+* Formation helpers.
+* Lifecycle stores.
+* Backup/restore payload generation and validation.
+* Generic overflight persistence.
+* Data counts/storage information.
 
-`src/js/datamodel.js`
+#### `src/js/ui_liveboard.js`
 
-- Movement storage, config, initialization, timing helpers, formation helpers, lifecycle stores, localStorage persistence.
+* Live Board.
+* History.
+* Strip rendering.
+* Lifecycle actions.
+* Movement modals.
+* Inline editing.
+* Formation UI.
+* Cancelled/deleted movement UI.
 
-`src/js/vkb.js`
+#### `src/js/ui_booking.js`
 
-- Static VKB CSV loading and lookup helpers.
+* Booking UI.
+* Calendar UI.
+* Booking profiles.
 
-`src/js/reporting.js`
+#### `src/js/stores/bookingsStore.js`
 
-- Reporting and official return logic.
+* Booking persistence/access layer.
 
-`src/js/ui_reports.js`
+#### `src/js/services/bookingSync.js`
 
-- Reports UI wiring.
+* Booking ↔ movement linkage reconciliation.
 
-`src/js/export_utils.js`
+#### `src/js/vkb.js`
 
-- Shared export/save helpers for CSV/text and binary export paths.
+* Bundled VKB/reference-data loading.
+* Lookup helpers.
+* Mutable override layer.
+* Reference-data admin functions.
 
-`src/js/services/bookingSync.js`
+#### `src/js/audit.js`
 
-- Booking ↔ strip linkage reconciliation.
+* Append-only audit ledger.
+* Audit event generation.
+* Field-diff support.
+* Reference-data audit history.
+* Backup/restore system events.
 
-`src/js/stores/bookingsStore.js`
+The current audit ledger was originally VKB-scoped and remains narrower than a future complete operational audit subsystem.
 
-- Booking persistence/access layer.
+#### `src/js/metar_builder.js`
 
-`src/css/vectair.css`
+* METAR/SPECI builder.
+* Builder persistence.
+* validation and assembly.
+* Admin Weather settings.
 
-- Main styling, Live Board styling, History styling, Reports styling, formation child-strip styling.
+#### `src/js/reporting.js`
 
-Tauri-specific files:
+* Reporting classification.
+* Official Monthly Return logic.
+* Reporting calculations and exports.
+
+#### `src/js/ui_reports.js`
+
+* Reports UI wiring.
+
+#### `src/js/export_utils.js`
+
+* Shared native Save As / browser fallback export helper.
+
+### 8.3 Tauri files
+
+Key desktop files include:
 
 ```text
 src-tauri/Cargo.toml
@@ -439,111 +887,105 @@ src-tauri/capabilities/default.json
 
 ---
 
-## 5. Completed / merged baseline
+## 9. Completed / merged product baseline
 
-The following workstreams should be treated as merged and complete for current planning purposes.
+The following workstreams are treated as complete for current planning unless evidence of regression appears.
 
-| Workstream | Status |
-|---|---|
-| Core Live Board strip workflow | Complete baseline |
-| Live Board counter aggregation and computed tooltips | Complete — merged |
-| Monthly Return ghost-count contamination | Complete — merged |
-| Desktop Productization audit | Complete — planning baseline |
-| DP-03 — Vendor SheetJS for offline operation | Complete — merged |
-| DP-04 — package.json identity and Tauri scripts | Complete — merged |
-| DP-05 — README / Getting Started desktop rewrite | Complete — pushed |
-| DP-06 — Enable and smoke-test CSP after SheetJS is vendored | Complete — smoke-tested |
-| DP-07 — Confirm and document Admin backup/restore coverage | Complete — pushed |
-| DP-08 — Version alignment and release build validation | Complete — pushed; final package validation remains part of final acceptance sweep |
-| DP-09 / DP-09b / DP-09c Windows shortcut icon repair | Complete / superseded by REL-POLISH-001 — shortcut icon logic retained; temporary diagnostic marker removed |
-| REL-POLISH-001 — Remove DP-09c installer diagnostic marker | Complete — merged and pushed at `ffe4206` |
-| EGOW-COUNT-001 — Manual EGOW code classification precedence | Complete — merged |
-| DUP-REG-001 / DUP-REG-001b — Duplicate modal timing fixes | Complete — merged |
-| INPUT-NORM-001 — Operational text uppercase normalization | Complete — merged |
-| HIST-FILTER-UX-001 / HIST-LAYOUT-002 tranche | Complete — History toolbar/filter/layout refactor merged |
-| Cancelled tab relocation | Complete — Cancelled Sorties and Deleted Strips moved to top-level Cancelled tab |
-| UTC-first timing hardening | Complete baseline |
-| Day Timeline presentation tranche | Complete baseline |
-| Cancellation / deleted-strip lifecycle tranche | Complete |
-| Cancellation reporting | Complete |
-| Formation implementation through FR-15 | Complete for V1 launch |
-| Formation expanded child-strip display refactor | Complete |
-| History Retrieval H1–H5b | Complete |
-| Native Save As export consolidation H5b | Complete |
-| EGOW / LOC / timing regression cluster | Fixed and merged at `73023df` |
-| EGOW attribution consolidation | Fixed and merged at `73023df` |
-| Aircraft pilot suggestions | Implemented using `FDMS_AIRCRAFT_PILOTS.csv` |
-| Registration CSV restoration | `FDMS_REGISTRATIONS.csv` verified at 25,713 lines |
-| UPDATER-001 — Manual in-app updater | Complete — merged. Admin → System Status → Updates; operator-initiated only; `tauri-plugin-updater` registered; public key in `tauri.conf.json`. |
-| VERSION-RESET-001 — Pre-launch version reset to 0.9.0 | Complete — pushed. `package.json`, `Cargo.toml`, `tauri.conf.json` all at `0.9.0`. `1.0.0` reserved for launch. |
-| DEV-INSTALL-001 — Local dev reinstall script | Complete — pushed. `scripts/install-latest-dev-build.ps1` added. |
-| METAR-BUILDER-001 — Structured METAR/SPECI Builder | Complete — merged. Weather tab, builder logic, validation, assembler, localStorage recall. |
-| METAR-BUILDER-002 — Operational Refinement Pass | Complete — merged. Admin > Weather schedule, wind defaults, present weather structured selector, colour state, temperature M-prefix. |
-| METAR-BUILDER-002a — Correction Pass | Complete — merged. Schedule window logic, hourlyMinute selector, WX/RW validation fixes. |
-| METAR-BUILDER-003 — CAP 746 Compliance and UX Hardening | Complete — merged. Mandatory fields, blocked Copy, placeholder tokens, multiple WX groups, cloud hardening, QNH text input, colour RMK. |
-| METAR-BUILDER-003a — Blocking Present-Weather Validation | Complete — merged. CAP 746 illegal WX combinations now block Copy. |
-| METAR-BUILDER-003b — Mixed Precipitation Grouping | Complete — merged. Simultaneous precipitation must be combined in one group; GR/GS require SH or TS. |
-| METAR-BUILDER-003c — TS Requires CB Cloud | Complete — merged. TS present weather requires CB cloud qualifier (blocking). |
-| METAR-BUILDER-004 — Compact Form, Reporting Mode, Section Visibility | Complete — merged. 2-column grid layout, Military/Civilian mode, per-section Admin visibility controls, accordion sections. |
-| METAR-BUILDER-004a — Immediate Admin Settings Application | Complete — merged. Admin > Weather settings apply immediately to Weather tab on Save. |
-| DOCS-FLITE-001 — Weather/METAR Builder documentation | Complete. `docs/quick-start.md`, `docs/user-guide.md`, `docs/install-update-backup-troubleshooting.md` created. README key features added. STATE.md updated. No app code changed. |
-| UX-V1-001 — Expand desktop app shell width | Complete — merged. Removed `max-width: 1280px` and `margin: 0 auto` from `.app-shell`; shell now uses full available window width. |
-| LIVEBOARD-AUTOACTIVATE-RECONCILE-001 — App-level planned movement reconciliation | Complete — implemented. Planned movement autoactivation no longer depends solely on Live Board rendering during the activation window. `reconcilePlannedMovementActivation()` runs on startup, app-level 45-second tick, window focus return, document visibilitychange, and Live Board tab return. ARR/OVR missed activation windows are caught up within a 24-hour horizon. The previous ETA+60-minute stale guard has been replaced with the 24-hour catch-up window. ARR movements with ATA already recorded are excluded from autoactivation. ARR overdue warning independence remains separate and already implemented. |
-| EGOW Live Board UI/validation centralisation | Complete — merged. Shared EGOW code/unit-code helpers added; create/edit modal datalists now use shared options; duplicated hardcoded valid-code arrays removed. Unit-code taxonomy remains advisory/datalist only pending SME decision on L/M/A vs legacy values such as ARMY/BBMF. |
+| Workstream                                          | Status                    |
+| --------------------------------------------------- | ------------------------- |
+| Core Live Board strip workflow                      | Complete baseline         |
+| Live Board counters and tooltips                    | Complete                  |
+| Monthly Return ghost-count fix                      | Complete                  |
+| Desktop Productization                              | Complete baseline         |
+| Offline SheetJS vendoring                           | Complete                  |
+| Tauri identity/build scripts                        | Complete                  |
+| CSP enablement/smoke test                           | Complete                  |
+| Native Save As export consolidation                 | Complete                  |
+| Windows shortcut/icon repair sequence               | Complete                  |
+| Windows updater                                     | Complete and proven       |
+| Check for updates on launch                         | Complete                  |
+| Version reset to pre-launch 0.x                     | Complete                  |
+| Internal dev reinstall script                       | Complete                  |
+| Backup / Restore Completeness                       | Complete                  |
+| Canonical Data Inventory                            | Complete                  |
+| Backup Validation & Restore Summary                 | Complete                  |
+| EGOW classification precedence                      | Complete                  |
+| PIC/VKB autofill precedence fixes                   | Complete                  |
+| Duplicate modal timing fixes                        | Complete                  |
+| Operational uppercase normalization                 | Complete                  |
+| History filter/layout tranche                       | Complete                  |
+| Cancelled tab relocation                            | Complete                  |
+| Cancellation/deleted-strip lifecycle                | Complete                  |
+| Cancellation reporting                              | Complete                  |
+| Formation through FR-15                             | Complete for V1           |
+| Formation child-strip display                       | Complete                  |
+| History Retrieval                                   | Complete                  |
+| Aircraft pilot suggestions                          | Complete                  |
+| Registration grid paging/performance work           | Complete current baseline |
+| METAR Builder 001–004a                              | Complete                  |
+| Weather/METAR Builder documentation                 | Complete                  |
+| Desktop shell UX expansion                          | Complete                  |
+| Flite branding/icon work                            | Complete                  |
+| Live Board autoactivation reconciliation            | Complete                  |
+| Historic retrospective entry improvements           | Complete                  |
+| PIC/autofill stale-data fixes                       | Complete                  |
+| V0.9.4 updater release and successful in-app update | Proven                    |
 
-## 6. Current active engineering priority
+---
 
-### 6.1 Immediate next item
+## 10. Non-negotiable behaviour invariants
 
-```text
-Final V1 regression and acceptance sweep.
-```
+### 10.1 UTC authority
 
-Create From workflow, METAR Builder, and Weather/METAR Builder documentation are all complete.
+UTC is authoritative.
 
-Main is current at:
+Stored operational strip times are UTC.
+
+Local time is presentation/input convenience only.
+
+Any local-time input must convert back to UTC before persistence.
+
+Canonical timing fields include:
 
 ```text
-41a97d2 Apply METAR admin visibility settings immediately
+depPlanned
+depActual
+arrPlanned
+arrActual
+depActualExact
 ```
 
-Recommended next sequence:
+Operational display/input generally uses:
 
 ```text
-1. Final V1 regression and acceptance sweep (section 21.8).
+HH:MM
 ```
 
-### 6.2 Cleared snag-list status
+Exact second-bearing WTC anchor time may use:
 
 ```text
-Known V1 snags remaining: 0
+HH:MM:SS
 ```
 
-Completed recent snags:
+### 10.2 Reporting models are intentionally different
 
-- EGOW-COUNT-001
-- DUP-REG-001
-- DUP-REG-001b
-- INPUT-NORM-001
-- HIST-FILTER-UX-001
-- HIST-FILTER-UX-001a/b
-- HIST-LAYOUT-002
-- HIST-LAYOUT-002a
-- REL-POLISH-001
+Two movement-counting models coexist.
 
-### 6.3 Remaining planned V1 sequence
+#### Live Board daily statistics
 
-```text
-Final V1 regression and acceptance sweep
-```
+Event-based / realised:
 
-Create From workflow — complete (CREATE-FROM-001, CREATE-FROM-001b).
-METAR Builder — complete (METAR-BUILDER-001 through 004a).
-Weather/METAR Builder documentation — complete (DOCS-FLITE-001).
+* DEP counts when departure occurred.
+* ARR counts when arrival occurred.
+* LOC counts realised departure/arrival events.
+* T&G adds 2 runway movements.
+* O/S adds 1.
+* OVR adds 0 to runway totals.
+* OVR remains separately counted.
 
-### 6.4 Reporting invariants
+#### Monthly Return / Dashboard / Insights
 
-Monthly Return, Dashboard, and Insights retain the nominal strip-type reporting model unless explicitly redesigned:
+Nominal strip-type model:
 
 ```text
 LOC = 2
@@ -554,163 +996,61 @@ T&G = +2
 O/S = +1
 ```
 
-Live Board daily counters remain separate and event-based / EGOW-realized.
+Do not “fix” one system to match the other without an explicit product decision.
 
-OVR is excluded from runway movement totals and counted separately.
+### 10.3 Lifecycle current-state truth
 
-## 7. Non-negotiable behaviour invariants
+Primary operational views use current-state truth.
 
-### 7.1 UTC authority
+| Current state    | Appears in                    |
+| ---------------- | ----------------------------- |
+| PLANNED / ACTIVE | Live Board                    |
+| COMPLETED        | History                       |
+| CANCELLED        | Cancelled → Cancelled Sorties |
+| Soft-deleted     | Cancelled → Deleted Strips    |
+| Purged           | Nowhere                       |
 
-UTC is authoritative.
+Historical audit/lifecycle records must not override current-state operational views.
 
-Stored operational strip times are UTC.
+### 10.4 Deleted-strip retention
 
-Local time is presentation/input only. Local input must convert back to UTC before save.
-
-Canonical time fields include:
-
-```text
-depPlanned
-depActual
-arrPlanned
-arrActual
-depActualExact
-```
-
-Operational fields use:
+Soft-deleted strips are retained for:
 
 ```text
-HH:MM
+24 hours
 ```
 
-Exact WTC anchor uses:
+unless a future product decision changes this.
+
+### 10.5 Reinstatement
+
+Cancelled movement reinstatement target state:
 
 ```text
-HH:MM:SS
+PLANNED
 ```
 
-### 7.2 Event-based vs nominal reporting split
+Planned timing follows the established reinstatement logic and must not casually be rewritten.
 
-Two reporting models intentionally coexist.
+### 10.6 ARR activation
 
-#### Live Board daily stats
+ARR activation must not fabricate an ATD.
 
-Live Board daily stats are event-based / EGOW-realized:
+### 10.7 Past-time inline editing
 
-- DEP counts only when departure actually occurred.
-- ARR counts only when arrival actually occurred.
-- LOC counts based on realized departure/arrival events plus T&G / O/S rules.
-- T&G counts as 2 runway movements.
-- O/S counts as 1 runway movement.
-- OVR contributes 0 to runway totals.
-- OVR remains a separate counter.
+Past inline arrival-side ETA edits on ARR/LOC strips write to ATA where current established behaviour requires it, preserving ETA and promoting PLANNED strips to ACTIVE as implemented.
 
-#### Monthly Return / Dashboard / Insights
+Existing DEP/LOC historical ETD → ATD behaviour must be preserved.
 
-Monthly Return / Dashboard / Insights use the nominal strip-type model:
+### 10.8 Operational text normalisation
 
-- LOC = 2
-- DEP = 1
-- ARR = 1
-- OVR = 0
-- T&G = +2
-- O/S = +1
+Operational identifiers are normalised to uppercase at the save boundary where applicable.
 
-These models must not be silently merged.
+Human-name fields must not be forcibly uppercased.
 
-### 7.3 OVR semantics
+### 10.9 Native export architecture
 
-OVR is excluded from runway Daily Movement Totals.
-
-OVR is counted separately.
-
-OVR timing uses off-frequency / left-frequency semantics:
-
-```text
-EOFT / AOFT
-ELFT / ALFT
-```
-
-### 7.4 ARR activation
-
-ARR Active is status-only and must not fabricate ATD.
-
-### 7.5 Booking/strip links
-
-A movement may carry:
-
-```text
-bookingId
-```
-
-A booking may carry:
-
-```text
-linkedStripId
-```
-
-`bookingSync.reconcileLinks()` remains the authority for deterministic repair/clear behaviour on load.
-
-### 7.6 Modal lifecycle
-
-All modal close paths must use the established modal close helpers.
-
-Avoid ad-hoc modal teardown.
-
-### 7.7 Formation model boundary
-
-Formation child cards are not independent normal movement records. They are UI representations of formation elements and must continue to use the existing formation-element update path.
-
-Do not route formation element edits through ordinary `updateMovement()` semantics unless a dedicated architecture ticket changes this.
-
-### 7.8 History / Cancelled model boundary
-
-History is completed-movement history unless a dedicated future ticket broadens it.
-
-Current primary navigation:
-
-```text
-Live Board | Calendar | Booking | History | Reports | Cancelled | VKB Lookup | Admin
-```
-
-History contains completed movement history views only:
-
-```text
-History
-├─ Strip Board
-├─ Calendar
-└─ Search / Table
-```
-
-Cancelled lifecycle views are now in the top-level `Cancelled` tab:
-
-```text
-Cancelled
-├─ Cancelled Sorties
-└─ Deleted Strips
-```
-
-Cancelled Sorties and Deleted Strips were moved, not functionally redesigned. Their internal behaviour should be treated as preserved unless a future ticket explicitly changes it.
-
-Do not silently mix Cancelled Sorties or Deleted Strips back into completed Movement History.
-
-### 7.9 Export model boundary
-
-All user-facing CSV/XLSX exports in the Tauri desktop app should use native Save As where implemented.
-
-Browser Blob/download fallback remains valid when not running under Tauri.
-
-Do not reintroduce direct frontend imports from Tauri plugin packages such as:
-
-```text
-@tauri-apps/plugin-dialog
-@tauri-apps/plugin-fs
-```
-
-The static/non-bundled frontend cannot safely resolve those module specifiers.
-
-Use the shared helper layer:
+Use:
 
 ```text
 src/js/export_utils.js
@@ -718,13 +1058,26 @@ src/js/export_utils.js
 
 and registered Tauri invoke commands.
 
-### 7.10 VKB mutability and historical truth
+Do not reintroduce direct frontend imports from unsupported Tauri plugin packages such as:
 
-VKB lookup data is mutable. Historical movement records must not be retroactively reinterpreted by later VKB edits.
+```text
+@tauri-apps/plugin-dialog
+@tauri-apps/plugin-fs
+```
 
-Changing a pilot assignment, aircraft association, callsign/fleet allocation, registration record, or EGOW flight-number row must affect future lookups only unless the operator explicitly chooses a controlled historical correction workflow.
+Browser Blob/download fallback remains valid outside the Tauri environment.
 
-Movement records should preserve the resolved values that applied when the movement was created/completed.
+### 10.10 VKB mutability and historical truth
+
+VKB/reference data is mutable.
+
+Historical movement records must not be retroactively reinterpreted because a later reference-data edit changes:
+
+* pilot assignment;
+* aircraft association;
+* callsign allocation;
+* registration data;
+* EGOW code/unit mapping.
 
 Example:
 
@@ -733,247 +1086,105 @@ April: UAM10 = Pilot A
 May:   UAM10 = Pilot B
 ```
 
-April movements must continue to show Pilot A after the May assignment change.
+April movements must continue to show Pilot A.
 
 ---
 
-## 8. Timing and timeline baseline
+## 11. Timing and movement lifecycle baseline
 
-### 8.1 Timing normalization
+### 11.1 Timing model
 
 Settled model:
 
-- one timing model per movement;
-- inline edit and modal edit should use the same semantics;
-- Timeline is a projection of resolved timing, not a separate timing engine.
+* one timing model per movement;
+* inline and modal edits should use the same semantics;
+* Timeline is a projection of movement timing, not an independent timing engine.
 
-### 8.2 Activate semantics
+### 11.2 Activate semantics
 
-| Movement type | Activate behaviour |
-|---|---|
-| DEP | stamps ATD if absent |
-| LOC | stamps ATD if absent |
-| OVR | stamps AOFT / actual off-frequency if absent |
-| ARR | status-only; no ATD fabrication |
+| Movement type | Activate behaviour                                   |
+| ------------- | ---------------------------------------------------- |
+| DEP           | stamps ATD if absent                                 |
+| LOC           | stamps ATD if absent                                 |
+| OVR           | stamps actual on-frequency/start-side time if absent |
+| ARR           | status-only; no ATD fabrication                      |
 
-### 8.3 Complete semantics
+### 11.3 Complete semantics
 
-| Movement type | Complete behaviour |
-|---|---|
-| DEP | no new end-side time |
-| LOC | stamps ATA only if absent |
-| ARR | stamps ATA only if absent |
-| OVR | stamps actual end-side time only if absent |
+| Movement type | Complete behaviour                    |
+| ------------- | ------------------------------------- |
+| DEP           | no new end-side time                  |
+| LOC           | stamps ATA if absent                  |
+| ARR           | stamps ATA if absent                  |
+| OVR           | stamps actual end-side time if absent |
 
-### 8.4 Rounding
+### 11.4 Automatic stamping
 
-Active and Complete auto-stamps use nearest-minute rounding:
+Auto-stamped operational times use established nearest-minute rounding:
 
 ```text
 00–29 seconds → round down
 30–59 seconds → round up
 ```
 
-Exact second-bearing WTC time is preserved separately where relevant.
+Exact second-bearing WTC anchor data is preserved separately where relevant.
 
-### 8.5 Inline time mode
+### 11.5 Autoactivation
 
-Implemented:
+Planned-movement activation reconciliation is app-level and must not depend solely on Live Board rendering.
 
-- inline time labels explicitly toggle estimate vs actual mode;
-- mode is UI session state, not persisted;
-- actual mode if actual exists; estimate mode otherwise;
-- explicit operator toggle survives re-renders for the session.
+Current triggers include:
 
-### 8.6 Timeline presentation
+* startup;
+* periodic app-level tick;
+* window focus return;
+* document visibility return;
+* Live Board tab return.
 
-Complete for V1 presentation:
-
-- dual UTC/local ruler;
-- secondary local ruler can be hidden when operationally same as UTC;
-- UTC/local ruler order can be swapped;
-- internal timeline header strip removed;
-- top and bottom rulers define timeline boundaries;
-- quarter-hour and half-hour ticks implemented.
-
-Timeline remains display-only. UTC authority is unchanged.
+ARR/OVR catch-up behaviour and overdue warning logic should not be changed without explicit investigation.
 
 ---
 
-## 9. Lifecycle model
+## 12. EGOW attribution and PIC/VKB baseline
 
-### 9.1 Governing rule
+### 12.1 General state
 
-Operational views and ordinary reports use current-state truth.
+The EGOW / LOC / timing regression cluster is resolved.
 
-| Current state | Appears in |
-|---|---|
-| PLANNED / ACTIVE | Live Board |
-| COMPLETED | History |
-| CANCELLED | Cancelled → Cancelled Sorties |
-| Soft-deleted | Cancelled → Deleted Strips |
-| Purged | Nowhere |
+Later PIC/autofill precedence fixes are also complete.
 
-Historical lifecycle/audit records may be retained but must not override current-state operational views.
+This is a regression baseline, not an active speculative refactor target.
 
-### 9.2 Current IA
+### 12.2 Callsign and registration precedence
 
-Primary navigation:
+The settled PIC/autofill rule is:
 
-```text
-Live Board | Calendar | Booking | History | Reports | Cancelled | VKB Lookup | Admin
-```
+* callsign/EGOW attribution wins where valid;
+* registration-based pilot attribution applies only where callsign attribution is absent or not visiting-category;
+* stale visiting code must not suppress a valid registration-only PIC when that code is merely tracked autofill residue;
+* empty callsign must clear stale callsign-derived PIC where appropriate.
 
-History contains completed movement history views only:
+### 12.3 Tracked autofill
 
-```text
-History
-├─ Strip Board
-├─ Calendar
-└─ Search / Table
-```
+System-filled values use tracked provenance.
 
-Cancelled contains lifecycle exception/recovery views:
+Manual operator overrides must not be overwritten casually.
 
-```text
-Cancelled
-├─ Cancelled Sorties
-└─ Deleted Strips
-```
+Stale autofill should clear when attribution becomes unresolved while preserving genuine manual input.
 
-Cancelled Sorties and Deleted Strips were moved out of History only. Their internal functionality should be treated as preserved unless a future ticket explicitly changes it.
+### 12.4 EGOW schema
 
-### 9.3 Cancelled Sorties
-
-Implemented:
-
-- cancellation modal with reason/note;
-- cancellation log/audit layer;
-- Cancelled Sorties page under the top-level `Cancelled` tab;
-- sort/filter/export;
-- current-state editability;
-- reason edit;
-- reinstatement;
-- delete from cancelled flow via soft-delete pathway;
-- native Save As CSV export path.
-
-Cancelled Sorties is a current-state view. A row belongs there only if the underlying movement still exists and its current status is:
-
-```text
-CANCELLED
-```
-
-### 9.4 Reinstatement
-
-Reinstatement target state:
-
-```text
-PLANNED
-```
-
-Rule:
-
-```text
-newStartTime = max(originalPlanned, now + typeOffset)
-```
-
-Original planned time comes from immutable snapshot.
-
-### 9.5 Deleted Strips
-
-Implemented:
-
-- soft-delete retention store;
-- full movement snapshot;
-- `deletedAt`;
-- `expiresAt`;
-- booking link cleared;
-- strip removed from active movement store;
-- Deleted Strips page under the top-level `Cancelled` tab;
-- restore logic;
-- purge of expired entries.
-
-Retention period:
-
-```text
-24 hours
-```
-
-Admin configurability is deferred.
-
-### 9.6 Cancellation reporting
-
-Implemented as a current-state operational report.
-
-Delivered:
-
-- date range;
-- cancellation KPIs;
-- reason breakdown;
-- movement type breakdown;
-- ranked aircraft/type/captain/route breakdowns;
-- row-level cancellation detail;
-- CSV export via native Save As in Tauri.
-
-Historical lifecycle-event analytics are not included and remain a future reporting mode.
-
-## 10. EGOW attribution / aircraft pilot baseline
-
-### 10.1 Status
-
-The EGOW / LOC / timing regression cluster has been resolved and merged into `main` at commit:
-
-```text
-73023df
-```
-
-This area is a regression baseline, not an active workstream.
-
-### 10.2 Resolved scope
-
-Resolved scope included:
-
-- LOC EGOW validation rejects blank and invalid EGOW codes where required.
-- Callsign-derived EGOW enrichment has been restored and consolidated through `lookupEgowAttributionFromCallsign()`.
-- Visible EGOW Code, EGOW Unit, and PIC fields use tracked autofill provenance via `dataset.autofillValue`.
-- Stale autofill clearing removes previous system-filled values when attribution becomes unresolved or partially blank, while preserving manual overrides.
-- The legacy untracked EGOW Unit writer has been removed.
-- UAM leading-zero semantics are enforced: `UAM03` resolves, `UAM3` does not.
-- UAM family fallback supports unknown UAM numbers such as `UAM99` resolving to `BM` only, with blank EGOW Unit and PIC.
-- LOC PIC layout matches DEP/ARR/OVR modal layout.
-- LOC planned-time sync and edit-save timing recalculation have been restored.
-- ARR Active no longer fabricates ATD.
-- OVR semantics remain unchanged.
-
-### 10.3 EGOW schema
-
-Implemented expanded EGOW attribution using the revised `FDMS_EGOW_CODES.csv` schema:
+Current expanded EGOW attribution is based on:
 
 ```text
 CALLSIGN_BASE,APPROVED_CONTRACTION,FLIGHT_NUMBER,EGOW_CODE,UNIT,UNIT_CODE,NAME,POSITION,NOTES
 ```
 
-`APPROVED_CONTRACTION` is the corrected spelling. Backward-compatible fallback for the old typo `APPROVED_CONTRATION` may remain where needed.
+Stored/displayed callsigns must not be rewritten by lookup normalisation.
 
-### 10.4 Resolver behaviour
+### 12.5 UAM leading-zero rule
 
-`lookupEgowAttributionFromCallsign(callsignCode)` implements deterministic lookup with:
-
-- numeric suffix splitting;
-- lookup-only leading-zero normalization;
-- `CALLSIGN_BASE + FLIGHT_NUMBER`;
-- `APPROVED_CONTRACTION + FLIGHT_NUMBER`;
-- blank `FLIGHT_NUMBER` base fallback;
-- blank `FLIGHT_NUMBER` contraction fallback;
-- malformed-input guard for leading-zero families.
-
-Stored/displayed callsigns must not be rewritten by lookup normalization.
-
-### 10.5 UAM / formation callsign rule
-
-Individual single-aircraft pilot callsigns must include a leading zero.
-
-Correct:
+Single-aircraft UAM callsigns require leading zero:
 
 ```text
 UAM01
@@ -981,7 +1192,7 @@ UAM02
 UAM03
 ```
 
-Malformed:
+Malformed single-digit forms such as:
 
 ```text
 UAM1
@@ -989,7 +1200,9 @@ UAM2
 UAM3
 ```
 
-Formation element callsigns do not use leading zero:
+must not silently resolve as valid pilot callsigns.
+
+Formation element callsigns such as:
 
 ```text
 MERSY1
@@ -997,46 +1210,37 @@ MERSY2
 CNNCT1
 ```
 
-`UAM3` must not resolve and must not fall through to the UAM family fallback. `MERSY2` must resolve via formation/contraction route and remain displayed/stored as `MERSY2`.
+follow their separate formation convention.
 
-### 10.6 Aircraft pilot suggestions
+### 12.6 Aircraft pilot data
 
-Implemented aircraft pilot suggestion loading using:
+Aircraft pilot suggestions use:
 
 ```text
 FDMS_AIRCRAFT_PILOTS.csv
+```
+
+with fields:
+
+```text
 REGISTRATION,FIXED_CALLSIGN,PILOT_NAME_LAST,PILOT_NAME_FIRST
 ```
 
-Implemented behaviour:
+Single-match autofill uses tracked behaviour.
 
-- `aircraftPilots: []` is loaded in VKB data.
-- `lookupAircraftPilots(registration, fixedCallsign)` matches by normalized registration or fixed callsign.
-- Duplicate surnames may be disambiguated with first-name initial.
-- New flight, LOC, and edit modal PIC inputs have pilot datalists.
-- Single-match auto-fill uses tracked autofill behaviour and preserves manual values.
-
-Pilot lookup is static for V1. Learned PIC ranking is post-launch.
-
-### 10.7 EGOW / LOC / timing regression baseline
-
-Future work touching attribution, validation, timing, activation, or movement counting must preserve the smoke tests in section 21.6.
+Learned PIC ranking is post-launch.
 
 ---
 
-## 11. Formation baseline
+## 13. Formation baseline
 
-### 11.1 Status
+Formation implementation through FR-15 is complete for V1 launch purposes.
 
-Formation workstream is complete for V1 launch purposes.
+Further polish is post-launch unless a specific blocking defect is found.
 
-The primary implementation tranche FR-02 through FR-15 is complete. The expanded display has since been refactored from an internal table into subordinate strip-style child cards.
+### 13.1 Formation master
 
-Further polish is deferred to post-launch backlog unless a specific launch-blocking defect appears.
-
-### 11.2 Formation master
-
-The master strip is the formation summary shell. It holds top-level movement fields and a nested formation object containing:
+The master strip is a summary shell containing top-level movement data and:
 
 ```text
 formation.label
@@ -1046,13 +1250,13 @@ formation.shared
 formation.elements[]
 ```
 
-The master does not flatten element truth. It summarizes individually tracked elements.
+The master must not flatten away element-level truth.
 
-### 11.3 Formation elements
+### 13.2 Formation elements
 
-Each `formation.elements[]` entry represents a real aircraft in the formation.
+Each element represents an independently trackable aircraft.
 
-Each element can carry or resolve:
+Elements may contain:
 
 ```text
 callsign
@@ -1078,169 +1282,56 @@ overrides
 ordinal
 ```
 
-### 11.4 Shared/default model
+### 13.3 Shared/default model
 
-`formation.shared` is the shared/default layer.
+`formation.shared` provides shared/default values.
 
-Elements inherit from shared defaults unless they have an override. Divergence is tracked through the element `overrides` dictionary.
+Elements inherit unless an override is present.
 
-### 11.5 Callsign convention
-
-Element callsigns use the formation element callsign as the operational display callsign.
-
-Examples:
+### 13.4 WTC
 
 ```text
-MERSY1
-MERSY2
-CNNCT1
-MEMORIAL1
+wtcCurrent
 ```
 
-Generic crew/callsign attribution such as `UAM03` / `UNIFORM` is secondary detail text only and must not replace the element callsign in the primary callsign position.
-
-### 11.6 Movement counting
-
-Per-element movement counting is implemented.
-
-`getResolvedFormationMovements()` sums per-element nominal movement contributions, resolving T&G / O/S / FIS / inherited values as appropriate.
-
-### 11.7 Dynamic WTC
-
-Implemented:
-
-- `wtcCurrent` = highest WTC among PLANNED/ACTIVE elements.
-- `wtcMax` = highest WTC across all elements regardless of status.
-- `wtcMax` does not decrease due to lifecycle/status changes.
-
-### 11.8 Divergence
-
-Implemented:
-
-- elements hold independent statuses;
-- diverged child cards are visually marked;
-- parent summary derives conservative status;
-- master status cascade rules are preserved.
-
-Master cascade rules:
-
-- master → COMPLETED cascades PLANNED/ACTIVE elements to COMPLETED; CANCELLED preserved.
-- master → CANCELLED cascades PLANNED/ACTIVE elements to CANCELLED; COMPLETED preserved.
-- no cascade on activation.
-
-### 11.9 Per-element outcome/diversion
-
-Implemented:
+is the highest WTC among current PLANNED/ACTIVE elements.
 
 ```text
-NORMAL
-DIVERTED
-CHANGED
-CANCELLED
+wtcMax
 ```
 
-Also implemented:
+is the maximum across all elements and must not decrease merely because lifecycle state changes.
 
-- actual destination;
-- outcome time;
-- reason/note.
+### 13.5 Master cascade
 
-Outcome/diversion controls remain available, but they are visually secondary to ordinary operational strip controls.
+Preserve established rules:
 
-### 11.10 Per-element attribution and pilot identity
-
-Implemented:
-
-- manual attribution callsign;
-- manual pilot name;
-- VKB-aware resolution assistance;
-- reporting attribution by resolved identity where applicable.
-
-### 11.11 Expanded formation display
-
-Launch baseline:
-
-- formation summary section;
-- shared/defaults section;
-- child element stack;
-- each element renders as a subordinate strip-style card;
-- child cards use normal flight-type colour language;
-- child card primary callsign is the element callsign;
-- attribution/pilot identity appears as secondary/detail information;
-- T&G / O/S / FIS / timing are usable primary operational controls;
-- outcome/diversion fields are available but visually de-emphasised;
-- child stack spans the expanded formation panel width;
-- no accepted launch baseline should produce page/board overspan.
-
-### 11.12 Completed formation tickets
-
-| Ticket | Delivered |
-|---|---|
-| FR-02 | Activation UX |
-| FR-03 | Draft memory / in-session persistence |
-| FR-04 | Callsign generation |
-| FR-05 | Shared/default model |
-| FR-06 | Enrichment |
-| FR-07 | Master-first seeding |
-| FR-08 | Element-first synthesis / load-time normalization |
-| FR-09 | Field-level inheritance tracking |
-| FR-10 | Per-element movement counting |
-| FR-11 | Dynamic WTC |
-| FR-12 | Expanded strip display |
-| FR-13 | Lifecycle divergence |
-| FR-13b | Per-element diversion / outcome detail |
-| FR-14 | Per-element pilot attribution |
-| FR-14b | VKB-aware identity resolution assistance |
-| FR-15 | Documentation closeout |
-| Post-FR polish | Child element display refactored into strip-style cards |
-
-### 11.13 Formation post-launch backlog
-
-Deferred to post-launch unless promoted:
-
-- visual density tuning;
-- spacing/typography refinement;
-- inherited/shared value signalling;
-- 3+ element UX refinement;
-- narrow-window/responsive refinement;
-- formation creation via “number of aircraft” count field;
-- automatic master → element propagation after element set is established;
-- deeper formation profile architecture;
-- formation analytics/reporting refinements;
-- multiple WTC scheme support per formation;
-- advanced lifecycle/presentation enhancements.
+* master → COMPLETED cascades PLANNED/ACTIVE children to COMPLETED; CANCELLED preserved;
+* master → CANCELLED cascades PLANNED/ACTIVE children to CANCELLED; COMPLETED preserved;
+* no activation cascade unless explicitly designed otherwise.
 
 ---
 
-## 12. History Retrieval / Discovery baseline
+## 14. History, Cancelled and retrospective entries
 
-### 12.1 Status
+### 14.1 Current navigation
 
-History Retrieval / Discovery is implemented through the post-H5b layout/filter relocation tranche.
-
-The recent History/Cancelled restructuring is complete and smoke-tested. Remaining Search/Table and wider History/Admin IA polish is post-V1 UX/IA backlog unless a specific launch-blocking defect is found.
-
-### 12.2 Product problem
-
-The original Movement History strip board was adequate for short-range review but did not scale well for finding older completed movements.
-
-Operators now have three historical access modes for completed movement history:
-
-- strip-board review;
-- calendar-based date discovery;
-- search/table-based movement discovery.
-
-Cancelled Sorties and Deleted Strips are not completed-history views. They now sit under the top-level `Cancelled` tab.
-
-### 12.3 Current IA
-
-Primary navigation:
+Primary navigation includes:
 
 ```text
-Live Board | Calendar | Booking | History | Reports | Cancelled | VKB Lookup | Admin
+Live Board
+Calendar
+Booking
+History
+Reports
+Cancelled
+VKB Lookup
+Admin
 ```
 
-History contains completed movement history views only:
+### 14.2 History
+
+History contains completed movement history views:
 
 ```text
 History
@@ -1249,7 +1340,9 @@ History
 └─ Search / Table
 ```
 
-Cancelled contains lifecycle exception/recovery views:
+### 14.3 Cancelled
+
+Lifecycle exception/recovery views are under:
 
 ```text
 Cancelled
@@ -1257,1839 +1350,583 @@ Cancelled
 └─ Deleted Strips
 ```
 
-When History → Strip Board is active:
+Do not move these back into History without an explicit IA decision.
 
-Row 1:
+### 14.4 Retrospective movement entry
 
-```text
-[Strip Board] [Calendar] [Search / Table]                 [Show filters / Hide filters] [Export as CSV]
-```
+History → Calendar supports retrospective movement creation.
 
-Row 2, when expanded:
+Current retrospective entry supports the defined strip-type options and remains intentionally simpler than ordinary prospective strip creation.
 
-```text
-[Period] [Free text] [Callsign] [EGOW code] [EGOW unit code] [optional filters...] [Clear filters]
-```
-
-Filter row is collapsed by default. Clicking Show filters expands it. Switching to Calendar or Search/Table hides the Strip Board-specific actions and collapses the filter row.
-
-Search/Table page still needs a later UX reorganisation, but that is not a V1 blocking item. It belongs in the broader post-V1 UX/IA review.
-
-### 12.4 Completed phases
-
-| Phase | Status |
-|---|---|
-| H1 | Complete — Movement History default changed to Today |
-| H2 | Complete — Movement History internal subview shell |
-| H3 | Complete — Historic Movement Calendar |
-| H4 | Complete — Historic Strip Board structured filters |
-| H5 | Complete — Search / Table view |
-| H5b | Complete — Shared export correction / native Save As consolidation |
-| HIST-FILTER-UX-001 / 001a / 001b | Complete — toolbar layout, filter collapse, hidden CSS enforcement, configurable filter visibility |
-| HIST-LAYOUT-002 / 002a | Complete — History toolbar/layout refactor and Admin filter config re-link |
-| Cancelled relocation | Complete — Cancelled Sorties and Deleted Strips moved to top-level Cancelled tab |
-| H6 / wider History UX polish | Post-V1 backlog unless a specific launch-blocking defect appears |
-
-### 12.5 H1 complete
-
-Movement History now defaults to:
-
-```text
-Today
-```
-
-Movement History remains completed-only.
-
-Cancelled Sorties and Deleted Strips remain separate lifecycle views under the top-level `Cancelled` tab.
-
-### 12.6 H2 complete
-
-Movement History has internal views:
-
-- Historic Strip Board;
-- Historic Movement Calendar;
-- Search / Table.
-
-Historic Strip Board remains the default internal Movement History view.
-
-### 12.7 H3 complete
-
-Historic Movement Calendar implemented.
-
-Baseline behaviour:
-
-- month view for completed movements;
-- operational date / `m.dof` used as date anchor;
-- Previous / Next / Today calendar controls;
-- day summary counts;
-- military/civilian/other summary via EGOW classification;
-- clicking a day opens that day in Historic Strip Board;
-- selected-date banner/chip with clear behaviour.
-
-Ctrl-click / Shift-click multi-date selection remains deferred unless promoted.
-
-### 12.8 H4 complete
-
-Historic Strip Board now has structured AND filters.
-
-Implemented filters include:
-
-- callsign;
-- registration;
-- pilot/PIC/attribution;
-- aircraft type;
-- EGOW code;
-- EGOW unit code;
-- WTC;
-- flight type;
-- departure AD;
-- arrival AD;
-- free-text search.
-
-Filter notes:
-
-- registration matching normalises punctuation/hyphens, so `G-GORV` and `GGORV` match equivalently;
-- pilot/PIC matching searches known pilot, PIC, attribution, and formation element identity fields;
-- EGOW unit code supports token-based matching;
-- Clear filters clears structured controls only; period/calendar selection remains independent.
-
-### 12.9 H5 complete
-
-Search / Table implemented.
-
-Current Search / Table features:
-
-- structured search across completed movement history;
-- date from / date to filters using operational date / DOF;
-- normalized registration matching;
-- widened pilot/PIC/attribution matching;
-- EGOW unit-code token matching;
-- row count display;
-- 15-column table;
-- Open info action;
-- View day / jump-to-day action;
-- filtered CSV export;
-- column sorting;
-- row-limit guard / visible cap;
-- export all filtered rows rather than only visible capped rows.
-
-Current columns:
-
-```text
-Date
-Callsign
-Registration
-Type
-WTC
-Flight type
-Dep AD
-Arr AD
-Times
-EGOW code
-EGOW unit
-Pilot
-Activity
-Status
-Actions
-```
-
-### 12.10 H5b complete
-
-H5b corrected and consolidated exports.
-
-Native Save As now works in Tauri for:
-
-- Historic Strip Board CSV export;
-- Search / Table filtered CSV export;
-- Cancelled Sorties CSV export;
-- Reports CSV export;
-- Reports XLSX export;
-- Reports Cancellation CSV export.
-
-Shared export helper:
-
-```text
-src/js/export_utils.js
-```
-
-Tauri native commands include text and binary save paths.
-
-XLSX export uses base64/native binary save rather than an unsafe frontend plugin import.
-
-`Cargo.lock` records the required base64 dependency.
-
-Browser fallback remains available outside Tauri.
-
-### 12.11 Post-V1 UX / IA backlog
-
-The following are not current V1 snags:
-
-- **UX-IA-001** — Full application information architecture review.
-- **UX-ADMIN-001** — Admin section reorganisation and grouping.
-- **UX-HISTORY-001** — Search / Table layout and filter UX rework.
-- **UX-CANCELLED-001** — Review Cancelled tab layout after relocation.
-- **UX-NAV-001** — Review primary navigation as feature count grows.
-
-## 13. Export baseline
-
-### 13.1 Export model
-
-All relevant exports should route through shared helper functions.
-
-Text/CSV helper:
-
-```text
-saveTextFileWithDialogOrDownload(text, filename)
-```
-
-Binary/XLSX helper:
-
-```text
-saveBinaryFileWithDialogOrDownload(base64, filename)
-```
-
-Browser fallback helper:
-
-```text
-downloadFileViaBrowser(content, filename, mimeType)
-```
-
-### 13.2 Native Tauri behaviour
-
-When running in Tauri, exports should use:
-
-```text
-window.__TAURI__.core.invoke(...)
-```
-
-Registered native save commands handle:
-
-- text file Save As;
-- binary/base64 file Save As.
-
-### 13.3 Browser fallback behaviour
-
-When not running in Tauri:
-
-- CSV/text exports fall back to Blob download;
-- XLSX export may use browser/XLSX library download behaviour where appropriate.
-
-### 13.4 Completed native Save As paths
-
-The following are implemented and accepted after H5b:
-
-- History → Historic Strip Board → Export as CSV;
-- History → Search / Table → Export filtered CSV;
-- Cancelled ? Cancelled Sorties ? Export CSV;
-- Reports → Export CSV;
-- Reports → Export XLSX;
-- Reports → Cancellation view → Export Cancellations CSV.
-
-### 13.5 Known export testing caveat
-
-A stale WebView/browser cache previously made working export code appear broken.
-
-When export behaviour appears inconsistent, reload cleanly before diagnosing:
-
-```text
-Admin → System Status → Reload App
-```
-
-or:
-
-```text
-DevTools → Network → Disable cache → Reload
-```
+Do not over-expand it without an explicit requirement.
 
 ---
 
-## 14. Booking baseline
+## 15. METAR Builder baseline
 
-### 14.1 Current booking model
-
-Booking workflow exists as part of the current functional baseline.
-
-Known implementation areas:
+METAR Builder implementation is complete through:
 
 ```text
-src/js/ui_booking.js
-src/js/services/bookingSync.js
-src/js/stores/bookingsStore.js
+METAR-BUILDER-001
+METAR-BUILDER-002
+METAR-BUILDER-002a
+METAR-BUILDER-003
+METAR-BUILDER-003a
+METAR-BUILDER-003b
+METAR-BUILDER-003c
+METAR-BUILDER-004
+METAR-BUILDER-004a
 ```
 
-Known booking sync fields:
+Implemented capabilities include:
+
+* structured METAR/SPECI creation;
+* CAP 746-guided validation;
+* Civilian/Military reporting mode;
+* Admin-configurable section visibility;
+* colour-state support;
+* multiple present-weather groups;
+* blocking illegal weather combinations;
+* mixed-precipitation grouping;
+* TS requiring CB;
+* temperature M-prefix handling;
+* compact accordion-based form;
+* immediate application of Admin Weather settings.
+
+Documentation is complete under:
 
 ```text
-movement.bookingId
-booking.linkedStripId
-booking.schedule.plannedTimeLocalHHMM
-booking.schedule.plannedTimeKind
+DOCS-FLITE-001
 ```
 
-`bookingSync.reconcileLinks()` is the authority for deterministic booking/strip link repair/clear behaviour on load.
-
-### 14.2 V1 booking boundary
-
-Core booking creation/sync is V1 baseline.
-
-Booking confirmation email, pilot briefing pack, and GAR note are post-launch/V2.
-
-### 14.3 Post-launch booking profile expansion
-
-The current booking profile system is limited. V2 should expand it into richer visitor, aircraft, operator, and contact profiles.
-
-Possible future profile fields:
-
-```text
-aircraft registration
-aircraft type
-WTC
-operator
-owner/contact
-regular pilot(s)
-home aerodrome
-billing/charging defaults
-training-rate eligibility
-parking preferences/defaults
-frequent routing
-special handling notes
-documents/briefing requirements
-GAR relevance if applicable
-```
-
-The later architecture decision is whether this remains booking-only or becomes part of a wider local VKB profile system.
-
----
-
-## 15. VKB data architecture baseline and long-term direction
-
-### 15.1 Current V1 data approach
-
-Current V1 data approach is static/local CSV packs.
-
-Known current/local static CSV data includes:
-
-```text
-FDMS_REGISTRATIONS.csv
-FDMS_EGOW_CODES.csv
-FDMS_AIRCRAFT_PILOTS.csv
-FDMS_LOCATIONS_B_E_L.csv
-```
-
-Other data sets include callsigns, locations, aircraft types, registrations, EGOW codes, and aircraft pilots.
-
-### 15.2 V1 offline data requirement
-
-V1 must remain functional offline using bundled or saved critical data.
-
-This does not require the full VKB to be bundled locally for V1. It does require enough saved/local data for normal core operations.
-
-### 15.3 Long-term cloud + saved VKB model
-
-Long-term VKB architecture is:
-
-```text
-Cloud VKB + saved local packs
-```
-
-Cloud mode:
-
-- full VKB API access when online;
-- authoritative or fuller data set;
-- future data update/provenance pipeline.
-
-Saved mode:
-
-- smaller local data packs;
-- region/country/operator-scoped subsets;
-- sufficient for normal offline operations most of the time;
-- user-selectable critical data footprint.
-
-Existing filenames such as:
-
-```text
-FDMS_LOCATIONS_B_E_L.csv
-```
-
-demonstrate the intended regional-pack approach.
-
-`B`, `E`, and `L` are operational region groupings used for Flite/VKB data packaging. Regional inclusion may include aerodromes that do not have an ICAO location indicator. For example, an aerodrome such as Kirkbride may be classified operationally under region `E` for Flite/VKB purposes even though it does not have an assigned ICAO code.
-
-Do not assume that inclusion in a regional location file means the location itself has an ICAO indicator.
-
-### 15.4 Future local pack model
-
-Future saved/local VKB packs may include:
-
-```text
-locations by ICAO region / country / theatre
-registrations by country
-callsigns by state/operator/region/package
-aircraft types globally or by operational relevance
-EGOW-local critical pack
-user-defined critical pack
-```
-
-This is V2+ unless a minimum subset is required by V1 Desktop Productization.
-
----
-
-## 16. V1 roadmap classification
-
-### 16.1 Confirmed V1 required workstreams
-
-The recent V1 snag list is cleared.
-
-```text
-Known V1 snags remaining: 0
-```
-
-Completed V1 closeout/productization items:
-
-1. ~~Live Board summary counter aggregation and computed tooltips.~~ **Complete — merged.**
-2. ~~Monthly Return ghost-count contamination.~~ **Complete — merged.**
-3. ~~Desktop Productization audit.~~ **Complete — planning baseline.**
-4. ~~DP-03 — Vendor SheetJS for offline operation.~~ **Complete — merged.**
-5. ~~DP-04 — package.json identity and Tauri dev/build scripts.~~ **Complete — merged.**
-6. ~~DP-05 — README / Getting Started desktop rewrite.~~ **Complete — pushed.**
-7. ~~DP-06 — Enable and smoke-test CSP after SheetJS is vendored.~~ **Complete — smoke-tested.**
-8. ~~DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.~~ **Complete — pushed.**
-9. ~~DP-08 — First full release build smoke test / version alignment / build validation.~~ **Complete enough for roadmap resumption; final packaged-app behaviour remains part of final acceptance sweep.**
-10. ~~DP-09 / DP-09b / DP-09c — Windows shortcut icon repair sequence.~~ **Complete / superseded by REL-POLISH-001.**
-11. ~~REL-POLISH-001 — Remove DP-09c installer diagnostic marker.~~ **Complete — merged and pushed at `ffe4206`.**
-12. ~~EGOW-COUNT-001 — Manual EGOW code classification precedence.~~ **Complete — merged.**
-13. ~~DUP-REG-001 / DUP-REG-001b — Duplicate modal timing fixes.~~ **Complete — merged.**
-14. ~~INPUT-NORM-001 — Save-boundary operational uppercase normalization.~~ **Complete — merged.**
-15. ~~HIST-FILTER-UX-001 / HIST-LAYOUT-002 tranche.~~ **Complete — merged.**
-16. ~~Cancelled tab relocation.~~ **Complete — merged.**
-
-Current remaining planned V1 work:
-
-1. ~~Create From workflow.~~ **Complete — merged.**
-2. ~~METAR Builder.~~ **Complete — merged.**
-3. ~~Weather/METAR Builder documentation.~~ **Complete — DOCS-FLITE-001.**
-4. **Final V1 regression and acceptance sweep.**
-
-### 16.2 Priority rationale
-
-The recommended order is now feature/documentation closeout:
-
-1. Create From should be implemented before final documentation because it affects the user-facing movement-creation workflow.
-2. METAR Builder should be implemented before final documentation because it adds a user-facing operational utility.
-3. Installation / Update / Backup / Troubleshooting documentation should be finalized after current packaging/export/backup behaviour is stable.
-4. Final acceptance sweep and freeze come last.
-
-### 16.3 V1 item detail
-
-#### A. Live Board summary counter aggregation and computed tooltips
-
-Status:
-
-```text
-COMPLETE — merged
-```
-
-Delivered:
-
-- `calculateLiveBoardSummaryStats()` in `ui_liveboard.js` returns structured per-category breakdown.
-- Visible counters are BM, BC, VM, VC, OVR, and Total.
-- VM bucket includes VM, VMH, and VNH.
-- VC bucket includes VC and VCH.
-- OVR is excluded from runway totals.
-- OVR split rule: military OVR = BM, VM, VMH, VNH; civilian OVR = BC, VC, VCH.
-- BM unit mapping: A → AEF, L → LUAS, M → MASUAS.
-- Per-category breakdown includes DEP, ARR, LOC base, T&G, and O/S counts where applicable.
-- Formation contributions are counted per element via formation EGOW breakdown logic.
-- Computed `title` tooltips are set dynamically on each `.stat-item` element on every update.
-- Static misleading HTML `title` attributes were removed from `index.html`.
-- `updateDailyStats()` in `app.js` uses the structured summary function.
-
-Known caveat:
-
-- BM formation edge cases with mixed element-level unit attribution may need future refinement, but this is not a current V1 blocker.
-
-#### B. Monthly Return ghost-count contamination
-
-Status:
-
-```text
-COMPLETE — merged
-```
-
-Delivered:
-
-- `isMovementInMonthlyReturnScope()` predicate in `reporting.js`: only COMPLETED movements enter the Official Monthly Return.
-- PLANNED, ACTIVE, CANCELLED, stale, duplicate ghost records, and residual soft-delete-marker records are excluded.
-- `computeMonthlyReturn()` applies the predicate before midnight-splitting and adds Set-based deduplication by source movement ID.
-- `getMovementsForCurrentPeriod()` in `ui_reports.js` filters COMPLETED only, so Dashboard, Insights, and CSV exports exclude ghost/non-completed records.
-- `renderOfficialMonthlyReturn()` passes `getMovements()` to `computeMonthlyReturn()` so midnight-crossing LOCs from adjacent month boundaries are captured correctly; scope filtering is done inside the reporting calculation.
-- `handleExportXLSX()` passes `getMovements()` for the official grid and uses `getMovementsForCurrentPeriod()` for the Movement Details sheet.
-- Nominal counting formulas are unchanged: LOC=2, DEP/ARR=1, OVR=0, T&G×2, O/S×1.
-- Cancellation Report is unchanged and remains a separate CANCELLED-movement reporting path.
-
-#### C. Desktop Productization audit
-
-Status:
-
-```text
-COMPLETE — planning baseline
-```
-
-Audit record:
-
-```text
-docs/DESKTOP_PRODUCTIZATION_AUDIT.md
-```
-
-Key conclusions:
-
-- Tauri v2 scaffold exists.
-- Product name in Tauri is Vectair Flite.
-- Identifier is `com.vectair.flite`.
-- `frontendDist: "../src"` means the release build bundles `src/` directly.
-- `devUrl: "http://localhost:8000"` means Tauri dev currently needs the Python dev server.
-- Native Save As commands exist for relevant CSV/XLSX exports.
-- Capabilities are minimal.
-- Most assets and CSV reference data are local/offline-safe.
-- SQLite is not required for V1 unless a concrete release-blocking storage problem appears.
-
-Original release blocker:
-
-- SheetJS was loaded from CDN in `src/index.html`.
-
-Resolution:
-
-- Resolved by DP-03.
-
-#### D. DP-03 — Vendor SheetJS for offline operation
-
-Status:
-
-```text
-COMPLETE — merged
-```
-
-Delivered:
-
-- Added local vendored SheetJS file at `src/lib/xlsx.full.min.js`.
-- Replaced CDN script tag in `src/index.html` with `./lib/xlsx.full.min.js`.
-- Used SheetJS 0.18.5 browser build.
-- Preserved `window.XLSX` global.
-- No export logic changed.
-- No Rust/Tauri code changed.
-- No Tauri capabilities changed.
-
-#### E. DP-04 — package.json identity and Tauri scripts
-
-Status:
-
-```text
-COMPLETE — merged
-```
-
-Delivered:
-
-- `package.json` name set to `vectair-flite`.
-- `package.json` description updated to Vectair Flite desktop development tooling.
-- Added `npm run tauri:dev`.
-- Added `npm run tauri:build`.
-- Preserved existing test scripts.
-- No runtime code changed.
-
-#### F. DP-05 — README / Getting Started desktop rewrite
-
-Status:
-
-```text
-COMPLETE — pushed
-```
-
-Delivered:
-
-- README rewritten around Vectair Flite as a Tauri desktop-local app.
-- Development run instructions updated for browser harness and Tauri dev.
-- Release build instructions added.
-- Offline operation documented.
-- SheetJS vendoring documented.
-- localStorage persistence and dev/release origin caveat documented.
-- Native export behaviour documented.
-- Manager–Worker documentation note added.
-
-#### G. DP-06 — Enable and smoke-test CSP after SheetJS is vendored
-
-Status:
-
-```text
-COMPLETE — smoke-tested
-```
-
-Delivered:
-
-- Removed all generated `onmouseover`/`onmouseout` inline JavaScript event handlers from `src/js/ui_liveboard.js` (Live Board menu, History menu, Cancelled Sorties log menu, and two unused dead constants).
-- Added `.flite-menu-item`, `.flite-menu-item-danger`, `.flite-menu-item-strong`, `.flite-menu-item-separated` CSS classes to `src/css/vectair.css` to replace the removed inline hover styling.
-- Set `"csp"` in `src-tauri/tauri.conf.json` to:
-  ```
-  default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
-  ```
-- `script-src` does not include `'unsafe-inline'`.
-- `style-src 'unsafe-inline'` is retained — the app uses inline `style=` attributes extensively for dynamic layout/colour values; this is acceptable and expected.
-
-CSP caveats:
-
-- `style-src 'unsafe-inline'` remains necessary due to pervasive inline `style=` attribute usage throughout the app (dynamic colour, layout, and visibility values).
-- No external network dependencies remain in core app scripts; the two known `window.open()` calls in `ui_booking.js` to external registries do not require `connect-src` additions.
-
-#### H. DP-07 — Confirm and document Admin backup/restore coverage
-
-Status:
-
-```text
-complete / pushed
-```
-
-Confirmed V1 backup key list (SESSION_BACKUP_KEYS in datamodel.js):
-
-```text
-vectair_fdms_movements_v3
-vectair_fdms_config
-vectair_fdms_cancelled_sorties_v1
-vectair_fdms_deleted_strips_v1
-fdms_booking_profiles_v1
-vectair_fdms_calendar_events_v1
-vectair_fdms_hours_v1
-```
-
-Delivered:
-
-- `SESSION_BACKUP_KEYS` canonical list added to `datamodel.js` (exported).
-- `exportSessionJSON()` rewritten to dump raw localStorage values for all seven keys into `storage` map; backup format is `{ app, format:"vectair-flite-session-backup", formatVersion:1, exportedAt, storage }`.
-- `importSessionJSON()` rewritten to restore all recognised V1 keys from new format; legacy formats (old envelope, v2, v1 array) remain supported and restore movements only.
-- `getDataCounts()` updated to include `hoursEntries` count.
-- Admin Session Management description updated to list all backed-up data categories.
-- Admin Danger Zone restore description updated.
-- Import preflight summary updated to show counts for all seven key categories.
-- `README.md` updated with correct key names and backup/restore instructions.
-- `STATE.md` records confirmed key list.
-- Admin backup export now uses `saveTextFileWithDialogOrDownload` from `export_utils.js`; native Save As dialog in Tauri, browser fallback otherwise.
-- Backup filename format: `vectair-flite-backup-YYYYMMDD-HHMMSS.json`.
-
-#### I. DP-08 — First full release build smoke test on Windows
-
-Status:
-
-```text
-COMPLETE ENOUGH FOR ROADMAP RESUMPTION — final package validation remains part of final acceptance sweep
-```
-
-**Version alignment decision:** All package identifiers aligned to **1.0.0** as the V1 release candidate version.
-
-| File | Before | After |
-|---|---|---|
-| `package.json` | 1.0.0 | 1.0.0 (unchanged — was already correct) |
-| `src-tauri/tauri.conf.json` | 0.1.0 | **1.0.0** |
-| `src-tauri/Cargo.toml` | 0.1.0 | **1.0.0** |
-
-**Build blockers found and resolved:**
-
-- `src-tauri/icons/*.png` were RGB (no alpha channel). Tauri requires RGBA. All PNGs converted to RGBA.
-- `src-tauri/icons/icon.icns` was referenced in bundle config but did not exist. Generated from `icon.png` using `png2icns`.
-
-**Build output (Linux CI environment — validates build system; Windows installer requires Windows hardware):**
-
-```text
-src-tauri/target/release/vectair-flite        (11 MB Linux binary)
-src-tauri/target/release/bundle/deb/Vectair Flite_1.0.0_amd64.deb  (3.7 MB)
-src-tauri/target/release/bundle/rpm/Vectair Flite-1.0.0-1.x86_64.rpm  (3.7 MB)
-```
-
-AppImage bundle failed in container due to FUSE/sandbox limitation — not a code defect.
-
-Windows installer/package behaviour should still be included in the final V1 acceptance sweep.
-
-Known release blockers from DP-08: none from the codebase. Icon files corrected and committed. Version identifiers aligned. Build system validates correctly.
-
-#### J. Create From workflow
-
-Status:
-
-```text
-V1 required
-```
-
-Purpose:
-
-- Convert the older “Duplicate → Create from…” concept into a clear Create From workflow.
-- Allow efficient creation of related movements.
-- Preserve timing/lifecycle semantics.
-- Distinguish duplicate, create-from, reciprocal, booking-derived, and formation-derived flows.
-- Avoid copying lifecycle-specific fields incorrectly.
-
-#### K. METAR Builder
-
-Status:
-
-```text
-V1 required
-```
-
-Purpose:
-
-- Selectable/editable METAR components.
-- Generated plain-text METAR-style output.
-- Copy/paste into email or operational communication.
-- Validation/formatting assistance sufficient for local operational use.
-
-#### L. H6 / wider History UX polish
-
-Status:
-
-```text
-Post-V1 UX/IA backlog unless a specific launch-blocking defect appears
-```
-
-Purpose:
-
-- Search/Table layout and filter UX rework.
-- Wider History/Admin IA review.
-- Empty-state wording, accessibility, and narrow-window refinements where required.
-
-#### M. Installation / Update / Backup / Troubleshooting documentation
-
-Status:
-
-```text
-Required before V1 freeze
-```
-
-Documentation must reflect actual packaged-app behaviour after DP-08.
-
-#### N. Final V1 acceptance sweep
-
-Status:
-
-```text
-Required before V1 freeze
-```
-
-Must include the smoke/regression areas in section 21.
-
----
-
-## 17. V2 / post-launch workstreams
-
-### 17.1 UX / IA review backlog
-
-These are not current V1 snags. They should be retained as post-V1 UX/IA work unless a specific launch-blocking defect appears.
-
-- **UX-IA-001** — Full application information architecture review.
-- **UX-ADMIN-001** — Admin section reorganisation and grouping.
-- **UX-HISTORY-001** — Search / Table layout and filter UX rework.
-- **UX-CANCELLED-001** — Review Cancelled tab layout after relocation.
-- **UX-NAV-001** — Review primary navigation as feature count grows.
-
-### 17.2 API / VKB integration
-
-Move beyond static/downloaded packs toward fuller Vectair-backed knowledge integration.
-
-Includes:
-
-- VKB API access;
-- online/offline mode handling;
-- formal data update/provenance pipeline;
-- cloud + saved data mode;
-- region/country/operator-scoped saved packs.
-
-### 17.3 VKB editable knowledge, local overrides, audit history, and rollback
-
-V2 should provide user-side editability for selected VKB-derived datasets and local operational knowledge.
-
-This includes, at minimum:
-
-- richer booking/visitor/aircraft profiles;
-- controlled add/edit/remove tools for local VKB records;
-- local override handling for VKB-sourced data;
-- change history with timestamp, old value, new value, affected record, and source/note;
-- future user attribution if user profiles are introduced;
-- rollback/undo for local data edits;
-- validity-period or retirement handling for changing callsign/pilot/aircraft assignments;
-- protection against retrospective alteration of historical movement records.
-
-Datasets requiring user-editable local management include:
-
-```text
-FDMS_AIRCRAFT_PILOTS
-FDMS_EGOW_CODES
-FDMS_REGISTRATIONS
-```
-
-Operational use cases include:
-
-- changing based aircraft lists;
-- changing BC aircraft details;
-- changing pilots associated with aircraft;
-- changing BM flight-number/pilot assignments;
-- adding/removing/editing aircraft registration records;
-- retaining historical truth when assignments change month-to-month.
-
-Architectural direction:
-
-```text
-Cloud VKB source data
-→ saved local VKB packs
-→ local user overrides
-→ audited local change log
-→ movement records store resolved historical snapshots
-```
-
-Do not design this as a simple live lookup that retroactively changes historical movement records.
-
-### 17.4 Booking confirmation email / pilot briefing / GAR note
-
-Includes:
-
-- booking confirmation email to booker;
-- cost breakdown;
-- confirmed itinerary;
-- pilot briefing output;
-- airfield operating information;
-- station / ATC notes;
-- GAR note for arrivals/departures outside contiguous UK;
-- explicit note that GAR is not managed by ATC.
-
-### 17.5 Booking re-linkage
-
-Improve linkage between booking records and created/planned strips after edits, lifecycle changes, deletion, restore, or manual correction.
-
-### 17.6 Deleted-strip retention configurability
-
-Make deleted-strip retention configurable in Admin.
-
-Current retention remains:
-
-```text
-24 hours
-```
-
-### 17.7 Historical lifecycle analysis
-
-Potential future analytics:
-
-- planned → active → completed/cancelled/deleted transitions;
-- timing deltas;
-- lifecycle event reports;
-- cancellation-event-only date analytics;
-- audit dashboard for transitions.
-
-### 17.8 Callsign family grouping
-
-Group related callsigns/families for display, filtering, and analysis.
-
-Useful for:
-
-- UAM-style pilot callsigns;
-- formation families;
-- unit/operator callsign patterns.
-
-### 17.9 Notification / reminder system
-
-Potential scope:
-
-- toast notifications;
-- one-off reminders;
-- recurring reminders;
-- calendar-linked reminders;
-- METAR observations;
-- ASP updates;
-- optional chime/sound;
-- unfocused/minimized attention indicator.
-
-Do not assume native taskbar flashing. Use title/tab/app attention indicators where appropriate.
-
-### 17.10 MAB package filter
-
-Status:
-
-```text
-Post-V1 / public-release hardening
-```
-
-The MAB package filter is deferred until after V1.
-
-It should eventually allow Flite/VKB users to include, exclude, or inspect MoD A Block / MAB callsign package entries separately from ordinary callsign records.
-
-It is not required for the first V1 release.
-
-### 17.11 Advanced persistence / storage adapter
-
-Possible future move away from localStorage toward:
-
-- SQLite;
-- explicit local storage adapter;
-- migration/versioning support;
-- backup/export/import hardening;
-- better auditability;
-- possible multi-device or multi-user modes only if product direction changes.
-
-### 17.12 Advanced export-location management
-
-Potential Admin section:
-
-```text
-Export & File Locations
-```
-
-Possible settings:
-
-- Ask every time;
-- default export folder;
-- separate folders by export type;
-- remember last export location.
-
-Current accepted behaviour is Save As.
-
-### 17.13 Formation post-launch enhancements
-
-See section 11.13.
-
----
-
-## 18. Rolling / lower-priority backlog
-
-The following are not V1 blockers unless explicitly promoted:
-
-- dynamic local timezone abbreviation rendering;
-- advanced formation analytics;
-- 3+ element formation layout refinement;
-- Admin-configurable export locations;
-- full backend/database architecture;
-- multi-user/concurrent operations model;
-- signed builds and auto-update if not completed as part of V1 productization;
-- learned PIC ranking by historical movement count;
-- alphanumeric flight-suffix support beyond pure digit suffixes;
-- public/open release hardening beyond the installable V1 baseline.
-
----
-
-## 19. Deprecated / superseded / no longer active
-
-| Item | Status |
-|---|---|
-| Hosted/web-app interpretation | Superseded. Flite is desktop-local, not a hosted web app. |
-| Python local server as product runtime | Superseded for V1. It remains development-only. |
-| Electron-first productization | Superseded by Tauri-first strategy unless confirmed WebView2 blockers force reconsideration. |
-| Direct frontend imports from Tauri plugins | Prohibited. Use shared export helper and registered Tauri invoke commands. |
-| Formation continuation as unresolved V1 blocker | Superseded. Formation is V1-complete unless defect found. |
-| EGOW/LOC/timing as active defect | Superseded. It is a regression baseline. |
-| UAM single-digit permissiveness | Superseded. `UAM03` valid; `UAM3` malformed. |
-| OVR included in runway totals | Invalid. OVR is separate and excluded from runway totals. |
-| Monthly Return using Live Board event-based model | Invalid unless explicitly redesigned. Monthly Return remains nominal strip-type based. |
-| MAB as V1 requirement | Superseded. MAB is post-V1/public-release hardening. |
-
----
-
-## 20. Documentation workstream
-
-Documentation is a parallel continuity layer owned by ChatGPT.
-
-Claude remains the engineer.
-
-Living documentation set:
-
-```text
-README.md
-Quick_Start_Guide.md
-User_Guide.md
-Install_Update_Backup_Troubleshooting.md
-docs/architecture/FORMATIONS.md
-STATE.md
-```
-
-For every future implementation ticket, explicitly state one of:
-
-```text
-Docs: no change
-Docs: update README
-Docs: update Quick Start
-Docs: update User Guide
-Docs: update Install/Update/Backup/Troubleshooting
-Docs: update architecture doc
-Docs: update STATE.md
-```
-
-Documentation principles:
-
-- accurate beats complete;
-- concise beats exhaustive;
-- current behaviour beats aspirational behaviour;
-- provisional areas should be labelled plainly;
-- use Vectair Flite / Flite naming by default.
-
-### 20.1 Required documentation refresh before V1
-
-Before V1 release, documentation must be updated to reflect:
-
-- product name: Vectair Flite;
-- fully independent offline installable desktop model;
-- local development run process;
-- packaged app launch/install behaviour;
-- backup/restore behaviour;
-- native Save As export behaviour;
-- History Retrieval H1–H5b completion;
-- H6 status if still open;
-- formation launch baseline;
-- Create From workflow;
-- METAR Builder;
-- known limitations;
-- V1 release scope and exclusions.
-
-Status:
-
-```text
-DOCS-FLITE-001 complete.
-README updated with key features list including Weather/METAR Builder.
-docs/quick-start.md created — includes Create a METAR/SPECI workflow.
-docs/user-guide.md created — includes full Weather/METAR Builder section (purpose, report, mandatory groups,
-  CAVOK, present weather, cloud, final values, optional sections, colour state, copy behaviour) and Admin > Weather.
-docs/install-update-backup-troubleshooting.md created — includes Weather tab verification note.
-STATE.md updated to record DOCS-FLITE-001 completion.
-No app code changed.
-Remaining before V1 freeze: final V1 regression and acceptance sweep.
-```
-
----
-
-## 21. Smoke testing and acceptance baseline
-
-Primary acceptance remains Stuart’s manual verification.
-
-### 21.1 General local validation
-
-Browser harness:
-
-```powershell
-cd C:\Users\dmshs\FDMS
-python -m http.server 8000 --directory src
-```
-
-Browser URL:
-
-```text
-http://localhost:8000/
-```
-
-Tauri development run:
-
-```powershell
-cd C:\Users\dmshs\FDMS
-cargo tauri dev
-```
-
-When testing JS/CSS:
-
-```text
-DevTools → Network → Disable cache → Reload
-```
-
-or:
-
-```text
-Admin → System Status → Reload App
-```
-
-### 21.2 Registration data integrity check
-
-After rebases, merges, or large file operations, verify:
-
-```powershell
-(Get-Content .\src\data\FDMS_REGISTRATIONS.csv).Count
-```
-
-Expected:
-
-```text
-25713
-```
-
-### 21.3 Export smoke baseline
-
-Minimum export smoke:
-
-- History → Historic Strip Board → Export as CSV opens Save As.
-- History → Search / Table → Export filtered CSV opens Save As.
-- Cancelled → Cancelled Sorties → Export CSV opens Save As.
-- Reports → Export CSV opens Save As.
-- Reports → Export XLSX opens Save As and writes valid `.xlsx`.
-- Reports → Cancellation view → Export Cancellations CSV opens Save As.
-- Cancelling a Save As dialog produces cancellation/info toast.
-- No `@tauri-apps/plugin-dialog` module-specifier error.
-
-### 21.4 Formation launch-complete smoke baseline
-
-Formation accepted for launch purposes after smoke confirming:
-
-- child element strips render as full-width subordinate strip-style cards;
-- element callsign is primary;
-- attribution/pilot identity is secondary;
-- T&G / O/S / FIS / timing usable as operational controls;
-- outcome/diversion available but visually secondary;
-- no datamodel/schema migration;
-- no counting/WTC/lifecycle regression sufficient to block launch.
-
-Further formation polish goes to post-launch backlog unless a specific bug is found.
-
-### 21.5 History / Cancelled smoke baseline
-
-Minimum History / Cancelled smoke:
-
-- History tab opens.
-- History contains Strip Board, Calendar, and Search / Table views.
-- Movement History defaults to Today.
-- Historic Strip Board renders completed movements only.
-- History Strip Board filter row is collapsed by default.
-- Show filters displays Period + configured filters.
-- Admin filter settings affect History Strip Board.
-- Calendar view summarizes days using completed movements only.
-- Single-click calendar day opens Historic Strip Board for that day.
-- Structured filters use AND semantics.
-- Search / Table opens.
-- Search / Table results match filter criteria.
-- Search / Table export exports all filtered rows, not only visible capped rows.
-- Cancelled primary tab exists.
-- Cancelled Sorties page works.
-- Deleted Strips page works.
-- Cancelled Sorties and Deleted Strips internal behaviour remains preserved after relocation.
-- All History/Cancelled exports use native Save As in Tauri where implemented.
-
-### 21.6 EGOW / LOC / timing regression smoke baseline
-
-Resolved and merged into `main` at:
-
-```text
-73023df
-```
-
-These tests must be preserved as regression coverage for future changes touching attribution, validation, timing, activation, or movement counting.
-
-Smoke must include:
-
-- `UAM03` → BM / L / JENKINS.
-- `UAM99` → BM / blank / blank.
-- `UAM32` → BM / A / HAIGH.
-- `XXX99` → blank / blank / blank.
-- `UAM3` → no EGOW autofill.
-- `MERSY2` → BM / L and remains displayed/stored as `MERSY2`.
-- Manual EGOW/PIC overrides are preserved.
-- Manual EGOW code affects counters/reports.
-- LOC stale-clear behaviour works.
-- Edit modal stale-clear behaviour works.
-- DEP creation with valid callsign/EGOW enrichment.
-- ARR creation with valid callsign/EGOW enrichment.
-- LOC creation requires valid EGOW.
-- LOC creation rejects blank EGOW where required.
-- LOC ETD/start-time edit recalculates ETA/end-time.
-- Duration arrow changes still recalculate expected times.
-- Existing strip dep/start-time edit recalculates dependent arr/end-time where appropriate.
-- OVR timing labels and semantics remain EOFT/AOFT/ELFT/ALFT.
-- ARR Active remains status-only and does not fabricate ATD.
-- UTC/local entry still stores UTC authority.
-
-### 21.7 Recent cleared snag final-pass checklist
-
-Optional broad confirmation after the cleared snag-list merge sequence:
-
-- Live Board loads.
-- New LOC/DEP/ARR/OVR still create strips.
-- Duplicate strip modal keeps submitted times.
-- Duplicate default LOC duration respects Admin LOC duration.
-- Manual EGOW code affects counters/reports.
-- Lowercase operational input persists uppercase.
-- History tab opens.
-- History Strip Board filter row collapsed by default.
-- Show filters displays Period + configured filters.
-- Admin filter settings affect History Strip Board.
-- Calendar subview works.
-- Search/Table still opens.
-- Cancelled primary tab exists.
-- Cancelled Sorties page works.
-- Deleted Strips page works.
-- Reports still open.
-- Admin still opens.
-- Developer diagnostics still present where intended.
-- No `dp09c-hook-ran.txt` installer marker remains.
-
-### 21.8 V1 feature smoke baseline
-
-Before V1 freeze, test:
-
-- new strip creation: DEP, ARR, LOC, OVR;
-- UTC/local entry and display;
-- Activate / Complete semantics;
-- inline edits;
-- EGOW code validation and autofill;
-- movement counts;
-- Live Board counter tooltips;
-- Monthly Return / Dashboard / Insights;
-- History: board, calendar, search/table, exports;
-- Cancelled Sorties;
-- Deleted Strips restore/purge;
-- formations;
-- booking-linked strip creation/update;
-- Create From workflow;
-- METAR Builder;
-- backup/restore;
-- desktop launch/package behaviour;
-- offline use without Python server;
-- native Save As exports;
-- registration CSV integrity.
-
-## 22. Manager–Worker operating rules
-
-### 22.1 ChatGPT
-
-ChatGPT is the:
-
-- thinker;
-- architect;
-- diagnostician;
-- root-cause finder;
-- ticket writer;
-- QA lead;
-- documentation continuity owner.
-
-ChatGPT must:
-
-- inspect current implementation before writing tickets;
-- identify actual cause;
-- state exact files to change;
-- state exact behaviour change required;
-- write narrow implementation tickets;
-- prevent drift.
-
-### 22.2 Claude Code
-
-Claude is the:
-
-- production engineer;
-- implementer.
-
-Claude must not be asked to:
-
-- diagnose root cause;
-- infer product direction;
-- choose architecture independently;
-- speculate about intended behaviour.
-
-### 22.3 Operating rule
-
-No Claude prompt should be issued until ChatGPT has already stated:
-
-- actual cause;
-- exact files to change;
-- exact behaviour change required;
-- acceptance tests;
-- documentation impact.
-
----
-
-## 23. Desktop Productization audit record
-
-**Audit document:** `docs/DESKTOP_PRODUCTIZATION_AUDIT.md`  
-**Status:** Complete as the current Desktop Productization planning baseline.
-
-Original release blocker identified:
-
-- BLOCKER-1: SheetJS XLSX library loaded from CDN in `src/index.html`. This would break XLSX export offline.
-
-Resolution:
-
-- Resolved by DP-03. SheetJS is now vendored locally at `src/lib/xlsx.full.min.js` and loaded from `./lib/xlsx.full.min.js`.
-
-Completed audit follow-ons:
-
-- DP-03 — Vendor SheetJS for offline operation.
-- DP-04 — Add `tauri:dev` / `tauri:build` scripts and update `package.json` identity.
-- DP-05 — Rewrite README Getting Started / Architecture for desktop launch procedure.
-
-Remaining audit-derived V1 work:
-
-- Document dev→release localStorage origin change in the final Installation / Update / Backup / Troubleshooting documentation.
-- Include packaged-app/offline/export/backup behaviour in the final V1 acceptance sweep.
-
-SQLite decision:
-
-```text
-SQLite is not required for V1.
-```
-
-localStorage remains acceptable for V1 single-operator desktop use if backup/export/restore is confirmed and documented. SQLite/local database remains V2 unless a concrete V1 release-blocking persistence failure appears.
-
----
-
-## 24. UPDATER-001 — Manual in-app updater
-
-**Status:** Implementation complete on `claude/updater-manual-admin-system-status`. Pending PR merge and end-to-end release-artifact smoke test.
-
-### 24.1 Architecture
-
-- **Tauri plugin:** `tauri-plugin-updater = "2"` registered in `src-tauri/src/lib.rs` via `tauri_plugin_updater::Builder::new().build()`.
-- **Rust commands exposed via `invoke_handler`:**
-  - `flite_get_app_version` — returns `{ version, buildSource }`.
-  - `flite_check_for_update` — checks the update endpoint; stores any pending `Update` object in `UpdaterState` (Mutex); returns structured status JSON.
-  - `flite_download_and_install_update` — retrieves stored `Update`, calls `download_and_install`; returns `{ status: "installed_restart_required" }` or error.
-  - `flite_restart_app` — calls `app.restart()`.
-- **Frontend:** Static, no Tauri plugin imports. Uses `window.__TAURI__?.core?.invoke` only. Browser-harness notice shown when `invoke` is unavailable.
-- **No launch-time update check.** No auto-install. App remains fully usable offline.
-
-### 24.2 Configuration
-
-- `src-tauri/tauri.conf.json`:
-  - `bundle.createUpdaterArtifacts: true`
-  - `plugins.updater.pubkey` — public signing key (minisign)
-  - `plugins.updater.endpoints` — `https://github.com/Vectair/FDMS/releases/latest/download/latest.json`
-  - `plugins.updater.windows.installMode: "passive"`
-
-### 24.3 Signing keypair
-
-- **Private key:** `C:\Users\dmshs\.tauri\vectair-flite.key` — Stuart's machine only. Never committed.
-- **Public key:** embedded in `tauri.conf.json`. Safe to commit.
-- Release builds require: `TAURI_SIGNING_PRIVATE_KEY` (path to key) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` environment variables set by the release maintainer.
-
-### 24.4 Update endpoint
-
-- **Current endpoint:** `https://github.com/Vectair/FDMS/releases/latest/download/latest.json`
-- The release maintainer must publish a signed installer and a valid `latest.json` alongside each GitHub Release for updates to be delivered.
-- `latest.json` must be signed with the private key matching the embedded public key.
-
-### 24.5 Known limitation
-
-Full end-to-end "download and install" cannot be proven until a signed newer release artifact and valid `latest.json` exist at the endpoint. The Tauri offline/error/no-update paths are provable immediately in dev.
-
-### 24.6 Operator guidance
-
-- Recommended: take an Admin → Session Management backup before installing a major update.
-- The app remains fully usable offline; update checking fails gracefully with "Offline" status.
-- Do not share or commit the private signing key or its password.
-
----
-
-## 25. CREATE-FROM-001 — Contextual Create From strip workflow
-
-**Status:** Implementation complete.
-
-CREATE-FROM-001 implemented:
-- Replaced flat Duplicate/Arrival/Departure reproduction actions with grouped Create From workflow.
-- Create From options are context ordered and omit the source strip's own movement type because Duplicate covers same-type reproduction.
-- Preserved existing Duplicate modal timing/reset behaviour.
-- Preserved existing DEP↔ARR reciprocal behaviour.
-- Added general cross-type creation dispatch for LOC/DEP/ARR/OVR.
-
-CREATE-FROM-001b implemented:
-- Converted Create From from a visible grouped section into a true nested submenu.
-- Main Edit menu now remains compact: Details / Create From › / Cancel / Delete.
-- Submenu opens on hover, focus-within, or click/tap (via .is-open toggle).
-- Viewport overflow check adds .open-left when submenu would clip the right edge.
-- Preserved CREATE-FROM-001 ordering, duplicate behaviour, reciprocal behaviour, and cross-type creation logic.
-
-### 25.1 Menu structure
-
-Each strip's Edit dropdown now contains a labelled **Create From** group instead of flat Duplicate/Arrival/Departure items. Order per source type:
-
-| Source | Create From order |
-|--------|-------------------|
-| LOC    | Duplicate, Departure, Overflight, Arrival |
-| DEP    | Arrival, Overflight, Local, Duplicate |
-| ARR    | Departure, Local, Overflight, Duplicate |
-| OVR    | Duplicate, Arrival, Departure, Local |
-
-### 25.2 Dispatch logic
-
-- **Duplicate** → `openDuplicateMovementModal()` (unchanged, preserves timing/reset).
-- **DEP→ARR** and **ARR→DEP** → `openReciprocalStripModal()` (unchanged, preserves aerodrome swap and configured offsets).
-- All other cross-type pairs → `openCreateFromTypedMovementModal()` which prefills identity, route, and timing and opens `openNewFlightModal()`. No movement is created until Save.
-
----
-
-## 26. METAR-BUILDER-001 — Structured METAR/SPECI Builder
-
-**Status:** Implementation complete.
-
-### 26.1 Files added / edited
-
-| File | Change |
-|---|---|
-| `src/js/metar_builder.js` | New module — builder logic, validation, assembler, localStorage recall |
-| `src/index.html` | Added `Weather` nav tab and full `#tab-metar` panel (12 groups) |
-| `src/js/app.js` | Import `initMetarBuilder`; `runStage('metar-builder:init', ...)` in bootstrap |
-| `src/css/vectair.css` | METAR Builder styles appended (output panel, sections, cloud rows) |
-| `STATE.md` | This section |
-
-### 26.2 localStorage key
+The METAR Builder draft key:
 
 ```text
 vectair_fdms_metar_builder_last_v1
 ```
 
-Stores structured field state (not the final string) on each Copy action.
-
-### 26.3 Manual acceptance test results
-
-| Test | Result |
-|---|---|
-| Tab appears and switches cleanly | Pass |
-| Default output begins with METAR EGOW and current UTC time | Pass |
-| Calm wind produces 00000KT | Pass |
-| Directional wind with gust produces correct KT group | Pass |
-| CAVOK suppresses visibility / weather / cloud contribution | Pass |
-| Two or more cloud layers can be added and removed | Pass |
-| Negative temperature/dew point uses M prefix | Pass |
-| QNH formats as Q1013 style | Pass |
-| Copy disabled when required fields invalid | Pass |
-| Copy includes trailing "=" | Pass |
-| Live Board continues to function after tab change | Pass |
-| Recall Previous restores last copied builder state | Pass |
-
-### 26.4 Explicit exclusions (confirmed not implemented)
-
-- External weather fetch
-- Dew point calculator
-- QNH calculator
-- Convective cloud-base calculator
-- Pressure-reduction method
-- Full ICAO Annex 3 validator
+is currently excluded from backup as regenerable convenience/cache data.
 
 ---
 
-## 27. METAR-BUILDER-002 — Operational Refinement Pass
+## 16. Audit and diagnostics baseline
 
-**Status:** Implementation complete.
+### 16.1 Current audit ledger
 
-**Branch:** `claude/friendly-bohr-YFGLP`
-
-### 27.1 Changes implemented
-
-| # | Change | Detail |
-|---|---|---|
-| 1 | Admin > Weather section | New `admin-sec-weather` panel: observation schedule (H+20/H+50, H+00/H+30, H+53) + rate (bi-hourly/hourly). Immediate save via `updateConfig()`. |
-| 2 | Auto-correct METAR time | On init and on report-type change to METAR, time is auto-set to most recent past scheduled observation. SPECI sets current UTC. `mbTimeNow` button respects report type. |
-| 3 | Wind order / default | Radio order changed to Directional (default, checked) → Calm → Variable. Default `windType: 'dir'`. Wind fields visible on load. |
-| 4 | Gust validation | Gust ≥ mean + 10 kt enforced; clear error message shown. |
-| 5 | Present Weather structured selector | Intensity / Descriptor / Phenomenon dropdowns + Manual override radio. Mode toggle shows/hides the relevant row. |
-| 6 | Recent Weather structured selector | Same structure with `mbRecentWx*` IDs. RE prefix auto-prepended; manual mode strips leading RE before re-adding it (fixes double-prefix RERERA bug). |
-| 7 | Cloud TCU/CB qualifier | Each cloud row has a TCU/CB select (blank/TCU/CB). Disabled for NSC/SKC/NCD. Output: `BKN020CB` etc. |
-| 8 | Temperature M-prefix | Temp/dew inputs changed to `type="text"`. `parseTempInput()` accepts `-5`, `M5`, `M05`, `5`. |
-| 9 | Colour state auto-population | `deriveColourState()` computes UK colour state from vis + lowest BKN/OVC + CAVOK. Auto-updates the `mbColour` select when Colour is enabled. Manual user change sets `data-manual-override="true"`; Recalculate button clears it. |
-| 10 | Editability preserved | All auto-populated fields remain standard editable inputs/selects. No field is locked. |
-| 11 | STATE.md | This section. |
-
-### 27.2 Files changed
-
-| File | Change |
-|---|---|
-| `src/js/metar_builder.js` | Complete rewrite — all 11 changes; added `initAdminWeather` export |
-| `src/index.html` | Structured WX/recent-WX selectors, cloud qualifier selects, temp text inputs, wind radio reorder, colour state indicator+button, Admin Weather section |
-| `src/js/app.js` | Import `initAdminWeather`; call in `admin:init` stage |
-| `src/css/vectair.css` | Added `.mb-colour-indicator`, `.mb-colour-indicator--auto/--manual`, `.mb-cloud-qual-label` |
-| `STATE.md` | This section |
-
-### 27.3 Config key added
+Persistent audit store:
 
 ```text
-metarObservationSchedule: { pattern: 'H20_H50', rate: 'bi-hourly' }
+vectair_flite_audit_log_v1
 ```
 
-Stored in `vectair_fdms_config` via `updateConfig()`. Default values used if absent.
+Originally implemented for VKB reference-data changes.
 
-### 27.4 localStorage migration
+Current additional system audit actions include:
 
-`loadSaved()` detects legacy state (has `wx` / `recentWx` fields, no `wxMode`) and migrates to `wxMode:'manual'` + `wxManualText` automatically. No data loss on recall.
-
-### 27.5 Explicit exclusions (unchanged from METAR-BUILDER-001)
-
-- External weather fetch
-- Dew point calculator / QNH calculator / convective cloud-base calculator
-- Email transmission
-- Pressure-reduction method
-- Full Admin > Meteorology UI
-- General unit conversion framework
-
----
-
-## 28. METAR-BUILDER-002a — Correction Pass
-
-**Status:** Implementation complete. Correction pass over METAR-BUILDER-002.
-
-**Branch:** `claude/friendly-bohr-YFGLP`
-
-### 28.1 Corrections applied
-
-| # | Item | Detail |
-|---|---|---|
-| 1 | Scheduled issue-time window logic | `getScheduledMETARTime()` now builds candidate Date objects for ±2 hours and checks if now is within `[issueStart, issueStart+5min]` (inclusive). If in window → use that issueStart. Otherwise roll forward to next issueStart. Uses real Date objects so hour/day/month rollover is correct. |
-| 2 | Admin > Weather hourlyMinute selector | Added `adminWeatherHourlyMinute` select (options driven by pattern). Shows when rate=hourly; hides for H53 along with the rate row. Options update dynamically when pattern changes. Config saves `hourlyMinute`. |
-| 3 | Admin Weather description text | Replaced "most recent scheduled observation" wording with the correct 5-minute window description. |
-| 4 | Recent Weather manual hint | Fixed "entering RERA outputs RERERA correctly" → "Enter RA or RERA; both output RERA." |
-| 5 | Present Weather enabled validation | Structured mode requires phenomenon; manual mode requires non-empty text. |
-| 6 | Recent Weather enabled validation | Same requirements as present weather. |
-| 7 | Recent weather normalisation | `normalizeRecentWeatherToken()` helper used. Input with leading RE is kept; without RE has it prepended. No double-prefix possible. |
-| 8 | Colour-state SCT inclusion | `deriveColourState()` now treats SCT, BKN, OVC as significant. FEW, NSC, SKC, NCD ignored. |
-| 9 | Temperature/dewpoint strict validation | `isValidMetarTempInput()` uses explicit regex (`/^-?\d{1,2}$/` or `/^M\d{1,2}$/`). Rejects `M5X`, `-5X`, `ABC`, bare `M`, etc. |
-| 10 | Gust validation message | Simplified to "Wind gust: gust must be at least 10 kt greater than the mean wind speed." |
-| 12 | STATE.md | This section. |
-
-### 28.2 Config shape (current)
-
-```json
-{
-  "metarObservationSchedule": {
-    "pattern": "H20_H50",
-    "rate": "bi-hourly",
-    "hourlyMinute": "50"
-  }
-}
+```text
+backup-exported
+backup-restored
 ```
 
-Stored in `vectair_fdms_config` via `updateConfig()`. All three keys present from 002a onwards; earlier saves without `hourlyMinute` fall back to `"50"` in `getScheduledMins()`.
+The audit ledger is not yet a complete unified operational audit system.
 
-### 28.3 Known limitations (not in scope)
+Movement, booking and lifecycle history remain distributed across current movement change logs and dedicated lifecycle stores.
 
-- Single weather phenomenon per structured group only. Multiple simultaneous phenomena (e.g. RASN) require manual override.
-- Runway-state group is free-text only; no structured SNOWTAM encoding.
+A future operational audit-schema workstream should consolidate deliberately rather than accidentally overloading the existing VKB-ledger design.
 
-### 28.4 Explicit exclusions (unchanged)
+### 16.2 Diagnostics
 
-- External weather fetch
-- Dew point calculator / QNH calculator / convective cloud-base calculator
-- Email transmission
-- Full ICAO Annex 3 validator
-- General unit conversion framework
+Current diagnostics include application/runtime state such as:
 
----
+* bootstrap stage log;
+* recent errors;
+* rendering counters;
+* storage estimate;
+* selected dataset counts;
+* generated diagnostic report.
 
-## 29. METAR-BUILDER-003 — CAP 746 Compliance and UX Hardening
+Diagnostics are currently largely in-memory and reset on reload.
 
-**Status:** Implementation complete.
+### 16.3 Integrity Checker
 
-**Branch:** `claude/friendly-bohr-YFGLP`
+No dedicated full Integrity Checker subsystem exists yet.
 
-**Reference:** CAP 746 Issue 6
+Phase 1 Item 2 is the canonical discovery baseline for future integrity work.
 
-### 29.1 Changes applied
-
-| # | Item | Detail |
-|---|---|---|
-| 1 | Invalid Copy state | Copy button gains `mb-copy-blocked` class (opacity 0.5, not-allowed cursor) when errors exist. `#mbIncompleteMsg` span ("Report incomplete") appears alongside it. |
-| 2 | Mandatory-field asterisks | Red `*` on: Station, Time, Wind section title, Temp, Dew Point, QNH. Conditional `*` (id `mbVisRequired`, `mbCloudRequired`) shown/hidden by `syncCavokUi()` based on CAVOK state. |
-| 3 | Remove operational defaults | `windDir`, `windSpeed`, `vis`, `tempC`, `dewC`, `qnh`, and `clouds` array all default to blank/empty. No user-data is silently pre-filled. |
-| 4 | Wind direction 010–360 | Directional wind validates `parseInt(dir) >= 1 && <= 360`. 000 is rejected with message "Use Calm (00000KT) for still air." Both dir and speed are required. |
-| 5 | Visibility required | Empty vis blocks Copy when CAVOK is not set. Must be exactly 4 digits. |
-| 6 | RVR suppressed by CAVOK | `#mbRvrSection` added to the hide-list in `syncCavokUi()`. Auto-expands (checks the RVR checkbox) when vis drops below 1500 m. RVR enabled-but-empty is a validation error. |
-| 7 | Multiple WX groups | Present weather structured mode now supports 1–3 groups via a dynamic list (`#mbWxGroupList`). Each row: intensity / descriptor / phenomenon selects + remove button. Add WX group button hidden when 3 already exist. State serialised as `wxGroups: [{intensity,descriptor,phenomenon}]`. Old single-field saves migrated in `loadSaved()`. |
-| 8 | CAP 746 WX compatibility | `validateWxCompatibility()` produces non-blocking warnings for: intensity on non-precip, VC with invalid phenomena, descriptor/phenomenon matrix (MI/BC/PR+FG, DR/BL+DU/SA/SN, SH+precip, FZ+DZ/RA/FG/UP), FG vis > 1000 m, BR vis range, HZ vis < 1000 m. |
-| 9 | Cloud hardening | NCD removed from cloud amount options (human-observed stations). `clouds: []` default (user must explicitly add layers). Cloud section required unless CAVOK — empty list is a blocking error. TS without CB qualifier generates a non-blocking warning. |
-| 10 | CAVOK warning | Non-blocking warning: "use only when visibility is 10 km or more, no cloud below 5000 ft or MSA, and no significant weather (CAP 746)." Also surfaced in CAVOK checkbox hint text. |
-| 11 | Temp/dew sanity | Blocking error if `parseMetarTempInput(tempC) < parseMetarTempInput(dewC)`. Preview still shows entered values when this fires. |
-| 12 | QNH text input | Changed from `type="number"` to `type="text"` with `maxlength="4"`. Default blank. 3–4 digit validation. Output as `Q0987` / `Q1013`. |
-| 13 | Colour state RMK prefix | `buildReport()` now outputs `RMK BLU` etc. instead of bare `BLU` immediately after QNH. |
-| 14 | Preview placeholder tokens | `buildReport()` substitutes `[WIND]`, `[VIS]`, `[TEMP/DEW]`, `[QNH]` when the corresponding mandatory field is absent or invalid. |
-| 15 | STATE.md | This section. |
-
-### 29.2 Validation return shape (from 003)
-
-`validateState()` now returns `{ errors, warnings }`. `errors` blocks Copy; `warnings` are displayed informationally. `handleChange()` renders both, using `mb-error-item` (orange) and `mb-warning-item` (amber) CSS classes.
-
-### 29.3 Product rule (unchanged)
-
-> The builder may guide, validate, derive, and format. It must not silently create plausible operational data. Operational values must only appear when: derived from locked Report/Admin logic; entered by the user; explicitly selected by the user; derived from a user-entered value.
-
-### 29.4 Explicit exclusions (unchanged from prior tickets)
-
-- External weather fetch
-- Dew point / QNH / convective cloud-base calculators
-- Email transmission
-- Full ICAO Annex 3 validator
-- NCD option (removed as not applicable to human-observed stations)
+Phase 1 Item 3 is specifically backup-validation work and must not be mistaken for a general whole-application integrity checker.
 
 ---
 
-## 30. METAR-BUILDER-003a — Blocking Present-Weather Validation
+## 17. Known architecture concerns and deferred findings
 
-**Status:** Implementation complete.
+The following are known and should not be forgotten.
 
-**Branch:** `claude/friendly-bohr-YFGLP`
+### 17.1 Generic-overflight key growth
 
-**Reference:** CAP 746 Issue 6
+Dated generic-overflight keys accumulate over time.
 
-### 30.1 Changes applied
+There is currently no proactive retention/purge policy.
 
-| # | Item | Detail |
-|---|---|---|
-| 1 | WX compatibility now blocking | `validateWxCompatibility()` returns `{errors, warnings}`. CAP 746 illegal combinations are now `errors` (block Copy), not warnings. `validateState()` spreads them into the main errors/warnings arrays. |
-| 2 | TS alone supported | `descriptor='TS'` with no phenomenon is a valid terminal group. Early-return in `validateWxCompatibility` skips all other checks. `anyFilled` check updated to accept `g.descriptor === 'TS'`. Outputs `TS` in the report. |
-| 3 | FG visibility blocking | FG (without exception descriptors MI/BC/PR or VC): vis required and must be < 1000 m. FZFG: vis must be < 1000 m and temp must be < 0°C. These are errors. MIFG / BCFG / PRFG / VCFG are exempt from station vis restriction. |
-| 4 | BR visibility blocking | BR (not VCBR): vis required; < 1000 m or > 5000 m blocks Copy. |
-| 5 | Descriptor matrix blocking | MI/BC/PR without FG, DR/BL without DU/SA/SN, SH without precipitation, FZ without DZ/RA/FG/UP, FZSN — all blocking errors. |
-| 6 | Intensity blocking | +/− with any non-precipitation phenomenon blocks Copy. |
-| 7 | VC blocking | VCRA and other invalid VC combinations block Copy. Valid: VCTS, VCFG, VCSH, VCPO, VCFC, VCDS, VCSS, VCBLxx. |
-| 8 | Remove UP from structured selector | UP removed from `phenomData` in `buildWxGroupRow()`. Manual override remains available. |
-| 9 | Remove IC from structured selector | IC removed from `phenomData` in `buildWxGroupRow()`. Manual override remains available. |
-| 10 | Remove SKC from cloud selector | SKC removed from `buildCloudRow()` amounts array and from all validation and output checks. Human-observed options: FEW / SCT / BKN / OVC / NSC. |
-| 11 | STATE.md | This section. |
+This is not currently proven to be causing failure, but growth is unbounded.
 
-### 30.2 Blocking vs warning split (from 003a)
+### 17.2 Most datasets lack uniform schema versioning
 
-**Blocking (Copy disabled):**
-- Illegal intensity (+/− with non-precipitation)
-- Invalid VC combinations
-- Descriptor/phenomenon matrix violations
-- FG with vis ≥ 1000 m (except MIFG/BCFG/PRFG/VCFG)
-- FZFG with vis ≥ 1000 m or temp ≥ 0°C
-- BR with vis < 1000 m or vis > 5000 m
-- FZSN and other invalid FZ compounds
+Only some datasets have explicit/enforced schema versioning.
 
-**Advisory warning only:**
-- CAVOK criteria reminder
-- TS without CB cloud qualifier
-- Manual weather group (unvalidated)
+Future migrations must not assume a universal schema contract already exists.
 
-### 30.3 Immediate next action
+### 17.3 Configuration blob mixes concerns
 
-METAR-BUILDER-003a implementation complete. Stuart acceptance required.
-
----
-
-## 31. METAR-BUILDER-003b — Mixed Precipitation Grouping and Combined Weather Codes
-
-**Branch:** `claude/friendly-bohr-YFGLP`
-**Commit:** Fix mixed precipitation weather grouping
-**Status:** Complete — Stuart acceptance required
-
-### 31.1 Problem
-
-Stuart generated `METAR EGOW 010920Z 20014KT 9999 RA SN GR SCT023 17/12 Q1010 RMK WHT=` — three separate weather groups for simultaneous precipitation. This is invalid under CAP 746: simultaneous precipitation types must be encoded as a single combined group (e.g. `RASNGR`), with the dominant type first.
-
-### 31.2 Changes implemented
-
-**`src/js/metar_builder.js`**
-
-1. **State model**: WX group objects changed from `{intensity, descriptor, phenomenon}` to `{intensity, descriptor, phenom1, phenom2, phenom3}`. Backwards-compat migration in `loadSaved()` and throughout all code paths.
-
-2. **`buildWxGroupRow()`**: `mb-wx-phenom1` (full phenomena selector) replaces `mb-wx-phenomenon`. Two additional precipitation-only selectors added (`mb-wx-phenom2`, `mb-wx-phenom3`) using `PRECIP_LIST = ['RA','DZ','SN','SG','PL','GR','GS']`. Row hint: "Combined precipitation: dominant type first".
-
-3. **`bindWxGroupRows()`**: Listens to `mb-wx-phenom1`, `mb-wx-phenom2`, `mb-wx-phenom3`.
-
-4. **`readFormState()`**: Reads `phenom1`, `phenom2`, `phenom3` from each row.
-
-5. **`initMetarBuilder()`**: New WX groups created with `{intensity:'', descriptor:'', phenom1:'', phenom2:'', phenom3:''}`.
-
-6. **`validateWxCompatibility()`**: New signature `(group, vis, tempC)` consuming `phenom1/phenom2/phenom3`. GR/GS check: if any slot contains GR or GS and descriptor is not SH or TS → blocking error.
-
-7. **`validateState()` cross-group check**: Groups with no descriptor, no VC, and a pure precipitation `phenom1` (`DZ/RA/SN/SG/PL/GR/GS`) are counted. If two or more exist → blocking error: "Present Weather: simultaneous precipitation types must be combined into one group with the dominant type first, not entered as separate groups (CAP 746)."
-
-8. **`buildReport()`**: Assembles each group as `intensity + descriptor + phenom1 + phenom2 + phenom3` (empty slots produce no output).
-
-### 31.3 Validation rules added
-
-| Condition | Type | Message |
-|-----------|------|---------|
-| 2+ separate pure-precipitation groups | Blocking | Combine into one group, dominant type first |
-| GR or GS without SH or TS descriptor | Blocking | GR/GS must be reported with SH or TS (CAP 746) |
-
-### 31.4 Preserved behaviour
-
-- Manual override WX mode remains unchanged
-- TS alone (no phenom1) remains valid
-- Automatic ordering is NOT enforced — observer places dominant type first manually
-- `loadSaved()` migrates old `phenomenon` key to `phenom1`; also migrates legacy plain-text and single-structured-group saves
-
----
-
-## 32. METAR-BUILDER-003c — TS Requires CB Cloud (Blocking)
-
-**Branch:** `claude/friendly-bohr-YFGLP`
-**Commit:** Require CB cloud for thunderstorm weather
-**Status:** Complete — Stuart acceptance required
-
-### 32.1 Problem
-
-TS present weather was accepted with BKN023TCU. CAP 746 requires CB to be reported whenever TS is present weather — TCU is not sufficient.
-
-### 32.2 Change
-
-In `validateState()`, the cross-check between structured WX groups and cloud layers:
-
-**Before:** TS without CB → advisory warning only  
-**After:** TS without CB → blocking error — Copy disabled
-
-**Blocking message:** "Present Weather: TS requires a CB cloud group in the cloud section (CAP 746)."
-
-Applies to TS, TSRA, TSRASN, TSRAGR, or any group where `descriptor === 'TS'`. TCU does not satisfy the check.
-
-### 32.3 Acceptance
-
-| Scenario | Result |
-|----------|--------|
-| TS + BKN023TCU | Blocked |
-| TS + BKN023CB | Allowed |
-| TSRA + BKN023TCU | Blocked |
-| TSRA + BKN023CB | Allowed |
-| TSRAGR + BKN023TCU | Blocked |
-| TSRAGR + BKN023CB | Allowed |
-| SHRA + BKN023TCU | Allowed |
-| RASN + BKN023TCU | Allowed |
-
----
-
-## 33. METAR-BUILDER-004 — Compact Form Body, Reporting Mode, and Section Visibility
-
-**Branch:** `claude/friendly-bohr-YFGLP`
-**Commit:** Compact METAR Builder form and add reporting visibility options
-**Status:** Complete — Stuart acceptance required
-
-### 33.1 Changes
-
-**Navigation:** Weather tab moved to second position: Live Board | **Weather** | Calendar | ...
-
-**Form layout:** Flat single-column sections replaced with a 2-column CSS grid of cards:
-- Top row: Report | Wind
-- Middle row: Visibility/CAVOK | Present Weather
-- Lower row: Cloud | Final Values (Temp/Dew/QNH + Colour State when Military)
-
-CAVOK suppresses WX and Cloud cards from the grid (CSS `grid-auto-flow: dense` reflows remaining cards). Sticky output/copy/validation panel intentionally unchanged.
-
-**Reporting mode (Admin > Weather):** Military (default) / Civilian.
-- Military: Colour State available, auto-populated, outputs `RMK BLU/WHT/GRN` etc.
-- Civilian: Colour State section hidden, no auto-populate, no `RMK` colour output.
-- Persisted in `vectair_fdms_config.reportingMode`.
-
-**Section visibility (Admin > Weather):** Per-section admin controls for RVR, Recent Weather, Wind Shear, Runway State, Colour State. Each: Hidden / Available collapsed / Available expanded.
-
-Woodvale Military defaults:
-```json
-{ "rvr": "hidden", "recentWeather": "collapsed", "windShear": "collapsed", "runwayState": "hidden", "colourState": "expanded" }
+```text
+vectair_fdms_config
 ```
 
-Hidden = not shown, not validated, not output. Persisted in `vectair_fdms_config.sectionVisibility`.
+contains a mixture of:
 
-**Accordion sections:** RVR, Recent Weather, Wind Shear, Runway State replaced with `▸/▾` collapsible accordions. Header shows section name + live status ("— not reported", "— R28/0800"). Enabled state = accordion is open and not admin-hidden.
+* operational behaviour;
+* display preferences;
+* compatibility fields;
+* UI configuration.
 
-**Mandatory group suppression removed:**
-- `mbCloudsEnabled` checkbox removed. Cloud is always mandatory when CAVOK is not set.
-- `mbRvrEnabled`, `mbRecentWxEnabled`, `mbWindShearEnabled`, `mbRwyEnabled` checkboxes removed. Section open/closed replaces them.
+Future storage decomposition may separate these concerns.
 
-### 33.2 Config keys added
-- `reportingMode`: `'military'` | `'civilian'`
-- `sectionVisibility`: `{ rvr, recentWeather, windShear, runwayState, colourState }` each `'hidden' | 'collapsed' | 'expanded'`
+Do not perform this as an unrelated cleanup.
 
-### 33.3 Preserved
-- Sticky output/copy/validation panel unchanged
-- METAR issue-time logic unchanged
-- All CAP 746 validation (mixed precip, TS+CB, GR/GS, FG/BR vis checks) unchanged
-- CAVOK advisory warning unchanged
-- Admin schedule settings unchanged
-- `loadSaved()` migration chain unchanged (saved states load cleanly; old `cloudsEnabled` key silently ignored)
+### 17.4 Audit scope is incomplete
 
----
+The central audit ledger is not yet a complete application-wide audit trail.
 
-## 34. METAR-BUILDER-004a — Immediate Admin Settings Application
+This is known and planned for later work.
 
-**Branch:** `claude/friendly-bohr-YFGLP`
-**Commit:** Apply METAR admin visibility settings immediately
-**Status:** Complete — Stuart acceptance required
+### 17.5 `docs/js/` drift
 
-In `initAdminWeather()`, after `updateConfig()` in the Save handler, added calls to `applySectionVisibility()` and `handleChange()`. Admin > Weather settings (reporting mode, section visibility) now take effect on the live Weather tab immediately after Save without requiring a page reload.
+The Data Inventory identified stale duplicated frontend code under `docs/js/`.
 
----
+This should be treated cautiously in any future persistence/code-search work.
 
-## 35. DOCS-FLITE-001 — Weather / METAR Builder Documentation
+### 17.6 Booking prototype copy
 
-**Status:** Complete.
+The Data Inventory identified stale prototype wording in the live Booking UI.
 
-**Branch:** `claude/docs-metar-builder`
-
-### 35.1 Scope
-
-Documentation-only update. No application code was changed.
-
-### 35.2 Files created
-
-| File | Content |
-|---|---|
-| `docs/quick-start.md` | Quick Start Guide including "Create a METAR/SPECI" workflow |
-| `docs/user-guide.md` | User Guide including full Weather / METAR Builder section (sections A–J) and Admin > Weather |
-| `docs/install-update-backup-troubleshooting.md` | Installation, Update, Backup, and Troubleshooting guide including Weather tab verification note |
-
-### 35.3 Files updated
-
-| File | Change |
-|---|---|
-| `README.md` | Added `## Key features` section listing Weather / METAR Builder and other V1 features |
-| `STATE.md` | Updated headline status, completed baseline table, remaining V1 sequence, section 20 documentation status; added this section |
-
-### 35.4 Documentation coverage
-
-The Weather / METAR Builder documentation now covers:
-
-- **Usage** — purpose, report section, mandatory groups, CAVOK behaviour, present weather structured selector, cloud layers, final values (temp/dew/QNH).
-- **Admin > Weather** — observation schedule (H+20/H+50, H+00/H+30, H+53), +5 submission window, reporting mode (Civilian/Military), section visibility (Hidden/Collapsed/Expanded), Woodvale defaults.
-- **Civilian/Military mode** — colour state auto-population, RMK output, civilian suppression.
-- **Section visibility** — per-section admin controls; hidden sections are not validated and do not appear in output.
-- **CAP 746-guided validation** — blocking errors for illegal WX combinations, mixed precipitation, TS without CB, FG/BR visibility rules, blocked Copy with placeholder tokens while incomplete.
-- **Copy behaviour** — trailing `=`, blocked until valid, Recall Previous.
-
-### 35.5 DOCS-FLITE-001a — Correction pass
-
-Documentation-only correction pass. No app code changed.
-
-- **Quick Start:** METAR timing wording corrected — no longer says "most recent scheduled observation"; now reflects the actual rule (scheduled issue time, +5 window, roll-forward).
-- **User Guide section I:** Colour state derivation corrected from "lowest BKN or OVC" to "lowest significant cloud layer: SCT, BKN, or OVC".
-- **User Guide Admin > Weather:** "bi-hourly" wording replaced with "two observations per hour" / "twice-hourly"; hourly rate selector and hourly minute selector described accurately.
-
-### 35.6 Next recommended action
-
-Final V1 regression and acceptance sweep (section 21.8).
+This is a UX/documentation gap rather than a core functional defect.
 
 ---
 
-## 36. LIVEBOARD-OVERDUE-INDEPENDENT-001 — ARR overdue warnings independent of activation state
+## 18. UX closeout baseline
 
-**Status:** Implemented.
+A broad user-facing review identified remaining UX and workflow work beyond core functionality.
 
-LIVEBOARD-OVERDUE-INDEPENDENT-001 implemented.
-ARR overdue action warnings now apply to unresolved ARR strips regardless of PLANNED/ACTIVE status.
-Autoactivation reconciliation remains a separate follow-up item.
+Important principles:
 
-LIVEBOARD-OVERDUE-ELIGIBLE-STATES-001 implemented.
-ARR overdue action warnings now apply only to PLANNED and ACTIVE unresolved arrivals. Any terminal, deleted, unknown, or blank status does not receive an overdue warning.
+* remove placeholder/inaccurate copy;
+* ensure Admin screens explain what operators can actually do;
+* do not expose implementation concepts unnecessarily;
+* make operational consequences explicit;
+* destructive actions must be clearly described;
+* save/apply state must be unambiguous;
+* avoid hidden behaviour;
+* preserve compact, information-dense desktop operation appropriate to ATC use.
 
----
-
-## 37. LIVEBOARD-EDIT-RETURN-TO-PLANNED-001 — Add Edit → Planned lifecycle action
-
-**Status:** Implemented.
-
-LIVEBOARD-EDIT-RETURN-TO-PLANNED-001 implemented.
-Active strips now have an Edit → Planned action allowing operators to return a strip to PLANNED. The action preserves strip data, confirms before returning strips with actual times recorded, and allows existing reconciliation logic to reactivate the strip if its planned time remains inside the activation/overdue window.
+The final UX closeout list should remain in the roadmap/task source rather than being duplicated incompletely here.
 
 ---
 
-## 38. LIVEBOARD-RETURN-TO-PLANNED-SEMANTICS-002 — Replan DEP/LOC correctly when returning ACTIVE strips to PLANNED
+## 19. Release and installer baseline
 
-**Status:** Implemented.
+Proven:
 
-LIVEBOARD-RETURN-TO-PLANNED-SEMANTICS-002 implemented.
-DEP/LOC return-to-planned now performs a true replanning transition: actual departure state is cleared, a revised ETD is assigned, dependent timing is recalculated through the canonical timing model, and timeline/counter displays refresh. Inline future ATD edits on ACTIVE DEP/LOC strips are now treated as revised ETD entries and return the strip to PLANNED. ARR and OVR semantics remain unchanged.
+* Tauri desktop build;
+* Windows NSIS installer;
+* updater signing;
+* GitHub Releases update assets;
+* in-app update check;
+* in-app installation;
+* application restart/update success;
+* startup update-check option.
+
+Current released version:
+
+```text
+0.9.4
+```
+
+Final V1 work still includes appropriate release/installer documentation and acceptance validation.
+
+Do not reopen the completed Windows shortcut/icon repair sequence unless a real regression is demonstrated.
 
 ---
 
-## 39. VKB-REG-GRID-001 — Aircraft Registrations admin grid lazy/paginated render
+## 20. Testing and verification principles
 
-**Status:** Implemented.
+### 20.1 Evidence hierarchy
 
-VKB-REG-GRID-001 implemented. `Admin → Reference Data → Aircraft Registrations` previously rendered the full ~25k-row effective registration set into the DOM on every open (`tbody.innerHTML = filtered.map(...).join('')`), causing a 5–15 second UI hang.
+Use, in order:
 
-- The full-table DOM render for Aircraft Registrations has been removed. `_renderRegAdminTable()` now renders only the current page slice (default page size 100; selectable 50/100/250) — the DOM never contains more than one page of rows.
-- Added stateful grid: search text, page, page size, sort field, and sort direction (`REG_ADMIN_GRID_DEFAULTS`, default sort `REGISTRATION` ascending). Search/page-size/sort changes reset to page 1; the page clamps if data shrinks below the current page.
-- Search is debounced ~200ms and matches REGISTRATION, TYPE, OPERATOR, POPULAR NAME, FIXED C/S, EGOW FLIGHT TYPE, OPERATION TYPE, WARNINGS, and NOTES via a precomputed lowercase search-text row cache, invalidated inside `_rebuildEffectiveArrays()` (covers edit/add/delete/reset/`refreshVkbAdminDisplay()`).
-- Sortable column headers (Registration, Type, Operator, Fixed C/S, EGOW Flt Type, Op Type) with a direction indicator; sorting does not trigger a full re-render of all rows.
-- Pagination/status controls (rows-per-page selector, Previous/Next, "Showing X–Y of Z" status line) are generated dynamically and hidden when EGOW Callsign Attribution is active — EGOW keeps its original full-render behaviour, now also using shared event delegation (`_ensureVkbAdminDelegatedActions`) instead of per-button listeners.
-- CSV storage, override/audit schema, VKB storage keys, and Live Board VKB lookup/autofill behaviour are unchanged. SQLite remains explicitly deferred.
+1. actual current repository code;
+2. targeted automated/static tests;
+3. current branch diff;
+4. manual operational smoke tests;
+5. authoritative architecture docs;
+6. handovers and summaries.
+
+Do not trust a summary over contradictory implementation evidence.
+
+### 20.2 Manual testing role
+
+Stuart is the Product Owner, operational SME and primary manual acceptance tester.
+
+When implementation affects operational workflow, provide exact test steps.
+
+Do not claim operational proof merely because syntax checks pass.
+
+### 20.3 Regression discipline
+
+Completed areas should not be reopened casually.
+
+When changing an established area:
+
+* identify the previous baseline;
+* preserve known invariants;
+* run the relevant smoke tests;
+* verify no stale autofill/state remains;
+* verify no historical records are reinterpreted.
+
+---
+
+## 21. Key smoke-test areas
+
+Future changes should consider the relevant tests from this set.
+
+### 21.1 Core movement lifecycle
+
+Test:
+
+* create;
+* activate;
+* complete;
+* cancel;
+* reinstate;
+* delete;
+* restore deleted strip.
+
+### 21.2 Timing
+
+Verify:
+
+* DEP ATD stamping;
+* LOC ATD/ATA behaviour;
+* ARR activation does not fabricate ATD;
+* ARR completion stamps ATA where appropriate;
+* OVR start/end semantics;
+* UTC/local conversion;
+* historical inline edit promotion behaviour.
+
+### 21.3 EGOW/PIC
+
+Verify:
+
+* exact callsign attribution;
+* UAM leading-zero handling;
+* malformed UAM callsign rejection;
+* formation contraction lookup;
+* registration-only PIC fallback;
+* stale autofill clearing;
+* manual override preservation.
+
+### 21.4 Formation
+
+Verify:
+
+* element creation;
+* shared/default inheritance;
+* overrides;
+* child status divergence;
+* master cascade;
+* WTC current/max;
+* per-element movement counting;
+* outcome/diversion fields.
+
+### 21.5 Booking linkage
+
+Verify:
+
+* booking creation;
+* strip creation/linking;
+* duplicate-link reconciliation;
+* missing-pointer repair;
+* current-state linkage after restore.
+
+### 21.6 Backup/restore
+
+Verify:
+
+* valid current full backup;
+* old current-format v1 backup without new metadata;
+* malformed top-level JSON;
+* unrecognised file;
+* malformed static dataset JSON;
+* wrong static dataset shape;
+* unsupported future `formatVersion`;
+* malformed `formatVersion`;
+* generic-overflight malformed value warning/skip;
+* arbitrary unknown key rejection;
+* no localStorage write before full static validation succeeds;
+* legacy envelope restore;
+* legacy v2 restore;
+* legacy bare-array restore;
+* post-restore reload recommendation;
+* backup-exported audit event after successful export;
+* backup-restored audit event after successful restore;
+* cancel/failure not recorded as success.
+
+### 21.7 Updater
+
+Verify:
+
+* manual check;
+* no-update state;
+* available-update state;
+* first-click confirmation;
+* install handoff;
+* app restart;
+* startup check enabled;
+* startup check disabled;
+* last-check timestamp;
+* teardown error suppression.
+
+### 21.8 Final V1 acceptance
+
+Final acceptance should include:
+
+* fresh install;
+* upgrade from previous release;
+* backup before update;
+* restore after update where appropriate;
+* core movement lifecycle;
+* reporting;
+* bookings/calendar;
+* History;
+* formations;
+* VKB/reference edits;
+* METAR Builder;
+* diagnostics;
+* updater;
+* release documentation.
+
+---
+
+## 22. Working method for new engineering tasks
+
+For each new item:
+
+### Step 1 — Investigate
+
+ChatGPT inspects:
+
+* relevant repository code;
+* architecture docs;
+* existing tests;
+* merged branch state;
+* related historical implementation.
+
+### Step 2 — Define
+
+ChatGPT determines:
+
+* actual current behaviour;
+* defect/gap;
+* smallest correct architecture;
+* explicit non-goals;
+* acceptance criteria.
+
+### Step 3 — Ticket
+
+Claude receives a precise implementation ticket.
+
+Avoid:
+
+* broad exploratory tickets;
+* “investigate and fix whatever you find” tasks;
+* unnecessary refactors;
+* reopening product decisions without evidence.
+
+### Step 4 — Implement
+
+Claude implements the defined ticket.
+
+### Step 5 — Review
+
+ChatGPT independently checks:
+
+* actual branch diff;
+* correctness;
+* regressions;
+* scope discipline;
+* acceptance criteria.
+
+### Step 6 — Test
+
+Stuart performs manual acceptance where operational interaction matters.
+
+### Step 7 — Merge
+
+Only after the work passes review and required testing.
+
+### Step 8 — Update continuity
+
+Update:
+
+* `STATE.md` where materially needed;
+* authoritative roadmap status;
+* handover when moving to a new thread.
+
+---
+
+## 23. Documentation anchors
+
+Primary continuity/state file:
+
+```text
+STATE.md
+```
+
+Authoritative persistence reference:
+
+```text
+docs/architecture/DATA_INVENTORY.md
+```
+
+Important user documentation:
+
+```text
+docs/quick-start.md
+docs/user-guide.md
+docs/install-update-backup-troubleshooting.md
+```
+
+Other architecture/audit documentation should be inspected as relevant rather than assumed current globally.
+
+---
+
+## 24. Before V1 — current known themes
+
+Still to complete before V1, subject to authoritative roadmap ordering:
+
+```text
+Storage wrappers / persistence abstraction
+Operational audit schema
+Remaining resilience/integrity foundations
+Remaining UX polish items
+Final installer/release documentation
+Final regression and acceptance sweep
+```
+
+Potential later preparation:
+
+```text
+Signing-key rotation
+```
+
+Potential post-launch:
+
+```text
+SQLite migration
+MAB package filtering
+Learned PIC ranking
+Advanced historical lifecycle analytics
+Broader multi-workstation/multi-user architecture
+```
+
+---
+
+## 25. Current handover baseline for a new thread
+
+A new thread should begin from:
+
+```text
+Repository: Vectair/FDMS
+Local path: C:\Users\dmshs\FDMS
+Authoritative branch: main
+Current released version: 0.9.4
+Current confirmed main: 143ab12
+```
+
+Current Pre-V1 state:
+
+```text
+✅ Phase 1 Item 1 — Backup / Restore Completeness
+✅ Phase 1 Item 2 — Canonical Data Inventory
+✅ Phase 1 Item 3 — Backup Validation & Restore Summary
+```
+
+Do not revisit those items unless code has changed or evidence of a defect appears.
+
+Immediate next action:
+
+> Inspect the authoritative Pre-V1 roadmap, identify the next incomplete item, inspect the current implementation relevant to that item, and determine the smallest correct next engineering change before writing a Claude ticket.
+
+---
+
+## 26. Continuity rules
+
+The following rules are mandatory for future project continuity:
+
+1. `main` is authoritative.
+2. Repository implementation outranks summaries.
+3. `docs/architecture/DATA_INVENTORY.md` is authoritative for persistence inventory.
+4. Completed work should not be reopened without evidence.
+5. Product decisions should not be relabelled as defects merely because an alternative design exists.
+6. Prefer the smallest correct change.
+7. Avoid speculative refactors.
+8. Do not allow Claude to choose product architecture independently.
+9. Manual testing should reflect real operator workflows.
+10. Update handovers concisely but comprehensively enough that future threads do not drift.
+11. Preserve historical truth in operational records.
+12. User-entered operational data belongs to the user and must be protected accordingly.
+13. Backup/restore behaviour must remain explicit, inspectable and operator-friendly.
+14. Unknown arbitrary backup keys must never be restored.
+15. Full static backup validation must complete before full restore begins writing recognised static datasets.
+16. Future persistence changes must update the canonical inventory.
+17. Future data stores must be classified deliberately rather than introduced ad hoc.
+18. Do not widen V1 scope without evidence that the additional work is necessary for safe or responsible launch.
+
+---
+
+## 27. Final current-state summary
+
+Vectair Flite is a mature pre-V1 operational desktop application approaching deployment at EGOW.
+
+Major functionality is in place, including:
+
+* movement-strip lifecycle;
+* Live Board;
+* History;
+* Calendar;
+* Bookings;
+* reporting;
+* cancellations/deleted-strip recovery;
+* formation handling;
+* VKB/reference data;
+* aircraft/pilot attribution;
+* METAR Builder;
+* diagnostics;
+* backup/restore;
+* signed in-app Windows updating.
+
+The current engineering emphasis is no longer major feature creation.
+
+The priority is:
+
+```text
+data safety
+resilience
+auditability
+maintainability
+operator clarity
+release robustness
+final V1 acceptance
+```
+
+Phase 1 Items 1–3 of the Pre-V1 data-safety programme are complete and merged.
+
+The next engineering work should continue from the authoritative roadmap without reopening completed work unless repository evidence requires it.
