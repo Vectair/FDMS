@@ -8,6 +8,8 @@ import {
   getAuditEventsForEntity
 } from './audit.js';
 
+import { readJSON, writeJSON } from './storage.js';
+
 /**
  * VKB Data Store
  * Holds all loaded CSV data in memory for fast lookups and autocomplete.
@@ -1160,9 +1162,8 @@ function _migrateOverrides(parsed) {
 
 function getVKBOverrides() {
   try {
-    const raw = localStorage.getItem(VKB_OVERRIDES_KEY);
-    if (!raw) return _emptyOverrides();
-    const parsed = JSON.parse(raw);
+    const parsed = readJSON(VKB_OVERRIDES_KEY);
+    if (parsed === undefined) return _emptyOverrides();
     if (!parsed || typeof parsed !== 'object') return _emptyOverrides();
 
     // Migrate legacy top-level shape (no datasets wrapper)
@@ -1211,7 +1212,7 @@ function getVKBOverrides() {
 }
 
 function saveVKBOverrides(data) {
-  localStorage.setItem(VKB_OVERRIDES_KEY, JSON.stringify({ ...data, updatedAt: new Date().toISOString() }));
+  writeJSON(VKB_OVERRIDES_KEY, { ...data, updatedAt: new Date().toISOString() });
 }
 
 // ── Baseline + effective helpers ──────────────────────────────────────────

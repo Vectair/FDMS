@@ -10,6 +10,8 @@ import {
   lookupCaptainFromEgowCodes        as _vkbLookupCaptain
 } from './vkb.js';
 
+import { readRaw, writeRaw, remove, readJSON, keys as storageKeys, getUsageBytes } from './storage.js';
+
 const STORAGE_KEY = "vectair_fdms_movements_v3";
 const STORAGE_KEY_V2 = "vectair_fdms_movements_v2";
 const STORAGE_KEY_V1 = "vectair_fdms_movements_v1";
@@ -397,7 +399,7 @@ function cloneDemoMovements() {
 function migrateFromV1() {
   if (typeof window === "undefined" || !window.localStorage) return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY_V1);
+    const raw = readRaw(STORAGE_KEY_V1);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
@@ -409,7 +411,7 @@ function migrateFromV1() {
       rules: m.rules || "VFR"
     }));
     // Remove old key after successful migration
-    window.localStorage.removeItem(STORAGE_KEY_V1);
+    remove(STORAGE_KEY_V1);
     return migrated;
   } catch (e) {
     console.warn("FDMS: failed to migrate from v1", e);
@@ -425,7 +427,7 @@ function migrateFromV1() {
 function migrateFromV2() {
   if (typeof window === "undefined" || !window.localStorage) return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY_V2);
+    const raw = readRaw(STORAGE_KEY_V2);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || parsed.version !== 2) return null;
@@ -439,7 +441,7 @@ function migrateFromV2() {
       rules: m.rules || "VFR"
     }));
     // Remove old key after successful migration
-    window.localStorage.removeItem(STORAGE_KEY_V2);
+    remove(STORAGE_KEY_V2);
     return migrated;
   } catch (e) {
     console.warn("FDMS: failed to migrate from v2", e);
@@ -456,7 +458,7 @@ function loadFromStorage() {
   if (typeof window === "undefined" || !window.localStorage) return null;
   try {
     // Try loading v3 schema first
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = readRaw(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       // v3 schema: { version, timestamp, movements }
@@ -492,7 +494,7 @@ function saveToStorage() {
       timestamp: new Date().toISOString(),
       movements: movements
     });
-    window.localStorage.setItem(STORAGE_KEY, payload);
+    writeRaw(STORAGE_KEY, payload);
   } catch (e) {
     console.warn("FDMS: failed to save movements to storage", e);
   }
@@ -501,7 +503,7 @@ function saveToStorage() {
 function loadConfig() {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
-    const raw = window.localStorage.getItem(CONFIG_KEY);
+    const raw = readRaw(CONFIG_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       config = { ...defaultConfig, ...parsed };
@@ -526,7 +528,7 @@ function loadConfig() {
 function saveConfig() {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
-    window.localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+    writeRaw(CONFIG_KEY, JSON.stringify(config));
   } catch (e) {
     console.warn("FDMS: failed to save config to storage", e);
   }
@@ -2110,11 +2112,11 @@ export function inspectSessionBackup(parsed) {
 export function exportSessionJSON() {
   const storage = {};
   for (const key of SESSION_BACKUP_KEYS) {
-    const val = window.localStorage.getItem(key);
+    const val = readRaw(key);
     storage[key] = val !== null ? val : null;
   }
   for (const key of getGenericOverflightStorageKeys()) {
-    storage[key] = window.localStorage.getItem(key);
+    storage[key] = readRaw(key);
   }
 
   const backup = {
@@ -2155,7 +2157,7 @@ export function importSessionJSON(parsed) {
       const restoredKeys = [];
       for (const key of SESSION_BACKUP_KEYS) {
         if (Object.prototype.hasOwnProperty.call(parsed.storage, key) && parsed.storage[key] !== null) {
-          window.localStorage.setItem(key, parsed.storage[key]);
+          writeRaw(key, parsed.storage[key]);
           restoredKeys.push(key);
         }
       }
@@ -2164,7 +2166,7 @@ export function importSessionJSON(parsed) {
       // values inspectSessionBackup() already flagged as skip-worthy above.
       for (const key of Object.keys(parsed.storage)) {
         if (isGenericOverflightStorageKey(key) && isValidGenericOverflightValue(parsed.storage[key])) {
-          window.localStorage.setItem(key, parsed.storage[key]);
+          writeRaw(key, parsed.storage[key]);
           restoredKeys.push(key);
         }
       }
@@ -2207,9 +2209,7 @@ export function getStorageInfo() {
 
 function countBookingRecords() {
   try {
-    const raw = window.localStorage.getItem('vectair_fdms_bookings_v1');
-    if (!raw) return 0;
-    const parsed = JSON.parse(raw);
+    const parsed = readJSON('vectair_fdms_bookings_v1');
     return (parsed && Array.isArray(parsed.bookings)) ? parsed.bookings.length : 0;
   } catch (e) {
     return 0;
@@ -2219,9 +2219,7 @@ function countBookingRecords() {
 export function getDataCounts() {
   function countKey(key) {
     try {
-      const raw = window.localStorage.getItem(key);
-      if (!raw) return 0;
-      const val = JSON.parse(raw);
+      const val = readJSON(key);
       if (Array.isArray(val)) return val.length;
       if (val && typeof val === 'object') return Object.keys(val).length;
       return 0;
@@ -2593,12 +2591,7 @@ export function getStorageQuota() {
 
   try {
     // Calculate current usage
-    let used = 0;
-    for (let key in window.localStorage) {
-      if (window.localStorage.hasOwnProperty(key)) {
-        used += window.localStorage[key].length + key.length;
-      }
-    }
+    const used = getUsageBytes();
 
     // localStorage quota is typically 5-10MB, assume 5MB as conservative estimate
     const quota = 5 * 1024 * 1024; // 5MB in bytes
@@ -2667,12 +2660,7 @@ function isValidGenericOverflightValue(raw) {
  * @returns {string[]}
  */
 function getGenericOverflightStorageKeys() {
-  const keys = [];
-  for (let i = 0; i < window.localStorage.length; i++) {
-    const key = window.localStorage.key(i);
-    if (key && isGenericOverflightStorageKey(key)) keys.push(key);
-  }
-  return keys;
+  return storageKeys().filter(key => key && isGenericOverflightStorageKey(key));
 }
 
 /**
@@ -2696,7 +2684,7 @@ function getGenericOvrKeyForDate(dateStr = null) {
  */
 export function getGenericOverflightsCount(dateStr = null) {
   const key = getGenericOvrKeyForDate(dateStr);
-  const stored = localStorage.getItem(key);
+  const stored = readRaw(key);
   return stored ? parseInt(stored, 10) : 0;
 }
 
@@ -2707,7 +2695,7 @@ export function getGenericOverflightsCount(dateStr = null) {
  */
 export function setGenericOverflightsCount(count, dateStr = null) {
   const key = getGenericOvrKeyForDate(dateStr);
-  localStorage.setItem(key, String(Math.max(0, count)));
+  writeRaw(key, String(Math.max(0, count)));
 }
 
 /**
@@ -2746,19 +2734,19 @@ const CANCELLED_SORTIES_KEY = "vectair_fdms_cancelled_sorties_v1";
  */
 export function ensureCancelledSortiesInitialised() {
   try {
-    const raw = localStorage.getItem(CANCELLED_SORTIES_KEY);
+    const raw = readRaw(CANCELLED_SORTIES_KEY);
     if (raw === null) {
-      localStorage.setItem(CANCELLED_SORTIES_KEY, JSON.stringify([]));
+      writeRaw(CANCELLED_SORTIES_KEY, JSON.stringify([]));
       return;
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
       console.warn('[FDMS] Cancelled sorties store corrupt — resetting to []');
-      localStorage.setItem(CANCELLED_SORTIES_KEY, JSON.stringify([]));
+      writeRaw(CANCELLED_SORTIES_KEY, JSON.stringify([]));
     }
   } catch (e) {
     console.warn('[FDMS] Cancelled sorties store repair:', e);
-    localStorage.setItem(CANCELLED_SORTIES_KEY, JSON.stringify([]));
+    writeRaw(CANCELLED_SORTIES_KEY, JSON.stringify([]));
   }
 }
 
@@ -2769,7 +2757,7 @@ export function ensureCancelledSortiesInitialised() {
 export function getCancelledSorties() {
   ensureCancelledSortiesInitialised();
   try {
-    const raw = localStorage.getItem(CANCELLED_SORTIES_KEY);
+    const raw = readRaw(CANCELLED_SORTIES_KEY);
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
@@ -2782,7 +2770,7 @@ export function getCancelledSorties() {
  * @param {Array<Object>} list
  */
 export function saveCancelledSorties(list) {
-  localStorage.setItem(CANCELLED_SORTIES_KEY, JSON.stringify(Array.isArray(list) ? list : []));
+  writeRaw(CANCELLED_SORTIES_KEY, JSON.stringify(Array.isArray(list) ? list : []));
 }
 
 /**
@@ -2814,26 +2802,26 @@ const DELETED_STRIPS_KEY = "vectair_fdms_deleted_strips_v1";
 
 export function ensureDeletedStripsInitialised() {
   try {
-    const raw = localStorage.getItem(DELETED_STRIPS_KEY);
+    const raw = readRaw(DELETED_STRIPS_KEY);
     if (raw === null) {
-      localStorage.setItem(DELETED_STRIPS_KEY, JSON.stringify([]));
+      writeRaw(DELETED_STRIPS_KEY, JSON.stringify([]));
       return;
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
       console.warn('[FDMS] Deleted strips store corrupt — resetting to []');
-      localStorage.setItem(DELETED_STRIPS_KEY, JSON.stringify([]));
+      writeRaw(DELETED_STRIPS_KEY, JSON.stringify([]));
     }
   } catch (e) {
     console.warn('[FDMS] Deleted strips store repair:', e);
-    localStorage.setItem(DELETED_STRIPS_KEY, JSON.stringify([]));
+    writeRaw(DELETED_STRIPS_KEY, JSON.stringify([]));
   }
 }
 
 export function getDeletedStrips() {
   ensureDeletedStripsInitialised();
   try {
-    const raw = localStorage.getItem(DELETED_STRIPS_KEY);
+    const raw = readRaw(DELETED_STRIPS_KEY);
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
@@ -2842,7 +2830,7 @@ export function getDeletedStrips() {
 }
 
 export function saveDeletedStrips(list) {
-  localStorage.setItem(DELETED_STRIPS_KEY, JSON.stringify(Array.isArray(list) ? list : []));
+  writeRaw(DELETED_STRIPS_KEY, JSON.stringify(Array.isArray(list) ? list : []));
 }
 
 /**

@@ -2,6 +2,8 @@
 // UI-agnostic booking persistence helpers.
 // No imports from ui_booking.js or ui_liveboard.js.
 
+import { readJSON, writeJSON } from '../storage.js';
+
 const BOOKINGS_STORAGE_KEY = "vectair_fdms_bookings_v1";
 
 let bookings = [];
@@ -42,9 +44,8 @@ function ensureInitialised() {
 function loadFromStorage() {
   if (typeof window === "undefined" || !window.localStorage) return null;
   try {
-    const raw = window.localStorage.getItem(BOOKINGS_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
+    const parsed = readJSON(BOOKINGS_STORAGE_KEY);
+    if (parsed === undefined) return null;
     return (parsed && Array.isArray(parsed.bookings)) ? parsed : null;
   } catch (e) {
     console.warn("FDMS bookingsStore: failed to load", e);
@@ -55,12 +56,11 @@ function loadFromStorage() {
 function saveToStorage() {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
-    const payload = JSON.stringify({
+    writeJSON(BOOKINGS_STORAGE_KEY, {
       version: 1,
       timestamp: new Date().toISOString(),
       bookings
     });
-    window.localStorage.setItem(BOOKINGS_STORAGE_KEY, payload);
   } catch (e) {
     console.warn("FDMS bookingsStore: failed to save", e);
   }
