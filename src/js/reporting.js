@@ -25,6 +25,7 @@
 import { getMovements, getCancelledSorties, getElementAttributionIdentity, getResolvedElementPilot, resolveFormationElementIdentity } from './datamodel.js';
 import { getVKBRegistrations } from './vkb.js';
 import { saveTextFileWithDialogOrDownload, saveBinaryFileWithDialogOrDownload, downloadFileViaBrowser } from './export_utils.js';
+import { readJSON, writeJSON } from './storage.js';
 
 // ========================================
 // HOURS LOG MANAGEMENT
@@ -38,8 +39,8 @@ const HOURS_STORAGE_KEY = 'vectair_fdms_hours_v1';
  */
 export function loadHours() {
   try {
-    const stored = localStorage.getItem(HOURS_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : {};
+    const parsed = readJSON(HOURS_STORAGE_KEY);
+    return parsed !== undefined ? parsed : {};
   } catch (e) {
     console.error('Failed to load hours:', e);
     return {};
@@ -58,7 +59,7 @@ export function saveHours(date, hours) {
   } else {
     hoursMap[date] = parseFloat(hours);
   }
-  localStorage.setItem(HOURS_STORAGE_KEY, JSON.stringify(hoursMap));
+  writeJSON(HOURS_STORAGE_KEY, hoursMap);
 }
 
 /**

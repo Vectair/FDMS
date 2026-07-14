@@ -2,6 +2,8 @@
 // Central append-only audit ledger for Vectair Flite.
 // Scope: VKB reference-data changes only (movements, bookings etc. are out of scope for this ticket).
 
+import { readJSON, writeJSON } from './storage.js';
+
 export const AUDIT_LOG_KEY = "vectair_flite_audit_log_v1";
 
 const SCHEMA_VERSION = 1;
@@ -28,10 +30,8 @@ function generateCorrelationId() {
  */
 export function getAuditLog() {
   try {
-    const raw = localStorage.getItem(AUDIT_LOG_KEY);
-    if (!raw) return { version: 1, updatedAt: null, events: [] };
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.events)) {
+    const parsed = readJSON(AUDIT_LOG_KEY);
+    if (parsed === undefined || !parsed || typeof parsed !== 'object' || !Array.isArray(parsed.events)) {
       return { version: 1, updatedAt: null, events: [] };
     }
     return parsed;
@@ -44,7 +44,7 @@ export function getAuditLog() {
  * Write the audit log to localStorage, stamping updatedAt.
  */
 export function saveAuditLog(log) {
-  localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify({ ...log, updatedAt: nowISO() }));
+  writeJSON(AUDIT_LOG_KEY, { ...log, updatedAt: nowISO() });
 }
 
 /**

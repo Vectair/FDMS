@@ -70,6 +70,8 @@ import { saveTextFileWithDialogOrDownload } from "./export_utils.js";
 
 import { initMetarBuilder, initAdminWeather } from "./metar_builder.js";
 
+import { readRaw, writeRaw } from "./storage.js";
+
 /* -----------------------------
    Toast Notification System
 ------------------------------ */
@@ -2218,17 +2220,17 @@ function initUpdaterPanel() {
     if (elBuild) elBuild.textContent = 'unknown';
   });
 
-  const storedLastChecked = localStorage.getItem(UPDATER_LAST_CHECKED_KEY);
+  const storedLastChecked = readRaw(UPDATER_LAST_CHECKED_KEY);
   if (storedLastChecked && elLastChecked) {
     elLastChecked.textContent = formatUpdaterDate(storedLastChecked);
   }
 
   if (checkOnLaunch) {
-    const launchCheckEnabled = localStorage.getItem(UPDATER_CHECK_ON_LAUNCH_KEY);
+    const launchCheckEnabled = readRaw(UPDATER_CHECK_ON_LAUNCH_KEY);
     checkOnLaunch.checked = launchCheckEnabled !== 'false';
 
     checkOnLaunch.addEventListener('change', () => {
-      localStorage.setItem(
+      writeRaw(
         UPDATER_CHECK_ON_LAUNCH_KEY,
         checkOnLaunch.checked ? 'true' : 'false'
       );
@@ -2275,7 +2277,7 @@ function initUpdaterPanel() {
     try {
       const result = await invoke('flite_check_for_update');
       if (result.lastChecked) {
-        localStorage.setItem(UPDATER_LAST_CHECKED_KEY, result.lastChecked);
+        writeRaw(UPDATER_LAST_CHECKED_KEY, result.lastChecked);
         if (elLastChecked) elLastChecked.textContent = formatUpdaterDate(result.lastChecked);
       }
 

@@ -2,6 +2,7 @@
 // Structured METAR/SPECI builder for Vectair Flite — CAP 746 Issue 6 compliant.
 
 import { getConfig, updateConfig } from './datamodel.js';
+import { readJSON, writeJSON } from './storage.js';
 
 const STORAGE_KEY    = 'vectair_fdms_metar_builder_last_v1';
 const DEFAULT_STATION = 'EGOW';
@@ -524,9 +525,8 @@ function buildReport(s) {
 
 function loadSaved() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
+    const parsed = readJSON(STORAGE_KEY);
+    if (parsed === undefined) return null;
     // Migrate legacy plain-text wx
     if (parsed.wx !== undefined && parsed.wxMode === undefined) {
       parsed.wxMode = 'manual';
@@ -572,7 +572,7 @@ function loadSaved() {
 }
 
 function saveState(s) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (_) {}
+  try { writeJSON(STORAGE_KEY, s); } catch (_) {}
 }
 
 // ── DOM helpers ───────────────────────────────────────────────────────────────

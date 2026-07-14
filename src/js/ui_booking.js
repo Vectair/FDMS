@@ -18,6 +18,8 @@ import { closeActiveModal } from "./ui_liveboard.js";
 
 import * as bookingsStore from "./stores/bookingsStore.js";
 
+import { readJSON, writeJSON } from "./storage.js";
+
 // VKB imports for autofill functionality
 import {
   lookupRegistration,
@@ -63,12 +65,9 @@ function normalizeRegistration(reg) {
 function loadBookingProfiles() {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
-    const raw = window.localStorage.getItem(BOOKING_PROFILES_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.profiles && typeof parsed.profiles === 'object') {
-        bookingProfiles = parsed.profiles;
-      }
+    const parsed = readJSON(BOOKING_PROFILES_STORAGE_KEY);
+    if (parsed && parsed.profiles && typeof parsed.profiles === 'object') {
+      bookingProfiles = parsed.profiles;
     }
   } catch (e) {
     console.warn("FDMS Booking: failed to load profiles from storage", e);
@@ -82,12 +81,11 @@ function loadBookingProfiles() {
 function saveBookingProfiles() {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
-    const payload = JSON.stringify({
+    writeJSON(BOOKING_PROFILES_STORAGE_KEY, {
       schema_version: 1,
       timestamp: new Date().toISOString(),
       profiles: bookingProfiles
     });
-    window.localStorage.setItem(BOOKING_PROFILES_STORAGE_KEY, payload);
   } catch (e) {
     console.warn("FDMS Booking: failed to save profiles to storage", e);
   }
@@ -273,12 +271,9 @@ function isFieldUserEdited(field) {
 function loadCalendarEventsFromStorage() {
   if (typeof window === "undefined" || !window.localStorage) return null;
   try {
-    const raw = window.localStorage.getItem(CALENDAR_EVENTS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.events)) {
-        return parsed;
-      }
+    const parsed = readJSON(CALENDAR_EVENTS_STORAGE_KEY);
+    if (parsed && Array.isArray(parsed.events)) {
+      return parsed;
     }
     return null;
   } catch (e) {
@@ -290,12 +285,11 @@ function loadCalendarEventsFromStorage() {
 function saveCalendarEventsToStorage() {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
-    const payload = JSON.stringify({
+    writeJSON(CALENDAR_EVENTS_STORAGE_KEY, {
       version: 1,
       timestamp: new Date().toISOString(),
       events: calendarEvents
     });
-    window.localStorage.setItem(CALENDAR_EVENTS_STORAGE_KEY, payload);
   } catch (e) {
     console.warn("FDMS: failed to save calendar events to storage", e);
   }
