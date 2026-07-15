@@ -12,6 +12,7 @@ import {
 
 import { readRaw, writeRaw, remove, readJSON, keys as storageKeys, getUsageBytes } from './storage.js';
 import { appendAuditEvent, buildFieldDiff } from './audit.js';
+import { recordDiagnosticError } from './diagnostics.js';
 
 const STORAGE_KEY = "vectair_fdms_movements_v3";
 const STORAGE_KEY_V2 = "vectair_fdms_movements_v2";
@@ -476,6 +477,12 @@ function loadFromStorage() {
     return migrateFromV1();
   } catch (e) {
     console.warn("FDMS: failed to load movements from storage", e);
+    recordDiagnosticError({
+      severity: 'critical',
+      type: 'movement-persistence-read-error',
+      message: e.message || String(e),
+      stack: e.stack || null
+    });
     return null;
   }
 }
@@ -498,6 +505,12 @@ function saveToStorage() {
     writeRaw(STORAGE_KEY, payload);
   } catch (e) {
     console.warn("FDMS: failed to save movements to storage", e);
+    recordDiagnosticError({
+      severity: 'critical',
+      type: 'movement-persistence-write-error',
+      message: e.message || String(e),
+      stack: e.stack || null
+    });
   }
 }
 
@@ -522,6 +535,11 @@ function loadConfig() {
     }
   } catch (e) {
     console.warn("FDMS: failed to load config from storage", e);
+    recordDiagnosticError({
+      type: 'config-persistence-read-error',
+      message: e.message || String(e),
+      stack: e.stack || null
+    });
     config = { ...defaultConfig };
   }
 }
@@ -532,6 +550,11 @@ function saveConfig() {
     writeRaw(CONFIG_KEY, JSON.stringify(config));
   } catch (e) {
     console.warn("FDMS: failed to save config to storage", e);
+    recordDiagnosticError({
+      type: 'config-persistence-write-error',
+      message: e.message || String(e),
+      stack: e.stack || null
+    });
   }
 }
 
@@ -1753,6 +1776,12 @@ function auditMovementEvent(action, movement, { before, after, changedFields, co
     });
   } catch (e) {
     console.error(`FDMS: failed to record '${action}' audit event for movement`, movement && movement.id, e);
+    recordDiagnosticError({
+      type: 'audit-append-error',
+      message: e.message || String(e),
+      stack: e.stack || null,
+      context: { action, domain: 'movements', entityId: movement && movement.id }
+    });
   }
 }
 
@@ -2328,6 +2357,12 @@ export function importSessionJSON(parsed) {
     return { success: true, count: movements.length, format: 'legacy', inspection };
   } catch (e) {
     console.error("FDMS: import failed", e);
+    recordDiagnosticError({
+      severity: 'critical',
+      type: 'backup-restore-error',
+      message: e.message || String(e),
+      stack: e.stack || null
+    });
     return { success: false, error: e.message };
   }
 }
@@ -2875,10 +2910,20 @@ export function ensureCancelledSortiesInitialised() {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
       console.warn('[FDMS] Cancelled sorties store corrupt — resetting to []');
+      recordDiagnosticError({
+        type: 'persistence-corruption-repair',
+        message: 'Cancelled sorties store corrupt — reset to []',
+        context: { key: CANCELLED_SORTIES_KEY }
+      });
       writeRaw(CANCELLED_SORTIES_KEY, JSON.stringify([]));
     }
   } catch (e) {
     console.warn('[FDMS] Cancelled sorties store repair:', e);
+    recordDiagnosticError({
+      type: 'persistence-corruption-repair',
+      message: e.message || String(e),
+      context: { key: CANCELLED_SORTIES_KEY }
+    });
     writeRaw(CANCELLED_SORTIES_KEY, JSON.stringify([]));
   }
 }
@@ -2943,10 +2988,20 @@ export function ensureDeletedStripsInitialised() {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
       console.warn('[FDMS] Deleted strips store corrupt — resetting to []');
+      recordDiagnosticError({
+        type: 'persistence-corruption-repair',
+        message: 'Deleted strips store corrupt — reset to []',
+        context: { key: DELETED_STRIPS_KEY }
+      });
       writeRaw(DELETED_STRIPS_KEY, JSON.stringify([]));
     }
   } catch (e) {
     console.warn('[FDMS] Deleted strips store repair:', e);
+    recordDiagnosticError({
+      type: 'persistence-corruption-repair',
+      message: e.message || String(e),
+      context: { key: DELETED_STRIPS_KEY }
+    });
     writeRaw(DELETED_STRIPS_KEY, JSON.stringify([]));
   }
 }
@@ -3009,6 +3064,12 @@ export function insertRestoredMovement(snapshot, correlationId) {
   // Guard: don't insert if ID already in use
   if (movements.some(m => m.id === snapshot.id)) {
     console.warn('[FDMS] insertRestoredMovement: ID', snapshot.id, 'already in use — skipping');
+    recordDiagnosticError({
+      severity: 'warning',
+      type: 'movement-restore-id-collision',
+      message: `insertRestoredMovement: ID ${snapshot.id} already in use — skipped`,
+      context: { id: snapshot.id }
+    });
     return false;
   }
   const now = new Date().toISOString();

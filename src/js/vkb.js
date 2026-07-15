@@ -9,6 +9,7 @@ import {
 } from './audit.js';
 
 import { readJSON, writeJSON } from './storage.js';
+import { recordDiagnosticError } from './diagnostics.js';
 
 /**
  * VKB Data Store
@@ -1206,7 +1207,12 @@ function getVKBOverrides() {
     }
 
     return result;
-  } catch (_) {
+  } catch (e) {
+    recordDiagnosticError({
+      type: 'vkb-overrides-corruption',
+      message: e?.message || String(e),
+      context: { key: VKB_OVERRIDES_KEY }
+    });
     return _emptyOverrides();
   }
 }

@@ -2517,6 +2517,18 @@
       <pre id="devRecentErrors" class="dev-pre dev-pre--errors">(none)</pre>
     </div>
 
+    <!-- 9b. Persisted Diagnostic Errors -->
+    <div class="panel">
+      <h3>Persisted Diagnostic Errors <span id="devPersistedErrorCount" style="font-weight:normal; font-size: 11px; color:#666;">(0/100)</span></h3>
+      <div class="page-subtitle">
+        Technical error history that survives app reload/restart on this installation. Separate from the operational audit log — clearing this does not affect movements, bookings, configuration, or audit history.
+      </div>
+      <pre id="devPersistedErrors" class="dev-pre dev-pre--errors">(none)</pre>
+      <div style="margin-top: 10px;">
+        <button class="btn btn-secondary" id="btnClearDiagnosticLog" type="button">Clear diagnostic error history</button>
+      </div>
+    </div>
+
     <!-- 10. Diagnostic Report -->
     <div class="panel">
       <h3>Diagnostic Report</h3>

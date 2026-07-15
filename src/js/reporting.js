@@ -26,6 +26,7 @@ import { getMovements, getCancelledSorties, getElementAttributionIdentity, getRe
 import { getVKBRegistrations } from './vkb.js';
 import { saveTextFileWithDialogOrDownload, saveBinaryFileWithDialogOrDownload, downloadFileViaBrowser } from './export_utils.js';
 import { readJSON, writeJSON } from './storage.js';
+import { recordDiagnosticError } from './diagnostics.js';
 
 // ========================================
 // HOURS LOG MANAGEMENT
@@ -1018,6 +1019,13 @@ export async function exportMonthlyReturnToXLSX(monthlyReturn, movements, filena
       XLSX.writeFile(wb, filename);
     } catch (e) {
       console.error('XLSX.writeFile fallback failed', e);
+      recordDiagnosticError({
+        severity: 'critical',
+        type: 'export-critical-failure',
+        message: e.message || String(e),
+        stack: e.stack || null,
+        context: { filename, export: 'monthly-return-xlsx' }
+      });
       return 'error';
     }
     return base64Status === 'fallback' ? 'fallback' : 'downloaded';
