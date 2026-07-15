@@ -203,9 +203,7 @@ export function buildFieldDiff(before, after, fields = null) {
   for (const field of allFields) {
     const bVal = b[field] !== undefined ? b[field] : null;
     const aVal = a[field] !== undefined ? a[field] : null;
-    const bStr = bVal === null ? '' : String(bVal);
-    const aStr = aVal === null ? '' : String(aVal);
-    if (bStr !== aStr) {
+    if (auditValuesDiffer(bVal, aVal)) {
       changedFields.push(field);
       beforeDiff[field] = compactAuditValue(bVal);
       afterDiff[field] = compactAuditValue(aVal);
@@ -213,6 +211,30 @@ export function buildFieldDiff(before, after, fields = null) {
   }
 
   return { before: beforeDiff, after: afterDiff, changedFields };
+}
+
+/**
+ * Equality test used by buildFieldDiff(). Scalars compare via String() as
+ * before. Object/array values (on either side) compare via JSON.stringify
+ * instead — String() reduces every object/array to "[object Object]",
+ * which made distinct object/array values compare as equal and silently
+ * dropped genuine nested-field changes (e.g. a booking's `schedule` sub-object)
+ * from the audit diff. This only affects change *detection* — the compact
+ * storage representation from compactAuditValue() is unchanged.
+ */
+function auditValuesDiffer(bVal, aVal) {
+  const bIsObj = bVal !== null && typeof bVal === 'object';
+  const aIsObj = aVal !== null && typeof aVal === 'object';
+  if (bIsObj || aIsObj) {
+    try {
+      return JSON.stringify(bVal) !== JSON.stringify(aVal);
+    } catch (_) {
+      return true; // unserialisable value — conservatively treat as changed
+    }
+  }
+  const bStr = bVal === null ? '' : String(bVal);
+  const aStr = aVal === null ? '' : String(aVal);
+  return bStr !== aStr;
 }
 
 /**
