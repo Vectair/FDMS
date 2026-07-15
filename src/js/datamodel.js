@@ -11,6 +11,7 @@ import {
 } from './vkb.js';
 
 import { readRaw, writeRaw, remove, readJSON, keys as storageKeys, getUsageBytes } from './storage.js';
+import { appendAuditEvent, buildFieldDiff } from './audit.js';
 
 const STORAGE_KEY = "vectair_fdms_movements_v3";
 const STORAGE_KEY_V2 = "vectair_fdms_movements_v2";
@@ -1609,6 +1610,9 @@ export function updateFormationElement(id, elementIndex, patch) {
   // re-renders immediately show the correct inherited vs. overridden state.
   const shared = movement.formation.shared || {};
   const el = movement.formation.elements[elementIndex];
+  const patchKeys = Object.keys(patch);
+  const beforeEl = {};
+  for (const k of patchKeys) beforeEl[k] = el[k];
   if ('depAd' in patch || 'arrAd' in patch) {
     const ov = { ...(el.overrides || {}) };
     if ('depAd' in patch) {
@@ -1642,6 +1646,18 @@ export function updateFormationElement(id, elementIndex, patch) {
   });
 
   saveToStorage();
+
+  // Central audit event — only if the patched element fields actually changed.
+  const elDiff = buildFieldDiff(beforeEl, movement.formation.elements[elementIndex], patchKeys);
+  if (elDiff.changedFields.length > 0) {
+    auditMovementEvent('formation-element-updated', movement, {
+      before: elDiff.before,
+      after: elDiff.after,
+      changedFields: elDiff.changedFields,
+      metadata: { elementIndex, callsign: el.callsign || undefined }
+    });
+  }
+
   return movement;
 }
 
@@ -1653,15 +1669,20 @@ export function updateFormationElement(id, elementIndex, patch) {
  * No-op for other statuses or movements without a formation.
  * @param {number} id        - Movement ID
  * @param {string} newStatus - New master status
+ * @param {string} [correlationId] - links this cascade's audit event to the
+ *   related movement status-change event that triggered it (e.g. a cancel
+ *   or completion action), when the caller has one.
  */
-export function cascadeFormationStatus(id, newStatus) {
+export function cascadeFormationStatus(id, newStatus, correlationId) {
   if (newStatus !== "COMPLETED" && newStatus !== "CANCELLED") return;
   ensureInitialised();
   const movement = movements.find(m => m.id === id);
   if (!movement?.formation?.elements?.length) return;
 
   let changed = false;
-  movement.formation.elements.forEach(el => {
+  const changedElements = [];
+  movement.formation.elements.forEach((el, idx) => {
+    const fromStatus = el.status;
     if (newStatus === "COMPLETED") {
       // Only advance elements still in-progress; leave CANCELLED untouched.
       if (el.status === "PLANNED" || el.status === "ACTIVE") {
@@ -1677,6 +1698,9 @@ export function cascadeFormationStatus(id, newStatus) {
         changed = true;
       }
     }
+    if (el.status !== fromStatus) {
+      changedElements.push({ index: idx, callsign: el.callsign || undefined, from: fromStatus, to: el.status });
+    }
   });
 
   if (changed) {
@@ -1684,6 +1708,51 @@ export function cascadeFormationStatus(id, newStatus) {
     movement.formation.wtcCurrent = wtcCurrent;
     movement.formation.wtcMax     = wtcMax;
     saveToStorage();
+
+    auditMovementEvent('formation-status-cascaded', movement, {
+      after: { newStatus, changedElementCount: changedElements.length },
+      changedFields: changedElements.map(c => `formation.elements[${c.index}].status`),
+      correlationId,
+      metadata: { newStatus, changedElements }
+    });
+  }
+}
+
+/* -----------------------------
+   Central audit-ledger recording for movement/formation mutations
+   (Phase 1 Item 5). This is additional to, and never replaces, the
+   movement.changeLog entries appended by each function below.
+------------------------------ */
+
+/**
+ * Append one central audit event for a movement/formation mutation.
+ * Isolated in its own try/catch: a failure recording to the audit ledger
+ * must never roll back or falsely fail an already-successful movement
+ * mutation. On failure this only logs to console.error.
+ */
+function auditMovementEvent(action, movement, { before, after, changedFields, correlationId, reason, metadata, reversible } = {}) {
+  try {
+    appendAuditEvent({
+      action,
+      correlationId,
+      app: { name: 'Vectair Flite', version: getRunningAppVersion(), build: 'unknown' },
+      source: { module: 'movements', uiAction: action },
+      entity: {
+        domain: 'movements',
+        dataset: STORAGE_KEY,
+        type: 'movement',
+        id: movement.id,
+        label: movement.callsignCode || movement.registration || String(movement.id)
+      },
+      before: before || {},
+      after: after || {},
+      changedFields: changedFields || [],
+      reason: reason || { code: action, note: '' },
+      reversible: reversible !== undefined ? reversible : true,
+      metadata: metadata || {}
+    });
+  } catch (e) {
+    console.error(`FDMS: failed to record '${action}' audit event for movement`, movement && movement.id, e);
   }
 }
 
@@ -1761,10 +1830,36 @@ export function createMovement(partial) {
   };
   movements.push(movement);
   saveToStorage();
+
+  auditMovementEvent('movement-created', movement, {
+    after: {
+      id: movement.id,
+      callsignCode: movement.callsignCode,
+      registration: movement.registration,
+      flightType: movement.flightType,
+      status: movement.status,
+      dof: movement.dof
+    },
+    changedFields: ['id', 'callsignCode', 'registration', 'flightType', 'status', 'dof'],
+    metadata: {
+      creationSource: movement.bookingId ? 'linked-booking' : 'manual',
+      bookingId: movement.bookingId || undefined
+    }
+  });
+
   return movement;
 }
 
-export function updateMovement(id, patch) {
+/**
+ * @param {number} id
+ * @param {object} patch
+ * @param {{action?:string, correlationId?:string, reason?:object, metadata?:object}} [auditOverride]
+ *   Lets a caller record a dedicated lifecycle event (e.g. 'movement-cancelled',
+ *   'movement-reinstated') instead of the generic 'movement-updated' event for
+ *   this call, so a single user action does not produce a meaningless
+ *   duplicate alongside the semantically richer lifecycle event. See Item 5 §10.
+ */
+export function updateMovement(id, patch, auditOverride) {
   ensureInitialised();
   const movement = movements.find((m) => m.id === id);
   if (!movement) return null;
@@ -1793,6 +1888,24 @@ export function updateMovement(id, patch) {
   });
 
   saveToStorage();
+
+  // Central audit event — only for meaningful changes (no-op updates where
+  // nothing actually changed do not produce a central audit event).
+  const changedFieldNames = Object.keys(changes);
+  if (changedFieldNames.length > 0) {
+    const beforeObj = {}, afterObj = {};
+    for (const k of changedFieldNames) { beforeObj[k] = changes[k].from; afterObj[k] = changes[k].to; }
+    const diff = buildFieldDiff(beforeObj, afterObj, changedFieldNames);
+    auditMovementEvent((auditOverride && auditOverride.action) || 'movement-updated', movement, {
+      before: diff.before,
+      after: diff.after,
+      changedFields: diff.changedFields,
+      correlationId: auditOverride && auditOverride.correlationId,
+      reason: auditOverride && auditOverride.reason,
+      metadata: auditOverride && auditOverride.metadata
+    });
+  }
+
   return movement;
 }
 
@@ -1800,14 +1913,34 @@ export function updateMovement(id, patch) {
  * Permanently delete a movement from storage.
  * Unlike cancel (soft delete), this removes the record entirely.
  * @param {number} id - Movement ID to delete
+ * @param {{action?:string, correlationId?:string, reason?:object, metadata?:object}} [auditOverride]
+ *   Lets a caller record a dedicated lifecycle event (e.g. 'movement-soft-deleted')
+ *   instead of the generic 'movement-deleted' event. See Item 5 §10 — today the
+ *   only caller of this function is the soft-delete-to-Deleted-Strips flow.
  * @returns {boolean} True if movement was found and deleted
  */
-export function deleteMovement(id) {
+export function deleteMovement(id, auditOverride) {
   ensureInitialised();
   const index = movements.findIndex((m) => m.id === id);
   if (index === -1) return false;
+  const movement = movements[index];
   movements.splice(index, 1);
   saveToStorage();
+
+  auditMovementEvent((auditOverride && auditOverride.action) || 'movement-deleted', movement, {
+    before: {
+      id: movement.id,
+      callsignCode: movement.callsignCode,
+      registration: movement.registration,
+      status: movement.status
+    },
+    changedFields: ['id', 'callsignCode', 'registration', 'status'],
+    correlationId: auditOverride && auditOverride.correlationId,
+    reason: auditOverride && auditOverride.reason,
+    metadata: auditOverride && auditOverride.metadata,
+    reversible: false
+  });
+
   return true;
 }
 
@@ -2865,9 +2998,12 @@ export function purgeExpiredDeletedStrips() {
  * Used to restore a soft-deleted strip.
  * If the original ID is already in use (rare), logs a warning and returns false.
  * @param {Object} snapshot - full movement snapshot (with .id)
+ * @param {string} [correlationId] - links this restore's audit event to a
+ *   related event recorded by the caller (e.g. a follow-up updateMovement()
+ *   timing recalculation performed right after the restore).
  * @returns {boolean} true if inserted
  */
-export function insertRestoredMovement(snapshot) {
+export function insertRestoredMovement(snapshot, correlationId) {
   ensureInitialised();
   if (!snapshot || snapshot.id === undefined || snapshot.id === null) return false;
   // Guard: don't insert if ID already in use
@@ -2889,5 +3025,18 @@ export function insertRestoredMovement(snapshot) {
     nextId = restored.id + 1;
   }
   saveToStorage();
+
+  auditMovementEvent('movement-restored', restored, {
+    after: {
+      id: restored.id,
+      callsignCode: restored.callsignCode,
+      registration: restored.registration,
+      status: restored.status
+    },
+    changedFields: ['id', 'callsignCode', 'registration', 'status'],
+    correlationId,
+    metadata: { restoreSource: 'deleted-strips' }
+  });
+
   return true;
 }

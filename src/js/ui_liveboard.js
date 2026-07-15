@@ -58,6 +58,7 @@ import {
 import { showToast } from "./app.js";
 import { classifyMovement } from "./reporting.js";
 import { saveTextFileWithDialogOrDownload } from "./export_utils.js";
+import { generateCorrelationId } from "./audit.js";
 
 import { onMovementUpdated, onMovementStatusChanged, clearStripLinks } from "./services/bookingSync.js";
 import { getBookingById, updateBookingById } from "./stores/bookingsStore.js";
@@ -9217,9 +9218,19 @@ function transitionToCancelled(id) {
 
     appendCancelledSortie(logEntry);
 
-    // Existing cancel behaviour — unchanged.
-    updateMovement(id, { status: "CANCELLED" });
-    cascadeFormationStatus(id, "CANCELLED");
+    // Existing cancel behaviour — unchanged. A dedicated 'movement-cancelled'
+    // central audit event (carrying the cancellation reason/note) replaces
+    // the generic 'movement-updated' event this status change would
+    // otherwise produce, and shares a correlationId with the formation
+    // cascade so both are recognisable as one user action.
+    const cancelCorrelationId = generateCorrelationId();
+    updateMovement(id, { status: "CANCELLED" }, {
+      action: 'movement-cancelled',
+      correlationId: cancelCorrelationId,
+      reason: { code: reasonCode, note: reasonNote },
+      metadata: { cancelledSortieId: logEntry.id }
+    });
+    cascadeFormationStatus(id, "CANCELLED", cancelCorrelationId);
     onMovementStatusChanged(movement, 'CANCELLED');
 
     closeActiveModal();
@@ -9289,16 +9300,25 @@ function performDeleteStrip(movement) {
 
       appendDeletedStrip(logEntry);
 
+      // Dedicated 'movement-soft-deleted' central audit event carries the
+      // retention context; the (optional) booking link-clear below shares
+      // the same correlationId so both are recognisable as one user action.
+      const deleteCorrelationId = generateCorrelationId();
+
       // Clear booking's linkedStripId if present
       if (movement.bookingId) {
         const booking = getBookingById(movement.bookingId);
         if (booking && booking.linkedStripId === movement.id) {
-          updateBookingById(movement.bookingId, { linkedStripId: null });
+          updateBookingById(movement.bookingId, { linkedStripId: null }, deleteCorrelationId);
         }
       }
 
       // Remove from active movements store
-      deleteMovement(movement.id);
+      deleteMovement(movement.id, {
+        action: 'movement-soft-deleted',
+        correlationId: deleteCorrelationId,
+        metadata: { deletedStripId: logEntry.id, expiresAt, retentionHours: DELETED_STRIPS_RETENTION_HOURS }
+      });
 
       showToast(`${callsign} moved to Deleted Strips (recoverable for ${DELETED_STRIPS_RETENTION_HOURS}h)`, 'info');
       renderLiveBoard();
@@ -10543,7 +10563,16 @@ function reinstateFromCancelledLog(entry) {
     };
   }
 
-  updateMovement(m.id, patch);
+  // Dedicated 'movement-reinstated' central audit event carries the restore
+  // context (source log entry, new start time); the follow-up timing-patch
+  // update below shares the same correlationId so both are recognisable as
+  // one user action.
+  const reinstateCorrelationId = generateCorrelationId();
+  updateMovement(m.id, patch, {
+    action: 'movement-reinstated',
+    correlationId: reinstateCorrelationId,
+    metadata: { restoredFrom: 'cancelled-sorties-log', cancelledSortieId: entry.id, newStartTime }
+  });
 
   // Recalculate end-side derived time, but only when no actuals are present
   // (pure PLANNED state). If actuals exist, preserve them; operator edits if needed.
@@ -10555,7 +10584,7 @@ function reinstateFromCancelledLog(entry) {
       const timingPatch = recalculateTimingModel(freshM, changedField);
       if (Object.keys(timingPatch).length > 0 && !timingPatch._weakPrediction) {
         const { _weakPrediction, ...cleanPatch } = timingPatch; // eslint-disable-line no-unused-vars
-        updateMovement(m.id, cleanPatch);
+        updateMovement(m.id, cleanPatch, { correlationId: reinstateCorrelationId });
       }
     }
   }
@@ -11135,7 +11164,11 @@ function restoreDeletedStrip(entry) {
       restoredSnapshot.depPlanned = newStartTime;
     }
 
-    const ok = insertRestoredMovement(restoredSnapshot);
+    // Shared across the movement-restored audit event and the follow-up
+    // timing-patch update below, so both are recognisable as one user action.
+    const restoreCorrelationId = generateCorrelationId();
+
+    const ok = insertRestoredMovement(restoredSnapshot, restoreCorrelationId);
     if (!ok) {
       showToast("Cannot restore — movement ID conflict (already in use)", 'error');
       return;
@@ -11150,7 +11183,7 @@ function restoreDeletedStrip(entry) {
         const timingPatch = recalculateTimingModel(freshM, changedField);
         if (Object.keys(timingPatch).length > 0 && !timingPatch._weakPrediction) {
           const { _weakPrediction, ...cleanPatch } = timingPatch; // eslint-disable-line no-unused-vars
-          updateMovement(restoredSnapshot.id, cleanPatch);
+          updateMovement(restoredSnapshot.id, cleanPatch, { correlationId: restoreCorrelationId });
         }
       }
     }
