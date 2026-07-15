@@ -5,6 +5,7 @@
 import { readJSON, writeJSON } from '../storage.js';
 import { appendAuditEvent, buildFieldDiff } from '../audit.js';
 import { getRunningAppVersion } from '../datamodel.js';
+import { recordDiagnosticError } from '../diagnostics.js';
 
 const BOOKINGS_STORAGE_KEY = "vectair_fdms_bookings_v1";
 
@@ -38,6 +39,12 @@ function auditBookingEvent(action, booking, { before, after, changedFields, corr
     });
   } catch (e) {
     console.error(`FDMS: failed to record '${action}' audit event for booking`, booking && booking.id, e);
+    recordDiagnosticError({
+      type: 'audit-append-error',
+      message: e.message || String(e),
+      stack: e.stack || null,
+      context: { action, domain: 'bookings', entityId: booking && booking.id }
+    });
   }
 }
 
@@ -84,6 +91,12 @@ function loadFromStorage() {
     return (parsed && Array.isArray(parsed.bookings)) ? parsed : null;
   } catch (e) {
     console.warn("FDMS bookingsStore: failed to load", e);
+    recordDiagnosticError({
+      severity: 'critical',
+      type: 'booking-persistence-read-error',
+      message: e.message || String(e),
+      stack: e.stack || null
+    });
     return null;
   }
 }
@@ -98,6 +111,12 @@ function saveToStorage() {
     });
   } catch (e) {
     console.warn("FDMS bookingsStore: failed to save", e);
+    recordDiagnosticError({
+      severity: 'critical',
+      type: 'booking-persistence-write-error',
+      message: e.message || String(e),
+      stack: e.stack || null
+    });
   }
 }
 

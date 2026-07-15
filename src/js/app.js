@@ -53,7 +53,8 @@ import {
   incrementGenericOverflights,
   decrementGenericOverflights,
   getMovements,
-  getOperationalTimezoneOffsetHours
+  getOperationalTimezoneOffsetHours,
+  getRunningAppVersion
 } from "./datamodel.js";
 
 import { appendAuditEvent } from "./audit.js";
@@ -71,6 +72,14 @@ import { saveTextFileWithDialogOrDownload } from "./export_utils.js";
 import { initMetarBuilder, initAdminWeather } from "./metar_builder.js";
 
 import { readRaw, writeRaw } from "./storage.js";
+
+import {
+  recordDiagnosticError,
+  getRecentDiagnosticErrors,
+  getDiagnosticErrorCount,
+  clearDiagnosticErrorLog,
+  makeBootstrapStageEntry
+} from "./diagnostics.js";
 
 /* -----------------------------
    Toast Notification System
@@ -381,7 +390,19 @@ window.addEventListener("error", (e) => {
     type:    'error',
   });
   updateDiagnostics();
-  if (!shouldSuppressUpdateInstallToast(diagnostics.errors.lastErrorMessage)) {
+  const suppressed = shouldSuppressUpdateInstallToast(diagnostics.errors.lastErrorMessage);
+  // Suppressed teardown/IPC-closure noise during an update install is expected,
+  // not a real diagnosable failure — don't let it flood the persistent log
+  // either, matching the existing toast-suppression judgement call.
+  if (!suppressed) {
+    recordDiagnosticError({
+      type: 'window-error',
+      message: diagnostics.errors.lastErrorMessage,
+      source: diagnostics.errors.lastErrorSource,
+      line: diagnostics.errors.lastErrorLine,
+      column: diagnostics.errors.lastErrorColumn,
+      stack: diagnostics.errors.lastErrorStack
+    });
     showToast(`Error: ${diagnostics.errors.lastErrorMessage}`, 'error', 6000);
   }
 });
@@ -397,7 +418,13 @@ window.addEventListener("unhandledrejection", (e) => {
     type:    'unhandledrejection',
   });
   updateDiagnostics();
-  if (!shouldSuppressUpdateInstallToast(diagnostics.errors.lastErrorMessage)) {
+  const suppressed = shouldSuppressUpdateInstallToast(diagnostics.errors.lastErrorMessage);
+  if (!suppressed) {
+    recordDiagnosticError({
+      type: 'unhandledrejection',
+      message: diagnostics.errors.lastErrorMessage,
+      stack: diagnostics.errors.lastErrorStack
+    });
     showToast(`Promise error: ${diagnostics.errors.lastErrorMessage}`, 'error', 6000);
   }
 });
@@ -743,7 +770,7 @@ function initHistorySubtabs() {
 }
 
 function logBootstrapStage(label, status, detail = null) {
-  const entry = { time: new Date().toISOString(), label, status, detail };
+  const entry = makeBootstrapStageEntry(label, status, detail);
   diagnostics.bootstrap.stageLog.push(entry);
   diagnostics.bootstrap.currentStage = label;
   if (status === 'success') diagnostics.bootstrap.lastSuccessfulStage = label;
@@ -793,13 +820,23 @@ function generateDiagnosticReport() {
       ).join('\n')
     : '  (none)';
 
+  const persistedErrors = getRecentDiagnosticErrors();
+  const persistedErrLines = persistedErrors.length > 0
+    ? persistedErrors.map((e, i) =>
+        `  [${i + 1}] ${e.time}  severity:${e.severity}  type:${e.type}${e.occurrences > 1 ? `  (x${e.occurrences})` : ''}\n       msg: ${e.message}` +
+        (e.source ? `\n       at:  ${e.source}${e.line != null ? ':' + e.line : ''}` : '')
+      ).join('\n')
+    : '  (none)';
+
+  const vkbStatus = getVKBStatus();
+
   const lines = [
     '==== VECTAIR FLITE DIAGNOSTIC REPORT ====',
     f('generated:', now.toISOString()),
     '',
     '[BUILD]',
     f('app_name:', BUILD_INFO.appName),
-    f('app_version:', BUILD_INFO.appVersion),
+    f('app_version:', getRunningAppVersion()),
     f('git_commit:', BUILD_INFO.gitCommit),
     f('git_branch:', BUILD_INFO.gitBranch),
     f('build_timestamp:', BUILD_INFO.buildTimestamp),
@@ -859,6 +896,21 @@ function generateDiagnosticReport() {
     '[RECENT_ERRORS]',
     recentErrLines,
     '',
+    '[PERSISTED_DIAGNOSTIC_ERRORS]',
+    f('persisted_count:', getDiagnosticErrorCount() + '/100'),
+    persistedErrLines,
+    '',
+    '[VKB]',
+    f('loaded:', vkbStatus.loaded),
+    f('load_error:', vkbStatus.error || 'none'),
+    f('aircraft_types:', vkbStatus.counts.aircraftTypes),
+    f('callsigns_standard:', vkbStatus.counts.callsignsStandard),
+    f('callsigns_nonstandard:', vkbStatus.counts.callsignsNonstandard),
+    f('locations:', vkbStatus.counts.locations),
+    f('registrations:', vkbStatus.counts.registrations),
+    f('egow_codes:', vkbStatus.counts.egowCodes),
+    f('aircraft_pilots:', vkbStatus.counts.aircraftPilots),
+    '',
     '[COUNTERS]',
     f('render_live_board:', diagnostics.runtimeCounters.renderLiveBoardCount),
     f('render_history_board:', diagnostics.runtimeCounters.renderHistoryBoardCount),
@@ -907,7 +959,7 @@ function refreshDeveloperSection() {
 
   // Build
   set('devAppName',        BUILD_INFO.appName);
-  set('devAppVersion',     BUILD_INFO.appVersion);
+  set('devAppVersion',     getRunningAppVersion());
   set('devGitCommit',      BUILD_INFO.gitCommit);
   set('devGitBranch',      BUILD_INFO.gitBranch);
   set('devBuildTimestamp', BUILD_INFO.buildTimestamp);
@@ -984,9 +1036,44 @@ function refreshDeveloperSection() {
       : '(none)';
   }
 
+  // Persisted Diagnostic Errors (survive reload/restart — see diagnostics.js)
+  const persistedErrsEl = document.getElementById('devPersistedErrors');
+  if (persistedErrsEl) {
+    const persisted = getRecentDiagnosticErrors();
+    persistedErrsEl.textContent = persisted.length > 0
+      ? persisted.map((e, i) =>
+          `[${i + 1}] ${e.time}  severity:${e.severity}  type:${e.type}${e.occurrences > 1 ? `  (x${e.occurrences})` : ''}\n    msg: ${e.message}` +
+          (e.source ? `\n    at:  ${e.source}${e.line != null ? ':' + e.line : ''}` : '')
+        ).join('\n\n')
+      : '(none)';
+  }
+  const persistedCountEl = document.getElementById('devPersistedErrorCount');
+  if (persistedCountEl) persistedCountEl.textContent = `${getDiagnosticErrorCount()}/100`;
+
   // Diagnostic Report
   const outputEl = document.getElementById('devDiagnosticOutput');
   if (outputEl) outputEl.textContent = generateDiagnosticReport();
+}
+
+/**
+ * Wire the "Clear diagnostic error history" operator action (Admin →
+ * Developer). Clears only the persistent technical diagnostic error log
+ * (diagnostics.js) — never the operational audit ledger, movements,
+ * bookings, configuration, or lifecycle history.
+ */
+function initDiagnosticClearHandler() {
+  const btnClear = document.getElementById('btnClearDiagnosticLog');
+  if (!btnClear) return;
+  btnClear.addEventListener('click', () => {
+    adminConfirm(
+      "This will permanently clear the persisted technical diagnostic error history on this installation. It does not affect operational data, the audit log, movements, bookings, or configuration. This cannot be undone.",
+      () => {
+        clearDiagnosticErrorLog();
+        refreshDeveloperSection();
+        showToast("Diagnostic error history cleared", 'success');
+      }
+    );
+  });
 }
 
 function initAdminPanelHandlers() {
@@ -1067,11 +1154,23 @@ function initAdminPanelHandlers() {
             });
           } catch (auditErr) {
             console.warn("FDMS: failed to record backup-exported audit event", auditErr);
+            recordDiagnosticError({
+              type: 'audit-append-error',
+              message: auditErr.message || String(auditErr),
+              stack: auditErr.stack || null,
+              context: { action: 'backup-exported' }
+            });
           }
         }
       } catch (e) {
         showToast("Backup export failed.", 'error');
         console.error("FDMS: backup export error", e);
+        recordDiagnosticError({
+          severity: 'critical',
+          type: 'backup-export-error',
+          message: e.message || String(e),
+          stack: e.stack || null
+        });
       }
     });
   }
@@ -1256,6 +1355,12 @@ function initAdminPanelHandlers() {
                   });
                 } catch (auditErr) {
                   console.warn("FDMS: failed to record backup-restored audit event", auditErr);
+                  recordDiagnosticError({
+                    type: 'audit-append-error',
+                    message: auditErr.message || String(auditErr),
+                    stack: auditErr.stack || null,
+                    context: { action: 'backup-restored' }
+                  });
                 }
 
                 if (result.format === 'full') {
@@ -1267,9 +1372,22 @@ function initAdminPanelHandlers() {
                   showToast(`Restore applied from "${file.name}" — ${result.count} movements loaded (legacy format: only movement data was restored).`, 'success', 7000);
                 }
               } else {
+                recordDiagnosticError({
+                  severity: 'critical',
+                  type: 'backup-restore-error',
+                  message: result.error || 'Restore failed',
+                  context: { fileName: file.name }
+                });
                 showToast(`Restore failed: ${result.error}`, 'error');
               }
             } catch (err) {
+              recordDiagnosticError({
+                severity: 'critical',
+                type: 'backup-restore-error',
+                message: err.message || String(err),
+                stack: err.stack || null,
+                context: { fileName: file.name }
+              });
               showToast(`Restore failed: ${err.message}`, 'error');
             }
           },
@@ -2307,6 +2425,10 @@ function initUpdaterPanel() {
         }
       }
     } catch (err) {
+      recordDiagnosticError({
+        type: 'updater-check-error',
+        message: err?.message || String(err)
+      });
       if (!startup) {
         setStatus(`Unable to check — ${err}`, '#b71c1c');
       }
@@ -2376,6 +2498,10 @@ function initUpdaterPanel() {
           btnCheck.disabled = false;
         } else {
           resetInstallConfirm();
+          recordDiagnosticError({
+            type: 'updater-install-error',
+            message: result.message || 'Update failed'
+          });
           setStatus(`Update failed — ${result.message || 'unknown error'}`, '#b71c1c');
           btnInstall.disabled = false;
           btnCheck.disabled = false;
@@ -2403,6 +2529,10 @@ function initUpdaterPanel() {
           return;
         }
 
+        recordDiagnosticError({
+          type: 'updater-install-error',
+          message: err?.message || String(err)
+        });
         resetInstallConfirm();
         window.__FDMS_UPDATE_INSTALL_IN_PROGRESS__ = false;
         setStatus(`Update did not complete — ${err}`, '#b71c1c');
@@ -2446,6 +2576,11 @@ async function bootstrap() {
     } catch (vkbError) {
       logBootstrapStage('vkb:load', 'failed', vkbError.message);
       console.warn('VKB load failed, continuing without VKB:', vkbError);
+      recordDiagnosticError({
+        type: 'vkb-load-error',
+        message: vkbError.message || String(vkbError),
+        stack: vkbError.stack || null
+      });
       showToast('VKB data failed to load - lookup features unavailable', 'warning', 5000);
     }
 
@@ -2461,7 +2596,7 @@ async function bootstrap() {
       initHistorySubtabs();
     });
     runStage('vkb-lookup:init', () => initVkbLookup());
-    runStage('admin:init',      () => { initAdminPanel(); initAdminPanelHandlers(); initUpdaterPanel(); initAdminWeather(); initVkbAdmin(); });
+    runStage('admin:init',      () => { initAdminPanel(); initAdminPanelHandlers(); initUpdaterPanel(); initAdminWeather(); initVkbAdmin(); initDiagnosticClearHandler(); });
     runStage('reports:init',    () => initReports());
     runStage('booking:init',    () => { initBookingPage(); initCalendarPage(); initBookingProfilesAdmin(); });
     runStage('metar-builder:init', () => initMetarBuilder());
@@ -2548,6 +2683,13 @@ async function bootstrap() {
       logBootstrapStage(diagnostics.bootstrap.currentStage || 'unknown', 'failed', e.message || String(e));
     }
     recordError({ message: e.message || String(e), stack: e.stack || null, type: 'bootstrap-error' });
+    recordDiagnosticError({
+      severity: 'critical',
+      type: 'bootstrap-error',
+      message: e.message || String(e),
+      stack: e.stack || null,
+      context: { failedStage: diagnostics.bootstrap.failedStage }
+    });
     updateInitStatus("Init failed - check diagnostics", false);
     updateDiagnostics();
     throw e;

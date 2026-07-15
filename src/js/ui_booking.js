@@ -20,6 +20,8 @@ import * as bookingsStore from "./stores/bookingsStore.js";
 
 import { readJSON, writeJSON } from "./storage.js";
 
+import { recordDiagnosticError } from "./diagnostics.js";
+
 // VKB imports for autofill functionality
 import {
   lookupRegistration,
@@ -71,6 +73,12 @@ function loadBookingProfiles() {
     }
   } catch (e) {
     console.warn("FDMS Booking: failed to load profiles from storage", e);
+    recordDiagnosticError({
+      type: 'booking-persistence-read-error',
+      message: e.message || String(e),
+      stack: e.stack || null,
+      context: { dataset: 'booking-profiles' }
+    });
   }
   bookingProfilesInitialised = true;
 }
@@ -88,6 +96,12 @@ function saveBookingProfiles() {
     });
   } catch (e) {
     console.warn("FDMS Booking: failed to save profiles to storage", e);
+    recordDiagnosticError({
+      type: 'booking-persistence-write-error',
+      message: e.message || String(e),
+      stack: e.stack || null,
+      context: { dataset: 'booking-profiles' }
+    });
   }
 }
 
@@ -278,6 +292,12 @@ function loadCalendarEventsFromStorage() {
     return null;
   } catch (e) {
     console.warn("FDMS: failed to load calendar events from storage", e);
+    recordDiagnosticError({
+      type: 'booking-persistence-read-error',
+      message: e.message || String(e),
+      stack: e.stack || null,
+      context: { dataset: 'calendar-events' }
+    });
     return null;
   }
 }
@@ -292,6 +312,12 @@ function saveCalendarEventsToStorage() {
     });
   } catch (e) {
     console.warn("FDMS: failed to save calendar events to storage", e);
+    recordDiagnosticError({
+      type: 'booking-persistence-write-error',
+      message: e.message || String(e),
+      stack: e.stack || null,
+      context: { dataset: 'calendar-events' }
+    });
   }
 }
 

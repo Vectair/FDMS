@@ -2,7 +2,7 @@
 
 Status: **Audit document — not a design proposal.** Produced under Phase 1 Item 2 (Canonical Data Inventory & Persistence Audit); corrected and completed under Phase 1 Item 2A (Canonical Data Inventory Corrections). No runtime behaviour was changed to produce or correct this document.
 
-Audit date: 2026-07-10 (original) · corrected 2026-07-13 (Item 2A)
+Audit date: 2026-07-10 (original) · corrected 2026-07-13 (Item 2A) · updated 2026-07-15 (Phase 1 Item 6 — Persistent Diagnostic Error Log)
 Audit scope: entire repository (`src/`, `src-tauri/`, `docs/`, root tooling)
 Audit method: static code search + manual read-through of every persistence call site. No dynamic/runtime instrumentation was used.
 
@@ -59,9 +59,10 @@ Flite does not configure a Tauri `app_data_dir` and does not use `BaseDirectory`
 │ Browser localStorage (per-origin, engine-managed on disk)     │
 │  - 10 static keys in SESSION_BACKUP_KEYS                      │
 │  - 1 dynamic per-date key family (generic overflights)        │
-│  - 3 keys NOT in SESSION_BACKUP_KEYS (metar draft, updater×2) │
+│  - 4 keys NOT in SESSION_BACKUP_KEYS (metar draft, updater×2, │
+│    diagnostic log — added Phase 1 Item 6)                      │
 │  - 2 legacy keys, migrated-then-deleted on first load (v1/v2) │
-│  Total: 10 + 1 + 3 + 2 = 16 localStorage keys/key-families.   │
+│  Total: 10 + 1 + 4 + 2 = 17 localStorage keys/key-families.   │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -141,9 +142,28 @@ Data that is not itself a live operational safety record, but directly supports 
 
 | Item | Owner | Type |
 |---|---|---|
-| `vectair_flite_audit_log_v1` | Admin / VKB | Append-only ledger of VKB reference-data changes (who/what/when/before/after). Scope is explicitly VKB only — movements and bookings are **not** audited here. |
-| `diagnostics` object (`app.js`) | Admin / System Status | **In-memory only, not persisted.** Bootstrap stage log, error log, timing. Reset on every reload. Surfaced via `generateDiagnosticReport()` as a generated text report (Export, not storage). |
+| `vectair_flite_audit_log_v1` | Admin / VKB / Movements / Bookings | Append-only central operational audit ledger. **Updated under Phase 1 Item 5 (previously VKB-only):** now covers VKB reference-data changes, core movement/formation mutations, booking mutations, and system/backup events (`backup-exported`/`backup-restored`), in addition to the pre-existing VKB scope. See `audit.js` header comment for the canonical envelope and current scope. |
+| `vectair_flite_diagnostic_log_v1` | Admin / System Status (`diagnostics.js`) | **New under Phase 1 Item 6.** Bounded (max 100 events), persisted technical diagnostic error log — JS errors, unhandled rejections, bootstrap failures, and deliberately-instrumented handled failures (persistence read/write, backup/restore, updater, VKB load, audit-append, booking/movement persistence, critical export failures). Survives reload/restart on the same installation. Distinct from, and never combined with, the operational audit ledger above. See §2.6.1 below. |
+| `diagnostics` object (`app.js`) | Admin / System Status | **In-memory only, not persisted.** Bootstrap stage log, current-session recent errors (last 10), timing. Reset on every reload. Surfaced via `generateDiagnosticReport()` as a generated text report (Export, not storage). The persistent diagnostic error log above is additional to this, not a replacement — this in-memory object still drives the existing current-session UI. |
 | `window.__fdmsDiag` counters (`bookingSync.js`) | Dev diagnostics | **In-memory only.** Optional counters gated behind `window.__FDMS_DIAGNOSTICS__`. |
+
+#### 2.6.1 `vectair_flite_diagnostic_log_v1` detail (Phase 1 Item 6)
+
+| Field | Value |
+|---|---|
+| Owner / module | `src/js/diagnostics.js` |
+| Purpose | Machine-local technical troubleshooting history that survives reload/restart, so a diagnostic report generated after a crash/failure has more evidence than only the current session's in-memory error list. |
+| Shape | `{ version: 1, updatedAt: <ISO>, events: [{ id, time, severity, type, message, source, line, column, stack, context, occurrences }] }` |
+| Retention | Bounded to the 100 most recent events; oldest discarded on overflow. |
+| Deduplication | Same `type` + `message` + `source` recurring within 5 seconds updates the existing most-recent matching record's `time`/`occurrences` instead of appending a new one. |
+| Canonical status | Diagnostic (not authoritative operational data; not the operational audit ledger). |
+| Backup | **Excluded** — not in `SESSION_BACKUP_KEYS`. Intentionally: this is machine-local troubleshooting data, not part of ordinary session/operational recovery. |
+| Restore | **Excluded/ignored** — never written by `importSessionJSON()`. |
+| Diagnostic Bundle | **Included** — recent persisted events are surfaced in `generateDiagnosticReport()` under `[PERSISTED_DIAGNOSTIC_ERRORS]` (counts/compact fields only, never full operational records). |
+| Regenerable | Yes — it is disposable troubleshooting history; losing it has no operational consequence, only reduces after-the-fact diagnosability. |
+| Operational / Safety Significance | None — purely diagnostic. |
+| Clearing | Deliberate operator action only: Admin → Developer → "Clear diagnostic error history" (`clearDiagnosticErrorLog()`), with confirmation. Clears only this store — never the operational audit ledger, movements, bookings, configuration, or lifecycle history. |
+| Validation | Defensive read (`readJSON` + shape check) with a safe empty-log fallback on any parse/shape failure — matches the pattern already used by `audit.js`'s `getAuditLog()`. |
 
 ### 2.7 Migration Stores (legacy, transitional)
 
@@ -191,7 +211,8 @@ Storage Type legend: `LS` = browser localStorage. Backup legend: `Included` = co
 | `vectair_fdms_calendar_events_v1` | Booking / Calendar | LS | Operational Data | Authoritative | Included | Restored (replace) | `Array.isArray(parsed.events)` only | No | Included | Medium | No schema version; wrapped `{version,timestamp,events}` but the version field is unchecked on read. |
 | `vectair_fdms_hours_v1` | Reports | LS | Supporting Operational Data | Authoritative | Included | Restored (replace) | None beyond JSON parse | No | Included | Low | Map `date → hours`; no schema version. Reclassified from User Preferences under Item 2A — see §2.2. |
 | `vectair_fdms_vkb_overrides_v1` | VKB | LS | Reference Data | Authoritative (override layer) | Included | Restored (replace) | Legacy-shape migration (`_migrateOverrides`), registration key re-canonicalisation on every load | No (baseline CSVs are, but overrides aren't) | Excluded | Medium | Sits above bundled CSV baseline; 3 datasets: `egowCodes`, `registrations`, `aircraftPilots`. Affects EGOW/registration/pilot attribution used operationally. |
-| `vectair_flite_audit_log_v1` | Admin / VKB | LS | Diagnostics | Diagnostic | Included | Restored (replace) | `Array.isArray(parsed.events)` fallback to empty | No (historical ledger) | Excluded | Medium | VKB-change scope only; movements/bookings not covered. |
+| `vectair_flite_audit_log_v1` | Admin / VKB / Movements / Bookings | LS | Diagnostics | Diagnostic | Included | Restored (replace) | `Array.isArray(parsed.events)` fallback to empty | No (historical ledger) | Excluded | Medium | **Updated under Phase 1 Item 5** (previously VKB-only): now also covers movement/formation mutations, booking mutations, and system/backup events — see §2.6. |
+| `vectair_flite_diagnostic_log_v1` | Admin / System Status (`diagnostics.js`) | LS | Diagnostics | Diagnostic | **Excluded** | Ignored (not restored) | Shape check (`Array.isArray(parsed.events)`) fallback to empty log | Yes (disposable troubleshooting history) | Included | None | **New under Phase 1 Item 6.** Bounded to 100 events; deliberately excluded from backup/restore — machine-local technical troubleshooting data, not operational session data. See §2.6.1. |
 | `vectair_fdms_bookings_v1` | Booking System | LS | Operational Data | Authoritative | Included | Restored (replace) | `Array.isArray(parsed.bookings)` only | No | Included | Medium | One in-place migration for `plannedTimeLocalHHMM` runs on every load. |
 | `fdms_generic_overflights_${date}` (dynamic) | Live Board | LS | Operational Data | Authoritative | Included (swept by regex, not by static key) | Restored (strict regex allow-list, never arbitrary keys) | Regex `^fdms_generic_overflights_\d{4}-\d{2}-\d{2}$` | No | Excluded | Low | One key per calendar date; never proactively deleted (see Gap Analysis §8.2). |
 | `vectair_fdms_metar_builder_last_v1` | Weather / METAR Builder | LS | Cache | Cache (last-draft convenience) | **Excluded** | Ignored (not restored) | Several in-place legacy-shape migrations on load | Yes (user re-enters) | Future | Low | **Intentionally excluded from `SESSION_BACKUP_KEYS` today; product decision should confirm whether this is desired.** See Gap Analysis §8.1. |
@@ -203,7 +224,7 @@ Storage Type legend: `LS` = browser localStorage. Backup legend: `Included` = co
 | Diagnostic report | Admin | Generated text | Export | Export | N/A | N/A | N/A | N/A | Not applicable | None | See §2.8. Troubleshooting output only. |
 | `diagnostics` in-memory object | app.js | In-memory (JS variable) | Diagnostics | Temporary | N/A | N/A | N/A | Yes (empty on reload) | Included | None | Never touches localStorage; this is the source object the diagnostic report is generated from. |
 
-**Row-count reconciliation:** 16 `localStorage` rows (10 backed-up static + 1 dynamic family + 3 intentionally excluded static + 2 legacy migration-only) + 5 non-`localStorage` rows (1 bundled CSV set + 4 generated Export/Diagnostics rows) = **21 matrix rows total.** This matches §9 (Audit Report) totals below.
+**Row-count reconciliation:** 17 `localStorage` rows (10 backed-up static + 1 dynamic family + 4 intentionally excluded static + 2 legacy migration-only) + 5 non-`localStorage` rows (1 bundled CSV set + 4 generated Export/Diagnostics rows) = **22 matrix rows total.** This matches §9 (Audit Report) totals below. (The 4 excluded static keys are: `vectair_fdms_metar_builder_last_v1`, `vectair_flite_check_updates_on_launch_v1`, `vectair_flite_last_update_check_v1`, and `vectair_flite_diagnostic_log_v1` — the last added under Phase 1 Item 6.)
 
 ---
 
@@ -238,8 +259,10 @@ Storage Type legend: `LS` = browser localStorage. Backup legend: `Included` = co
       ▼
   fdms_generic_overflights_${date}  (Live Board FIS/overflight counters, one key per day)
 
-  vectair_flite_audit_log_v1  ← independent append-only ledger, fed only by VKB Admin edits
-                                  (egowCodes / registrations / aircraftPilots overrides)
+  vectair_flite_audit_log_v1  ← independent append-only central ledger. Originally fed only by
+                                  VKB Admin edits; Phase 1 Item 5 extended it to also receive
+                                  movement/formation mutations, booking mutations, and
+                                  system/backup events (backup-exported/backup-restored).
 
   vectair_fdms_config  ← independent, read by nearly every module (offsets, display toggles,
                           History filter defaults); written only from Admin → Configuration
@@ -249,6 +272,12 @@ Storage Type legend: `LS` = browser localStorage. Backup legend: `Included` = co
 
   vectair_flite_check_updates_on_launch_v1 / vectair_flite_last_update_check_v1
     ← independent, Admin → System Status → Updates only
+
+  vectair_flite_diagnostic_log_v1  ← independent, Admin → Developer only (Phase 1 Item 6).
+    Fed by window error/unhandledrejection handlers, bootstrap failure capture, and
+    deliberately-instrumented handled failures across app.js/datamodel.js/bookingsStore.js/
+    ui_booking.js/vkb.js/export_utils.js/reporting.js. No relationship to movements/bookings/
+    reports; never combined with the audit ledger above.
 
                  │
                  ▼
@@ -262,7 +291,7 @@ Storage Type legend: `LS` = browser localStorage. Backup legend: `Included` = co
         explicitly re-imported via Admin → Restore)
 ```
 
-**Independent (no cross-dataset dependency) datasets:** `vectair_fdms_config`, `vectair_fdms_vkb_overrides_v1` + bundled CSVs, `vectair_flite_audit_log_v1`, `vectair_fdms_metar_builder_last_v1`, `vectair_flite_check_updates_on_launch_v1`, `vectair_flite_last_update_check_v1`.
+**Independent (no cross-dataset dependency) datasets:** `vectair_fdms_config`, `vectair_fdms_vkb_overrides_v1` + bundled CSVs, `vectair_flite_audit_log_v1`, `vectair_fdms_metar_builder_last_v1`, `vectair_flite_check_updates_on_launch_v1`, `vectair_flite_last_update_check_v1`, `vectair_flite_diagnostic_log_v1`.
 
 **Derived-from-movements (no storage of their own):** Reports/Monthly Return/Dashboard/Insights (computed from `vectair_fdms_movements_v3` + `vectair_fdms_cancelled_sorties_v1` + `vectair_fdms_hours_v1` at render time; only their *exports* are written to disk).
 
@@ -297,18 +326,22 @@ fdms_generic_overflights_YYYY-MM-DD   (all present dates)
 
 That is 1 dynamic key family.
 
-**Intentionally excluded from backup today** (3 static keys — see Gap Analysis §8 for assessment of each):
+**Intentionally excluded from backup today** (4 static keys — see Gap Analysis §8 for assessment of each):
 
 ```
 vectair_fdms_metar_builder_last_v1        (intentionally excluded today — product decision should
                                             confirm whether this is desired; see Gap Analysis §8.1)
 vectair_flite_check_updates_on_launch_v1  (reasonable — machine-local preference)
 vectair_flite_last_update_check_v1        (reasonable — diagnostic timestamp)
+vectair_flite_diagnostic_log_v1           (deliberate — machine-local technical troubleshooting
+                                            data added under Phase 1 Item 6; must survive ordinary
+                                            reload/restart but must not travel with, or be replaced
+                                            by, an operational session backup/restore. See §2.6.1.)
 ```
 
 Bundled reference CSVs are not part of backup/restore; they travel with the installer/app bundle, not with user data.
 
-**Backup key-count reconciliation:** 10 static + 1 dynamic family + 3 excluded = 14 keys/families currently known to the backup subsystem's scope of consideration (10 actually written into a backup file, 1 dynamic family also written, 3 deliberately not written). Together with the 2 legacy migration-only keys (never eligible for backup — they are deleted before a backup could ever capture them), this accounts for all 16 `localStorage` keys/families catalogued in §1.1 and §3.
+**Backup key-count reconciliation:** 10 static + 1 dynamic family + 4 excluded = 15 keys/families currently known to the backup subsystem's scope of consideration (10 actually written into a backup file, 1 dynamic family also written, 4 deliberately not written). Together with the 2 legacy migration-only keys (never eligible for backup — they are deleted before a backup could ever capture them), this accounts for all 17 `localStorage` keys/families catalogued in §1.1 and §3.
 
 ## 6. Restore Coverage
 
@@ -355,8 +388,8 @@ Findings only — no fixes applied, per audit constraints.
 ### 8.5 No schema version on most datasets
 Only `vectair_fdms_movements_v3` is versioned. `vectair_fdms_config`, `vectair_fdms_bookings_v1`, `vectair_fdms_calendar_events_v1`, `vectair_fdms_hours_v1`, `vectair_fdms_cancelled_sorties_v1`, `vectair_fdms_deleted_strips_v1`, and `vectair_fdms_metar_builder_last_v1` either have no version field or an unenforced one (`bookingsStore` writes `version:1` but never checks it on read). Future format changes to any of these must currently rely on defensive/shape-based migration (as bookings and METAR Builder already do ad hoc) rather than a version check. **Foundational concern for the planned SQLite migration** — there is no uniform versioning contract to migrate *from*.
 
-### 8.6 Audit log scope is narrower than its name suggests
-`vectair_flite_audit_log_v1` ("Central append-only audit ledger for Vectair Flite", per its own file header) only ever receives events from VKB Admin edits (`auditEntityChange()` calls, sourced from `admin-vkb-editor`). Movement create/update/delete, booking changes, cancellations, and deletions each maintain their own bespoke `changeLog` (on movements) or dedicated log store (cancelled sorties, deleted strips) rather than feeding the shared audit ledger. This is explicitly acknowledged in the file's own header comment ("movements, bookings etc. are out of scope for this ticket") so it is a known, scoped limitation rather than an accidental gap — but it means there is no single cross-cutting audit trail today. **Worth flagging for the future Integrity Checker / audit consolidation design.**
+### 8.6 Audit log scope is narrower than its name suggests — RESOLVED (Phase 1 Item 5)
+Originally, `vectair_flite_audit_log_v1` only ever received events from VKB Admin edits. **This has since been addressed under Phase 1 Item 5**: the ledger now also receives core movement/formation mutations (`datamodel.js`'s `auditMovementEvent()`) and booking mutations (`bookingsStore.js`'s `auditBookingEvent()`), in addition to the pre-existing VKB scope and the system/backup events (`backup-exported`/`backup-restored`) recorded from `app.js`. Movements and bookings still additionally maintain their own dataset-specific history (`changeLog`, cancelled sorties, deleted strips) — the central ledger is additive, not a replacement for those. This entry is retained here as a historical record of the original finding; it is no longer an open gap.
 
 ### 8.7 Configuration and operational-behaviour settings are mixed in one untyped blob
 `vectair_fdms_config` mixes true user/machine preference (`showLocalTime`, `timelineSwapUtcLocalRulers`), operational business rules (`depOffsetMinutes`, `autoActivateArrEnabled`), and UI-only display toggles (`historyStripBoardVisibleFilters`) in a single flat, unversioned object with several `// Legacy - kept for backwards compatibility` fields still active (`defaultTimeOffsetMinutes`, `autoActivateEnabled`, `autoActivateMinutesBeforeEta`, `timezoneOffsetHours`). None of these legacy fields have removal criteria or dead-code markers. **Configuration/operational mixing + accumulating legacy fields — a candidate for schema decomposition in the SQLite migration, not for action now.**
@@ -366,6 +399,8 @@ Corruption handling today is: reset-to-empty (cancelled sorties, deleted strips)
 
 ### 8.9 Diagnostics scope note (not a defect)
 `updateDiagnostics()` / `getDataCounts()` surface counts for movements, bookings, cancelled sorties, deleted strips, booking profiles, calendar events, and hours entries — but not for VKB overrides, the audit log, or the METAR Builder draft (see the `Diagnostic Bundle` column in §3). Combined with §8.1, the METAR Builder dataset is currently invisible to both backup coverage and the diagnostics panel — marked `Future` in §3 rather than `Excluded` because this is the one exclusion explicitly flagged here as worth reviewing. VKB overrides and the audit log are marked plain `Excluded` in §3: their absence from the diagnostic report is noted as fact, but this audit found no explicit basis to recommend adding them. **Should be reviewed alongside §8.1.**
+
+**Update (Phase 1 Item 6):** the previously in-memory-only `diagnostics` object in `app.js` (bootstrap log, current-session recent errors) is now complemented by a genuinely persisted store, `vectair_flite_diagnostic_log_v1` (§2.6.1), whose recent events are surfaced in the generated diagnostic report. This closes the specific "errors are lost on reload" gap for technical errors; it does not change the assessment above for VKB overrides, the audit log, or the METAR Builder draft.
 
 ---
 
@@ -405,15 +440,15 @@ The Pre-V1 roadmap identifies future persistence needs that do not exist in the 
 
 ## 10. Audit Report
 
-**Total persistent datasets catalogued:** **16** distinct `localStorage` keys/key-families:
+**Total persistent datasets catalogued:** **17** distinct `localStorage` keys/key-families:
 
 ```
 10 static backed-up keys
  + 1 dynamic backed-up key family
- + 3 intentionally excluded static keys
+ + 4 intentionally excluded static keys (includes vectair_flite_diagnostic_log_v1, Phase 1 Item 6)
  + 2 legacy migration-only keys
  --------------------------------------
- = 16
+ = 17
 ```
 
 Separately (not `localStorage`, not part of the 16 above): 8 bundled read-only reference CSV files, and the 8 generated-export types listed in §2.8 (rolled up into 4 rows in the Persistence Matrix by output category). See the row-count reconciliation note under §3 for how this maps onto the 21-row Persistence Matrix.
@@ -431,22 +466,22 @@ Separately (not `localStorage`, not part of the 16 above): 8 bundled read-only r
 - Bookings: `arrivalTimeLocalHHMM` → `plannedTimeLocalHHMM`/`plannedTimeKind`, additive, runs on every load.
 - METAR Builder: three separate legacy-shape migrations (plain-text WX → structured, single WX group → `wxGroups` array, `phenomenon` → `phenom1/2/3`), all additive, run on every load.
 
-**Backup coverage summary:** 10 of 13 static application keys are covered by `SESSION_BACKUP_KEYS`, plus the dynamic generic-overflight family. 3 static keys are intentionally excluded today — 2 are low-risk machine-local/diagnostic values (updater launch-check preference, updater last-checked timestamp; both `Operational/Safety Significance: None`), and 1 (`vectair_fdms_metar_builder_last_v1`, `Class: Cache`, `Operational/Safety Significance: Low`) has no code-level evidence establishing whether its exclusion was a deliberate product decision — see §8.1 for the recommended follow-up. Bundled reference CSVs and the legacy migration-only keys are correctly out of scope for backup by design.
+**Backup coverage summary:** 10 of 14 static application keys are covered by `SESSION_BACKUP_KEYS`, plus the dynamic generic-overflight family. 4 static keys are intentionally excluded today — 3 are low-risk machine-local/diagnostic values (updater launch-check preference, updater last-checked timestamp, and the new `vectair_flite_diagnostic_log_v1` diagnostic error log; all `Operational/Safety Significance: None`), and 1 (`vectair_fdms_metar_builder_last_v1`, `Class: Cache`, `Operational/Safety Significance: Low`) has no code-level evidence establishing whether its exclusion was a deliberate product decision — see §8.1 for the recommended follow-up. Bundled reference CSVs and the legacy migration-only keys are correctly out of scope for backup by design.
 
-**Integrity coverage summary:** Only 1 of 13 static application keys (`vectair_fdms_movements_v3`) carries an explicit, checked schema version. Corruption recovery exists for config, cancelled sorties, and deleted strips; is absent (silent empty fallback) for bookings, calendar events, hours, booking profiles, and the METAR Builder draft. Exactly one cross-dataset referential-integrity sweep exists (`bookingSync.reconcileLinks()`, bookings ⇄ movements only). No checksum/hash validation exists on any dataset. No unified Integrity Checker subsystem exists yet.
+**Integrity coverage summary:** Only 1 of 14 static application keys (`vectair_fdms_movements_v3`) carries an explicit, checked schema version. Corruption recovery exists for config, cancelled sorties, deleted strips, and (new, Phase 1 Item 6) the diagnostic error log (shape-checked, falls back to an empty log on any parse/shape failure — the same defensive pattern as `audit.js`); is absent (silent empty fallback) for bookings, calendar events, hours, booking profiles, and the METAR Builder draft. Exactly one cross-dataset referential-integrity sweep exists (`bookingSync.reconcileLinks()`, bookings ⇄ movements only). No checksum/hash validation exists on any dataset. No unified Integrity Checker subsystem exists yet.
 
 **Documentation gaps identified:**
 - Backup coverage list in STATE.md §3.5 is stale relative to actual `SESSION_BACKUP_KEYS` content drift potential (currently matches code, but has no single source of truth cross-reference — this document now serves that role).
 - `docs/js/` duplicate is undocumented as a non-authoritative, drifted snapshot (§8.3).
 - Stale prototype copy visible in the live Booking UI (§8.4).
-- Audit log's actual (narrow) scope vs. its general-sounding name is documented only in a code comment, not in user-facing or architecture docs (§8.6).
+- Audit log's originally-narrow scope vs. its general-sounding name was documented only in a code comment, not in architecture docs — **now resolved**: the ledger's expanded scope (movements/formations/bookings/system events, Phase 1 Item 5) is documented in §2.6 and §8.6.
 - Planned-but-unimplemented persistence (operator/workstation/session identity, future per-operator preferences) had no canonical record prior to this correction — now tracked in §9.
 
 **Architectural concerns for the future SQLite migration:**
 - No uniform schema-versioning contract across datasets (§8.5) — a migration tool will need per-dataset bespoke detection logic mirroring today's ad hoc migrations, not a single version-driven path.
 - Configuration mixes preference/operational/UI-toggle concerns in one blob (§8.7) — worth decomposing during migration rather than carrying the mixed shape into SQL tables verbatim.
 - Unbounded dynamic key growth (§8.2) has no equivalent problem in a relational schema (a dated row is trivial) but should be explicitly resolved (retention policy decision) rather than silently inherited.
-- The audit log's narrow scope (§8.6) is a design decision to revisit if the future Integrity Checker or SQLite migration is expected to provide a full change history.
+- The audit log's scope (§8.6) was narrower than its name suggested prior to Phase 1 Item 5; now that movements/formations/bookings feed it too, a future Integrity Checker or SQLite migration can treat it as the closer-to-complete cross-cutting change history it was originally intended to be.
 - Planned identity concepts (§9) currently have no schema footprint anywhere — the SQLite migration is a natural point to decide where operator/workstation/session identity would live, but no such decision has been made and none is proposed here.
 
 ---
@@ -457,13 +492,14 @@ Separately (not `localStorage`, not part of the 16 above): 8 bundled read-only r
 |---|---|
 | `src/js/datamodel.js` | movements (v1/v2/v3), config, cancelled sorties, deleted strips, generic overflights (dynamic), `SESSION_BACKUP_KEYS` definition, `exportSessionJSON`/`importSessionJSON`, `getStorageInfo`/`getDataCounts`/`getStorageQuota` |
 | `src/js/vkb.js` | VKB overrides (`vectair_fdms_vkb_overrides_v1`); bundled CSV loading (read-only) |
-| `src/js/audit.js` | Audit log (`vectair_flite_audit_log_v1`) |
+| `src/js/audit.js` | Operational audit log (`vectair_flite_audit_log_v1`) — VKB, movements/formations, bookings, system/backup events (Phase 1 Item 5) |
+| `src/js/diagnostics.js` | **New (Phase 1 Item 6).** Persistent diagnostic error log (`vectair_flite_diagnostic_log_v1`): `recordDiagnosticError()`, `getRecentDiagnosticErrors()`, `clearDiagnosticErrorLog()`, `getDiagnosticErrorCount()`, `getDiagnosticSnapshot()`, `makeBootstrapStageEntry()`. Called from `app.js` (window error/unhandledrejection/bootstrap/backup/updater), `datamodel.js` (movement/config persistence, audit-append, corruption repair), `stores/bookingsStore.js` (booking persistence, audit-append), `ui_booking.js` (booking profile/calendar persistence), `vkb.js` (overrides corruption), `export_utils.js` (native-save fallback), `reporting.js` (Monthly Return XLSX failure). |
 | `src/js/ui_booking.js` | Booking profiles (`fdms_booking_profiles_v1`), calendar events (`vectair_fdms_calendar_events_v1`) |
 | `src/js/stores/bookingsStore.js` | Bookings (`vectair_fdms_bookings_v1`) |
 | `src/js/services/bookingSync.js` | No storage of its own; reconciles bookings ⇄ movements |
 | `src/js/reporting.js` | Hours log (`vectair_fdms_hours_v1`, Supporting Operational Data); Monthly Return/Cancellation exports (generated files only) |
 | `src/js/metar_builder.js` | METAR Builder draft (`vectair_fdms_metar_builder_last_v1`) |
-| `src/js/app.js` | Updater preference/timestamp keys; diagnostics (in-memory); Admin backup/restore UI wiring; diagnostic report generation |
+| `src/js/app.js` | Updater preference/timestamp keys; diagnostics (in-memory session state + calls into `diagnostics.js` for the persistent log); Admin backup/restore UI wiring; diagnostic report generation; Admin → Developer "Clear diagnostic error history" action |
 | `src/js/ui_liveboard.js` | No storage of its own beyond calling into `datamodel.js`; owns History/Cancelled/Search CSV export functions |
 | `src/js/export_utils.js` | No storage; shared Save-As/Blob-download helpers used by all exports |
 | `src-tauri/src/lib.rs` | No app-data persistence; `save_text_file_with_dialog`/`save_binary_file_with_dialog` (export-only, user-chosen path); in-memory updater `Mutex` |

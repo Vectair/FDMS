@@ -2,6 +2,8 @@
 // Shared file-save helpers for all CSV and binary (XLSX) exports.
 // Detects Tauri native Save As dialog; falls back to browser Blob download.
 
+import { recordDiagnosticError } from './diagnostics.js';
+
 /**
  * Trigger a browser Blob download.
  * @param {string|Uint8Array} content
@@ -37,6 +39,12 @@ export async function saveTextFileWithDialogOrDownload(text, filename) {
       return result === 'cancelled' ? 'cancelled' : 'saved';
     } catch (err) {
       console.error('Native text save failed; falling back to browser download', err);
+      recordDiagnosticError({
+        severity: 'warning',
+        type: 'export-native-save-fallback',
+        message: err?.message || String(err),
+        context: { filename }
+      });
       downloadFileViaBrowser(text, filename, 'text/plain;charset=utf-8;');
       return 'fallback';
     }
@@ -67,6 +75,12 @@ export async function saveBinaryFileWithDialogOrDownload(base64, filename) {
     return result === 'cancelled' ? 'cancelled' : 'saved';
   } catch (err) {
     console.error('Native binary save failed', err);
+    recordDiagnosticError({
+      severity: 'warning',
+      type: 'export-native-save-fallback',
+      message: err?.message || String(err),
+      context: { filename }
+    });
     return 'fallback';
   }
 }
