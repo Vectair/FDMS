@@ -3,8 +3,43 @@
 // No imports from ui_booking.js or ui_liveboard.js.
 
 import { readJSON, writeJSON } from '../storage.js';
+import { appendAuditEvent, buildFieldDiff } from '../audit.js';
+import { getRunningAppVersion } from '../datamodel.js';
 
 const BOOKINGS_STORAGE_KEY = "vectair_fdms_bookings_v1";
+
+/**
+ * Append one central audit event for a booking mutation (Phase 1 Item 5).
+ * Additional to, and never a replacement for, the booking's own
+ * createdAtUtc/updatedAtUtc timestamps. Isolated in its own try/catch: an
+ * audit-append failure must never roll back or falsely fail an
+ * already-successful booking mutation — only logs to console.error.
+ */
+function auditBookingEvent(action, booking, { before, after, changedFields, correlationId, metadata } = {}) {
+  try {
+    appendAuditEvent({
+      action,
+      correlationId,
+      app: { name: 'Vectair Flite', version: getRunningAppVersion(), build: 'unknown' },
+      source: { module: 'bookings', uiAction: action },
+      entity: {
+        domain: 'bookings',
+        dataset: BOOKINGS_STORAGE_KEY,
+        type: 'booking',
+        id: booking.id,
+        label: (booking.contact && booking.contact.name) || (booking.aircraft && booking.aircraft.registration) || String(booking.id)
+      },
+      before: before || {},
+      after: after || {},
+      changedFields: changedFields || [],
+      reason: { code: action, note: '' },
+      reversible: action !== 'booking-deleted',
+      metadata: metadata || {}
+    });
+  } catch (e) {
+    console.error(`FDMS: failed to record '${action}' audit event for booking`, booking && booking.id, e);
+  }
+}
 
 let bookings = [];
 let bookingsInitialised = false;
@@ -121,15 +156,19 @@ export function getBookingById(id) {
  * Deep-merges known nested keys, then shallow-assigns the rest.
  * @param {number} id – Booking ID
  * @param {object} patch – Partial booking update
+ * @param {string} [correlationId] – links this update's audit event to a
+ *   related event recorded by the caller (e.g. clearing linkedStripId as
+ *   part of a strip soft-delete).
  * @returns {object|null} Updated booking or null if not found
  */
-export function updateBookingById(id, patch) {
+export function updateBookingById(id, patch, correlationId) {
   ensureInitialised();
   const booking = bookings.find(b => b.id === id);
   if (!booking) return null;
 
   // Snapshot before changes for no-op detection (excluding updatedAtUtc)
-  const before = JSON.stringify({ ...booking, updatedAtUtc: null });
+  const beforeSnapshotObj = { ...booking, updatedAtUtc: null };
+  const before = JSON.stringify(beforeSnapshotObj);
 
   // Deep-merge nested objects
   const nestedKeys = ['contact', 'schedule', 'aircraft', 'movement', 'ops', 'charges'];
@@ -146,22 +185,44 @@ export function updateBookingById(id, patch) {
   normalizeScheduleFields(booking);
 
   // No-op optimization: only save if actual changes were made (excluding updatedAtUtc)
-  const after = JSON.stringify({ ...booking, updatedAtUtc: null });
+  const afterSnapshotObj = { ...booking, updatedAtUtc: null };
+  const after = JSON.stringify(afterSnapshotObj);
   if (before === after) {
-    return booking; // No changes, skip save
+    return booking; // No changes, skip save — and no central audit event either.
   }
 
   booking.updatedAtUtc = new Date().toISOString();
   saveToStorage();
+
+  const diff = buildFieldDiff(beforeSnapshotObj, afterSnapshotObj);
+  auditBookingEvent('booking-updated', booking, {
+    before: diff.before,
+    after: diff.after,
+    changedFields: diff.changedFields,
+    correlationId
+  });
+
   return booking;
 }
 
-export function deleteBookingById(id) {
+export function deleteBookingById(id, correlationId) {
   ensureInitialised();
   const index = bookings.findIndex(b => b.id === id);
   if (index === -1) return false;
+  const booking = bookings[index];
   bookings.splice(index, 1);
   saveToStorage();
+
+  auditBookingEvent('booking-deleted', booking, {
+    before: {
+      id: booking.id,
+      contactName: booking.contact && booking.contact.name,
+      registration: booking.aircraft && booking.aircraft.registration
+    },
+    changedFields: ['id'],
+    correlationId
+  });
+
   return true;
 }
 
@@ -180,5 +241,16 @@ export function createBooking(data) {
 
   bookings.push(booking);
   saveToStorage();
+
+  auditBookingEvent('booking-created', booking, {
+    after: {
+      id: booking.id,
+      contactName: booking.contact && booking.contact.name,
+      registration: booking.aircraft && booking.aircraft.registration,
+      dateISO: booking.schedule && booking.schedule.dateISO
+    },
+    changedFields: ['id', 'contactName', 'registration', 'dateISO']
+  });
+
   return booking;
 }
