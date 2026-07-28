@@ -259,3 +259,220 @@ Duplicate formation elements are reset to PLANNED with actual values removed.
 Most Booking Profile text-field autofill uses anti-stomp behaviour.
 The METAR Builder separates blocking errors from warnings and disables Copy while blocking errors exist.
 Backup restore preflight uses a shared inspection path, blocks unrecognised/non-restorable files, displays record counts and catches import errors.
+
+4. Persistence-result and partial-operation audit
+
+Completed 28 July 2026.
+
+This audit examined whether operational and administrative mutations can distinguish durable success from in-memory success, whether linked multi-record operations are atomic, and whether corruption and storage failures preserve recoverable data.
+
+Severity summary:
+
+Critical: 2
+High: 14
+Medium-high: 10
+Medium: 8
+Low-medium: 3
+Total: 37
+
+Critical findings
+
+1. Legacy movement migration can permanently delete the only durable dataset.
+
+V1 and V2 migration removes the old storage key before the replacement V3 dataset is confirmed as durably written. A failed V3 write can leave the migrated movements only in memory, so reload or closure permanently loses them.
+
+2. Booking creation and linked-strip creation are not one atomic operation.
+
+The workflow separately writes the booking, movement strip and optional Booking Profile, checks none of the persistence results and provides no rollback. It can leave a booking without a strip, a strip pointing to a missing booking, or a success message after partial or total failure.
+
+High-severity findings
+
+3. The shared persistence wrapper has no reliable success contract.
+
+writeRaw(), writeJSON() and remove() do not return structured results. Storage-unavailable writes may silently do nothing, so callers cannot distinguish durable success from failure or non-operation.
+
+4. Movement CRUD mutates memory first and returns success regardless of durable outcome.
+
+Movement creation, update and deletion change the live collection before saving. The save routine suppresses failures while callers still receive success-shaped values.
+
+5. Booking CRUD has the same false-success behaviour.
+
+Booking creation, update and deletion mutate memory first, suppress persistence failures and may still append audit events.
+
+6. Full backup restore is non-transactional.
+
+Restore writes datasets directly one key at a time with no pre-restore snapshot, staging, rollback, commit marker, write verification or post-restore integrity validation.
+
+7. Full restore overlays data rather than faithfully restoring the backed-up state.
+
+Null or absent backup datasets do not remove current local datasets, and local dated generic-overflight keys absent from the backup remain. Restoring into a populated installation therefore creates a hybrid state.
+
+8. Restore can report keys as restored when no write occurred.
+
+Keys are added to restoredKeys immediately after an unchecked write call. Silent storage unavailability can therefore produce a success result and restored-key count without durable writes.
+
+9. Legacy backup restore can report success after memory-only replacement.
+
+Legacy restore replaces the live movement array, calls the suppressed-error save routine and returns success even when the restored dataset was not persisted.
+
+10. Booking deletion is a non-transactional destructive multi-record operation.
+
+Linked strips may be cancelled or unlinked and the booking then deleted through independent unchecked writes. Partial failure can leave contradictory booking and movement states.
+
+11. New booking and strip relationships are knowingly left incomplete.
+
+The movement receives bookingId, but the booking is not immediately assigned linkedStripId. Startup reconciliation is used to complete a normal creation operation.
+
+12. Booking Profile import can partially mutate live state and still fail.
+
+Entries are merged into the live profile collection before the complete import and persistence succeed. Processing failure leaves earlier changes in memory, while persistence failure can still return success.
+
+13. Corrupt VKB override data can be overwritten by the next edit.
+
+Malformed override data is read as an empty override set. A later edit can then overwrite the raw store and destroy all prior local reference-data changes.
+
+14. Hours Log corruption can be overwritten as an empty history.
+
+A failed Hours Log read returns an empty object. Saving one later date rewrites the entire dataset from that empty state.
+
+15. Audit-log corruption is silently replaced by a new empty ledger.
+
+Malformed or unexpected audit data is treated as an empty log. The next audit append overwrites the original history.
+
+16. Cancelled-sortie and Deleted Strips corruption is automatically destroyed.
+
+Both recovery stores reset malformed or wrongly shaped data to an empty array, destroying the raw value and all potentially recoverable history.
+
+Medium-high findings
+
+17. Storage-unavailable mode is treated as an empty working installation.
+
+Flite can initialise empty in-memory datasets and continue accepting operational input even though its sole persistence layer is unavailable.
+
+18. Configuration changes cannot report durable success.
+
+Configuration is changed in memory and saved through a suppressed-error path, so Admin forms cannot know whether settings persisted.
+
+19. Formation-element updates and status cascades return memory success.
+
+Formation elements, WTC values, metadata and change logs are mutated before persistence, with no durable result.
+
+20. Booking audit history can contradict the booking dataset.
+
+Audit events may be written after a failed primary booking write.
+
+21. Movement audit history can contradict the movement dataset.
+
+Movement audit events may similarly persist even when the primary movement mutation did not.
+
+22. Booking status synchronisation is fire-and-forget.
+
+Movement completion or cancellation patches the linked booking without proving that the booking status was durably updated.
+
+23. Startup reconciliation claims repairs without verifying persistence.
+
+Repair counters are incremented after in-memory mutation calls and can report success even when the repairs will disappear on reload.
+
+24. VKB mutation audit is written before the primary override.
+
+The audit ledger can record a VKB change that never became operationally effective.
+
+25. Generic-overflight counters return calculated values without persistence confirmation.
+
+Increment and decrement return the arithmetic result even when the write did not occur.
+
+26. Recovery-store appends do not prove that recovery data was written.
+
+Cancellation and deletion workflows can continue despite the corresponding recovery snapshot not being durably stored.
+
+Medium-severity findings
+
+27. Calendar create, update and delete report success without durable confirmation.
+
+Calendar state changes in memory first and save failures are suppressed.
+
+28. Booking Profile save and delete report success without durable confirmation.
+
+Profile mutations alter the live collection before storage and the UI proceeds as though persistence succeeded.
+
+29. saveBookings() can replace the store with unchecked caller data.
+
+It accepts and assigns arbitrary caller data without validation, cloning or a persistence result.
+
+30. Store getters expose mutable internal arrays and objects.
+
+Booking and Calendar callers can mutate live state without persistence, timestamps, audit events or validation.
+
+31. Generic-overflight corruption can become NaN.
+
+Malformed stored text is parsed without validation and can propagate through arithmetic into a persisted "NaN" value.
+
+32. Recovery-store purges report removal without durable confirmation.
+
+Deleted-strip expiry purge can return a positive count despite no durable change.
+
+33. Diagnostic clear can report success when no clear occurred.
+
+Silent storage unavailability allows the clear function to return true without writing the empty log.
+
+34. Diagnostic recording can claim persistence when nothing was stored.
+
+The API may return a newly created diagnostic entry despite silent storage unavailability.
+
+Low-medium findings
+
+35. METAR state migration is not persisted until a later Copy.
+
+Legacy saved-state fields are migrated in memory on recall but are not immediately rewritten.
+
+36. Audit validation is advisory only.
+
+Malformed audit events are reported to the console but can still enter the canonical ledger.
+
+37. Export helpers classify unexpected native responses as saved.
+
+Any non-cancelled native result is treated as success rather than accepting only an explicit known saved result.
+
+Systemic conclusions
+
+Memory state and durable state are not distinguished.
+
+Across movements, bookings, Calendar, profiles, configuration and counters, a returned object usually proves only that memory changed, while the UI interprets it as durable persistence.
+
+Multi-record operations have no transaction boundary.
+
+Affected workflows include booking plus strip creation, booking deletion plus strip changes, cancellation, movement deletion, backup restore and VKB audit-plus-override operations.
+
+Corruption handling is inconsistent and often destructive.
+
+Operational and recovery stores need explicit absent, ok, corrupt, unsupported and storage-unavailable states. Mutations should be blocked while a dataset is unsafe unless the operator explicitly exports and resets it.
+
+Audit and recovery records are not causally tied to primary mutations.
+
+History or recovery records may be written before the primary mutation, after a failed mutation, or omitted while the primary operation continues.
+
+Required remediation direction
+
+1. Replace the storage wrapper with explicit result objects and read/write verification.
+2. Introduce explicit dataset states for unavailable, corrupt and unsupported storage.
+3. Block operational mutation when the primary store is unsafe.
+4. Stage domain changes and commit live memory only after durable success.
+5. Add transaction, rollback or compensating handling for linked operations.
+6. Preserve corrupt raw data rather than automatically overwriting it.
+7. Make full restore atomic and define it as replacement or merge; current wording implies replacement.
+8. Tie audit and recovery records to confirmed primary-operation outcomes.
+9. Add failure-injection tests for every mutation and restore stage.
+10. Make UI acknowledgements distinguish durable success, partial success, failure and fallback.
+
+Confirmed-sound controls
+
+Full-backup structures are validated before restore begins.
+Unsupported future backup formats are blocked.
+Generic-overflight restore keys use a strict allow-list and value validator.
+Movement and booking persistence failures are generally recorded diagnostically.
+Audit failures are isolated from already-completed operational actions.
+Diagnostics are bounded and deduplicated.
+Booking updates avoid no-op writes.
+Cancelled-sortie append guards against duplicate unreinstated entries.
+Exported backup metadata uses the same inspection path as restore.
+Native export failures are recorded diagnostically.

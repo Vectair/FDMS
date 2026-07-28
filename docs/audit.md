@@ -30,39 +30,50 @@ Detailed findings are recorded in docs/audit_findings.md.
 
 Priority: Complete - findings require disposition before final regression.
 
-2. Persistence-result and partial-operation audit
+2. Persistence-result and partial-operation audit - COMPLETED 28 July 2026
 
-Items 4–6 improved the storage architecture, but the UX audit has exposed an important remaining pattern:
+Status: Complete.
 
-write fails internally
-→ error is logged
-→ caller continues
-→ UI reports success
+The audit traced persistence results, mutation ordering, corruption handling and partial-operation behaviour across the shared storage wrapper and all principal local datasets.
 
-This audit should identify every mutation path where:
+Covered:
 
-an in-memory object changes before persistence;
-storage functions suppress errors;
-the caller cannot distinguish persisted success from failure;
-multiple records must be updated together;
-one half of a linked operation can succeed while the other fails.
+movement and formation persistence;
+booking, linked-strip and Booking Profile operations;
+Calendar events;
+configuration and METAR state;
+VKB overrides;
+Hours Log;
+audit and diagnostic logs;
+cancelled-sortie and Deleted Strips recovery stores;
+generic-overflight counters;
+backup export and restore;
+multi-record lifecycle operations.
 
-Particular focus:
+Consolidated severity:
 
-booking plus linked movement creation;
-booking/profile/calendar saves;
-cancellation plus booking status synchronization;
-movement deletion plus deleted-strip retention;
-restore/reinstate operations;
-VKB override saves;
-configuration saves;
-hours log;
-METAR draft persistence.
+Critical: 2
+High: 14
+Medium-high: 10
+Medium: 8
+Low-medium: 3
+Total: 37
 
-This does not necessarily require transactions everywhere. It first requires a clear inventory of where the UI lacks a reliable success result.
+Principal findings:
 
-Priority: High.
+the shared storage boundary cannot reliably report durable success;
+most stores mutate live memory before persistence and return success-shaped values after failure;
+legacy movement migration can delete the only durable dataset before its replacement is confirmed;
+booking plus strip creation is non-atomic and can leave either side missing;
+backup restore is non-transactional and overlays rather than faithfully replaces the installation;
+multi-record cancellation, deletion and booking operations lack rollback and result verification;
+corrupt operational, audit and recovery datasets are often replaced with empty state rather than preserved;
+audit and recovery records can contradict the primary durable datasets;
+storage-unavailable mode is not treated as a blocking or read-only application state.
 
+Detailed findings are recorded in docs/audit_findings.md.
+
+Priority: Complete - the systemic persistence architecture requires remediation before final regression.
 3. Cross-dataset integrity audit
 
 The canonical Data Inventory already established that only booking-to-movement links receive active reconciliation.
@@ -289,13 +300,12 @@ Recommended sequence
 
 The prudent remaining investigation sequence is:
 
-1. Persistence-result and partial-operation audit
-2. Date/time/timezone audit
-3. Cross-dataset integrity audit
-4. Control-to-domain trace audit
-5. Security/data-exposure audit
-6. Accessibility and keyboard-operation audit
-7. Performance and realistic-scale audit
-8. Installed-Tauri parity and clean-install/update audit
-9. Final backup/restore scenario audit
-10. Final documentation and regression audit
+1. Date/time/timezone audit
+2. Cross-dataset integrity audit
+3. Control-to-domain trace audit
+4. Security/data-exposure audit
+5. Accessibility and keyboard-operation audit
+6. Performance and realistic-scale audit
+7. Installed-Tauri parity and clean-install/update audit
+8. Final backup/restore scenario audit
+9. Final documentation and regression audit
