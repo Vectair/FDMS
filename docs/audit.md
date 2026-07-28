@@ -1,35 +1,34 @@
-1. Form-state and validation audit
+1. Form-state and validation audit - COMPLETED 28 July 2026
 
-This should be next.
+Status: Complete.
 
-The CUIW Reset defect shows that reviewing visible controls is insufficient; each form needs its complete state lifecycle checked:
+The audit traced the full state lifecycle of the principal operator forms and controls, including initial values, autofill, manual editing, validation failure, reset, save, cancel, reopen, duplicate, restore and lifecycle actions.
 
-initial open
-default values
-autofill
-manual editing
-validation failure
-Reset
-successful save
-cancel/close
-reopen/edit
-duplicate
-restore from saved data
-
-This should cover:
+Covered:
 
 movement creation and editing for DEP, ARR, LOC and OVR;
 formation creation and element editing;
+movement duplication, retrospective entry and Create From workflows;
 Booking and Booking Profiles;
 Calendar event creation/editing;
-cancellation and reinstatement dialogs;
+cancellation, soft deletion and related recovery stores;
 Admin configuration forms;
-METAR Builder;
-VKB override editors.
+METAR Builder and Admin Weather;
+backup/restore controls.
 
-The objective is to find contradictory defaults, stale hidden fields, reset omissions, fields that overwrite manual input, and forms that claim success despite persistence failure.
+Principal findings:
 
-Priority: High.
+Save & Complete uses divergent, weaker validation and field mapping than ordinary movement save;
+cancellation and deletion write recovery records before proving the underlying mutation succeeded;
+formation-element invalid actual times can silently clear valid values;
+Booking Reset changes the CUIW charging state;
+several forms report success without a reliable durable-persistence result;
+Calendar exposes recurrence, date-span and notification behaviour that is not implemented;
+configuration-dependent controls can silently reset or reinterpret values.
+
+Detailed findings are recorded in docs/audit_findings.md.
+
+Priority: Complete - findings require disposition before final regression.
 
 2. Persistence-result and partial-operation audit
 
@@ -290,12 +289,13 @@ Recommended sequence
 
 The prudent remaining investigation sequence is:
 
-1. Complete dynamic UX audit
-2. Form-state/default/validation audit
-3. Persistence-result and partial-operation audit
-4. Date/time/timezone audit
-5. Cross-dataset integrity audit
-6. Security/data-exposure audit
+1. Persistence-result and partial-operation audit
+2. Date/time/timezone audit
+3. Cross-dataset integrity audit
+4. Control-to-domain trace audit
+5. Security/data-exposure audit
+6. Accessibility and keyboard-operation audit
 7. Performance and realistic-scale audit
 8. Installed-Tauri parity and clean-install/update audit
-9. Final documentation and regression audit
+9. Final backup/restore scenario audit
+10. Final documentation and regression audit

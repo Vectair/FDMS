@@ -101,3 +101,161 @@ General UX integrity
 Diagnostic clear can falsely report success.
 Reports uses inconsistent native dialogs.
 Several minor empty-state and table-layout issues remain.
+3. Form-state and validation audit
+
+Completed 28 July 2026.
+
+This audit traced the complete state lifecycle of the principal operational forms and lifecycle controls, including defaults, autofill, manual edits, validation failures, resets, ordinary saves, Save & Complete, duplication, retrospective entry, cancellation, deletion, configuration changes, METAR handling and backup restoration.
+
+Severity summary:
+
+High: 6
+Medium-high: 1
+Medium: 14
+Low-medium: 1
+
+High-severity findings
+
+1. New movement Save & Complete bypasses the canonical movement builder.
+
+The normal new-movement save path uses the central movement-building and validation routine. Save & Complete separately reconstructs the movement and therefore applies weaker rules.
+
+Confirmed differences include:
+
+invalid time results are not reliably rejected;
+POB and T&G range validation is absent;
+ZZZZ companion-description validation is absent;
+formation data is discarded;
+PIC/captain data is discarded;
+manual WTC selection is ignored and recalculated;
+outcome and companion fields are incompletely mapped.
+
+This can produce a completed movement that could not have been saved through the ordinary path and can silently discard valid operator-entered data.
+
+2. Edit Save & Complete duplicates and weakens ordinary edit validation.
+
+The edit-completion path reconstructs its own patch rather than invoking the ordinary edit-save function.
+
+Confirmed differences include:
+
+DOF validation is omitted;
+invalid time results are not reliably rejected;
+POB and T&G range validation is absent.
+
+ZZZZ and formation checks are retained, but the path is still materially weaker than ordinary Save.
+
+3. Booking Reset changes the CUIW charging state.
+
+The initial Booking form and Reset path do not restore the same defaults. Reset checks both Parking Required and Has CUIW, whereas the initial form leaves Has CUIW unchecked.
+
+Because CUIW affects the calculated charge, Reset can remove the GBP 25 waiver charge without a deliberate operator decision.
+
+4. Cancellation writes its recovery record before proving cancellation succeeded.
+
+The workflow appends the cancelled-sortie snapshot before confirming that the movement status update, formation cascade and booking synchronization succeeded.
+
+Possible inconsistent outcomes include:
+
+a cancellation-log entry exists while the movement remains active;
+the parent movement is cancelled but formation elements are not;
+booking status changes while cancellation fails;
+the UI reports success despite a durable-write failure.
+
+5. Soft deletion writes its recovery snapshot before proving deletion succeeded.
+
+The workflow appends the Deleted Strips snapshot, may clear the booking link, then calls the movement deletion routine without checking each result.
+
+Possible inconsistent outcomes include:
+
+the movement exists in both active and deleted stores;
+the booking link is cleared although deletion fails;
+the movement is deleted but no recoverable snapshot persists;
+the UI reports recoverable deletion when recovery data was not stored.
+
+6. Formation-element actual-time validation can silently erase valid data.
+
+Invalid per-element DEP or ARR actual times are converted to empty strings and the update proceeds. The operator receives no validation error.
+
+Entering an invalid value can therefore clear an existing valid actual time.
+
+Medium-high finding
+
+7. Booking Profile import mutates the in-memory profile collection before persistence is confirmed.
+
+The imported profile set replaces the current in-memory collection before the storage write completes. Storage failures are suppressed and the import can still report success.
+
+Medium-severity findings
+
+8. Movement duplication omits ZZZZ companion-description fields.
+
+The duplicate form does not preserve departure description, arrival description or aircraft-type description companion data. A source movement using ZZZZ can therefore be duplicated with incomplete location information.
+
+9. Movement duplication permits a flight-type change without reconciling type-dependent fields.
+
+The duplicate workflow allows DEP, ARR, LOC or OVR to be changed while retaining source EGOW code, unit code, captain, route and clearance data. Those values may no longer be appropriate for the new movement type.
+
+10. Booking Profile autofill directly overwrites selected fields.
+
+MTOW unit and CUIW are assigned directly from the profile rather than using the anti-stomp mechanism applied to most text fields. Existing manual input can therefore be overwritten.
+
+11. Calendar Add Event defaults to a 45-minute notification although no notification mechanism was identified.
+
+The form presents notifications as operational behaviour, but the saved value appears to be storage-only.
+
+12. Booking Profile save and delete report success without durable confirmation.
+
+The in-memory collection is mutated before persistence and the UI proceeds as though the save or delete succeeded.
+
+13. Calendar create, update and delete report success without durable confirmation.
+
+Calendar state is mutated in memory and storage errors can be suppressed, allowing the current session to look correct while reload reverts the change.
+
+14. Movement, booking and retrospective submissions lack a reliable submission guard.
+
+Rapid repeated activation can invoke the create path more than once. This creates a duplicate-record risk where handlers are synchronous or persistence is delayed.
+
+15. Formation-element movement counts are insufficiently constrained.
+
+T&G, O/S and FIS values are clamped only to a minimum of zero. Very large values are accepted, decimals are silently truncated and malformed values become zero.
+
+16. Formation elements cannot fully represent ZZZZ locations.
+
+ZZZZ is accepted as a valid four-character AD code, but per-element departure and arrival description companions are unavailable.
+
+17. Admin Weather always reports Saved.
+
+The configuration update result is not checked before the Saved status is shown and the live Weather tab is updated.
+
+18. METAR Copy persists the previous observation before clipboard success is known.
+
+The observation is saved first. Clipboard fallback does not verify the return value of execCommand, yet Copied can still be shown.
+
+19. Admin configuration loading uses logical-OR defaults where zero may be valid.
+
+Several values use configuredValue || defaultValue. Valid zero values can therefore be replaced by defaults when the form opens.
+
+20. Changing WTC system can silently reset the alert threshold.
+
+If the previous threshold is not valid for the newly selected WTC system, rebuilding the options leaves the threshold at Off without explicitly warning the operator.
+
+21. A full backup restore leaves the application in a partially refreshed state.
+
+Several views are rerendered immediately, but the operator is then told to reload so all restored subsystems and configuration values are applied. Until reload, the application may contain a mixture of restored storage and stale module-level state.
+
+Low-medium finding
+
+22. METAR Reset does not clear the saved previous observation.
+
+Reset clears the current form but Recall Previous can immediately restore the last copied observation. This may be intended, but the UI does not make the distinction explicit.
+
+Confirmed-sound areas
+
+The ordinary new-movement path has substantial centralized validation.
+The ordinary edit path validates ZZZZ companion fields and formation data.
+Retrospective entry has strong movement-type-specific timing, range and ICAO validation.
+Retrospective AD/FIS defaults and PIC/attribution autofill are non-destructive.
+Duplicate movements correctly clear actual times, outcomes and completed state.
+Duplicate formation elements are reset to PLANNED with actual values removed.
+Most Booking Profile text-field autofill uses anti-stomp behaviour.
+The METAR Builder separates blocking errors from warnings and disables Copy while blocking errors exist.
+Backup restore preflight uses a shared inspection path, blocks unrecognised/non-restorable files, displays record counts and catches import errors.
