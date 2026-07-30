@@ -476,3 +476,213 @@ Booking updates avoid no-op writes.
 Cancelled-sortie append guards against duplicate unreinstated entries.
 Exported backup metadata uses the same inspection path as restore.
 Native export failures are recorded diagnostically.
+5. Date, time and timezone audit
+
+Completed 30 July 2026.
+
+This audit traced date/time behaviour across the operational movement model, movement creation and lifecycle actions, Calendar, History, reporting and exports, and the installed Tauri updater/runtime.
+
+Severity summary:
+
+High: 9
+Medium-high: 8
+Medium: 7
+Total: 24
+
+No Critical finding was assigned. The audit confirmed defects capable of materially misrepresenting operational dates and times, but did not confirm irreversible data loss caused solely by the date/time subsystem.
+
+High-severity findings
+
+1. Operational local/UTC conversion uses a current fixed offset instead of the offset applicable to the movement date.
+
+The conversion model does not resolve Europe/London rules for the entered operational date. A stored or configured offset is applied as though it were valid for every date. Historical and future movements on the opposite side of a BST boundary can therefore be converted by one hour incorrectly.
+
+The same structural weakness means that zero or plus one can be treated as the operational timezone rather than as an explicitly fixed offset, while the UI can imply London civil time.
+
+2. Repeated and missing civil times at BST transitions are not represented safely.
+
+The model cannot distinguish the two occurrences of a local clock time during the repeated hour when BST ends. It also does not identify nonexistent civil times during the spring transition.
+
+A local clock value can therefore resolve to the wrong instant or be accepted even though it did not exist.
+
+3. The movement model cannot represent start and end instants on different dates.
+
+Movements store one DOF plus date-less HH:MM fields. There is no explicit end date or day offset for ATD, ATA, ETD, ETA or overflight entry and leaving times.
+
+A movement from 23:50 to 00:20 cannot be reconstructed deterministically. This affects ordinary, retrospective, duplicated and completed movements and all downstream History, Calendar, reporting and export logic.
+
+4. Save & Complete fabricates actual times from planned times or the current clock.
+
+New and Edit Save & Complete can persist missing actual values using planned values and can fall back to the current clock.
+
+This changes an estimate into an asserted actual operational event without an operator-entered or observed actual time. A historical DOF can also be combined with today's clock time.
+
+5. Booking local times are copied directly into UTC movement fields.
+
+Booking records explicitly store local planned times. Linked movement creation and subsequent Booking edits copy the same digits into movement planned-time fields that are otherwise treated as UTC.
+
+During BST, a Booking for 11:00 local can therefore create or overwrite a strip as 11:00 UTC rather than 10:00 UTC.
+
+6. Primary Calendar month, week and year date keys shift backwards during BST.
+
+Calendar cells are constructed at browser-local midnight and then converted through toISOString(). During BST, local midnight is the previous UTC date.
+
+A visible 1 July cell can therefore query 30 June. Week views can be displaced by one day, and year-view counts can assign records to the wrong date.
+
+7. Multi-day and recurring Calendar events are exposed but not rendered.
+
+Calendar events persist end dates, recurrence and repeat-end dates, but retrieval checks only the original start date.
+
+Multi-day events appear only on day one, and daily, weekly, monthly and annual events do not generate subsequent occurrences. Notifications are also offered and stored without an identified notification mechanism.
+
+8. Monthly Return midnight allocation fabricates event distribution and is incomplete by movement type.
+
+Only LOC movements are detected as crossing midnight. DEP, ARR and OVR movements remain assigned to one DOF.
+
+For a midnight-crossing LOC, T&G and overshoot counts are split approximately in half and all FIS is assigned to the departure date. The data model contains no event timestamps supporting that allocation, so the report presents an inferred distribution as factual.
+
+9. Workstation-clock corrections can leave a movement incorrectly activated.
+
+Startup, interval, focus and visibility reconciliation recover missed forward activation transitions.
+
+However, when an incorrect workstation clock is later corrected backwards, an automatically activated movement is not returned to PLANNED when it falls outside the activation window. A transient clock error can therefore create a lasting lifecycle error.
+
+Medium-high findings
+
+10. Autoactivation combines governing HH:MM values with movement DOF and relies on the single-date model.
+
+Activation checks attach a date-less governing time to DOF. Overnight or incorrectly retained DOF values can therefore activate on the wrong operational date.
+
+The stale-age calculation also derives age from DOF midnight rather than from a complete movement instant.
+
+11. Duration inference treats equal times as 24 hours and reversed clock values as overnight.
+
+Without an explicit date boundary, equal start and end times can be interpreted as a full day, while any end time earlier than the start can be interpreted as next-day.
+
+These are guesses that can silently convert corrections or malformed input into plausible but false durations.
+
+12. Completed formations can contain elements with no actual times.
+
+Completion cascades status to formation elements without enforcing corresponding actual-time invariants for each element.
+
+A parent can contain actual times while one or more elements are marked COMPLETED with blank actual values.
+
+13. Duplication, reinstatement and Deleted Strip restoration wrap clock time without advancing DOF.
+
+Offset calculations produce an HH:MM value modulo 24 hours. They do not carry a day offset or update DOF when crossing midnight.
+
+Reinstating or restoring an old strip can also calculate a current-day planned time while retaining the original historical DOF.
+
+14. Reinstatement uses browser-local time in the UTC movement model.
+
+The reinstatement helper uses browser-local hours and minutes and writes the result directly into movement planned fields.
+
+During BST this can persist a value one hour later than the corresponding UTC operational time. Other workstation timezones can create larger differences.
+
+15. History rolling-period filters interpret UTC movement times as browser-local and use inconsistent event semantics.
+
+Today, 24-hour, 48-hour and 7-day views construct browser-local Date objects from DOF plus operational HH:MM. During BST, the resulting instant is one hour early.
+
+DEP is filtered by departure, ARR by arrival, LOC by departure first and OVR by frequency-entry time. One period selector therefore does not represent one common completion or activity window.
+
+16. Monthly Return summary and XLSX detail evidence can disagree at month boundaries.
+
+The official grid can include a generated next-month portion of an overnight LOC.
+
+The XLSX detail sheet contains only source movements whose original DOF belongs to the selected month and writes those movements unsplit. A total can therefore contain activity with no matching detail row.
+
+17. Cancellation reports group by UTC date while the date controls appear local.
+
+Cancellation timestamps are stored as UTC instants, and the report derives the date from the UTC timestamp. Default range values are generated from browser-local dates.
+
+A cancellation at 00:30 BST can therefore be grouped under the previous UTC date and omitted from a filter for the local civil date on which it was performed.
+
+Medium findings
+
+18. Save & Complete time validation is weaker than ordinary Save.
+
+Invalid time-normalisation results are not consistently treated as blocking in New, Edit and LOC Save & Complete paths.
+
+Malformed values can therefore reach completion persistence and fallback logic.
+
+19. Current-day markers and rollover use inconsistent UTC and local definitions.
+
+The primary Calendar, Historic Calendar, Live Board counters, History Today filter and Reports do not use one canonical operational-day definition.
+
+During BST, several UTC-derived Today markers and rollover checks remain on the previous date until 01:00 local, while other views use browser-local dates.
+
+20. Open-session day rollover refreshes only selected views.
+
+The 45-second tick updates counters, activation, Live Board and timeline. It does not automatically rerender Calendar, History, Historic Calendar, Search/Table or Reports.
+
+If Flite remains open across midnight, different views can refer to different current days until an operator action causes rerendering.
+
+21. Calendar event ranges are not validated and extended properties cannot be edited.
+
+Creation does not reject end dates before start dates, repeat-end dates before start, or same-day end times before start.
+
+The edit modal cannot modify end date/time, all-day state, recurrence, notification or event type.
+
+22. Main History CSV ignores visible Historic Strip Board filters.
+
+The Historic Strip Board can be limited by period, selected Calendar date and structured filters, but the primary History CSV exports every completed movement.
+
+The separate History Search/Table export correctly reapplies its own filters.
+
+23. Movement exports omit timezone and day-offset semantics.
+
+CSV and XLSX files contain DOF plus clock fields but do not state whether times are UTC or local, which offset applied, whether an end time belongs to DOF plus one, or whether an actual value was generated from a planned fallback.
+
+The exported data cannot deterministically reconstruct overnight or DST-boundary operations.
+
+24. Administrative timestamps and filenames are insufficiently explicit.
+
+Updater Last checked is generated at the start of an attempt and overwritten for offline and error results, so it does not mean the last successful check.
+
+It is displayed in workstation-local time without an offset label. History export filenames use the UTC date and can contain yesterday's date during the first hour after local midnight in BST. Undated cancellations bypass report date limits instead of being separated as undated.
+
+Confirmed-sound areas
+
+Native updater timestamps are generated as absolute UTC ISO values.
+The updater Gregorian leap-year rule is correct.
+Update checks do not install automatically.
+Startup, focus and visibility reconciliation correctly recover missed forward transitions after closure, sleep or timer throttling.
+Lifecycle timestamps such as cancellation, deletion, expiry, reinstatement and retrospective-entry time are generally stored as ISO UTC instants.
+Deleted-strip expiry uses elapsed duration rather than civil-day arithmetic.
+History Search/Table date ranges use inclusive lexical comparisons of canonical YYYY-MM-DD strings.
+The Historic Movement Calendar constructs its date grid consistently using UTC arithmetic and does not suffer the primary Calendar's local-midnight toISOString shift.
+Monthly Return row keys and next-date calculation avoid browser-local DST arithmetic.
+Cancellation CSV explicitly labels the absolute timestamp as UTC.
+
+Systemic conclusions
+
+Flite has no single canonical operational-time model.
+
+The application alternates between browser-local Date objects, UTC ISO instants, plain YYYY-MM-DD operational keys, date-less HH:MM values, configured fixed offsets and inferred next-day behaviour.
+
+DOF plus HH:MM is insufficient for operational lifecycle events.
+
+The model cannot distinguish same-day from next-day arrival, the two repeated local times at the end of BST, an impossible spring-transition time, an operator-entered actual from a generated fallback, or the date on which each event in a multi-event movement occurred.
+
+User-facing local time and persisted UTC time are not consistently separated.
+
+Booking and reinstatement write local clocks into UTC fields. History reads UTC clocks as local. Calendar converts local date constructors into UTC date keys. These are inverse forms of the same missing conversion boundary.
+
+Required remediation direction
+
+1. Define one canonical operational-timezone policy, expected to be Europe/London with date-aware timezone rules rather than a current fixed offset.
+2. Represent operational event instants with an explicit date plus time or absolute instant, while retaining DOF separately where operationally required.
+3. Add explicit day-offset or end-date support for movements spanning midnight.
+4. Remove planned and current-clock fallbacks from actual-time persistence unless clearly identified as estimated or system-derived metadata.
+5. Route Booking and reinstatement local values through the same date-aware conversion boundary as movement forms.
+6. Replace local Date plus toISOString Calendar-key generation with direct civil-date string construction.
+7. Implement or remove Calendar recurrence, multi-day rendering and notifications.
+8. Define a factual reporting policy for midnight activity and do not invent per-event allocation where event timestamps are unavailable.
+9. Make History period semantics explicit and consistent across movement types.
+10. Include timezone, day-offset and provenance metadata in operational exports.
+11. Refresh every date-sensitive view on operational-day rollover and detect significant workstation-clock changes.
+12. Add deterministic tests covering GMT/BST boundaries, repeated and missing civil times, month and year rollover, overnight movement types, historical entry and clock correction.
+
+Audit status
+
+The Date, time and timezone audit is complete as an investigation. Its findings require disposition and remediation planning before final regression and release acceptance.

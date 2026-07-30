@@ -95,30 +95,54 @@ This audit should initially produce findings, not immediately build a full Integ
 
 Priority: High before final regression, although implementation may be deferred if the actual data risks are bounded.
 
-4. Date, time and timezone audit
+4. Date, time and timezone audit - COMPLETED 30 July 2026
 
-Flite has unusually extensive date/time logic, and errors here can affect operational interpretation.
+Status: Complete.
 
-The audit should test:
+The audit traced date and time behaviour across the operational movement model, lifecycle actions, Calendar, History, reporting, exports and the installed Tauri runtime.
 
-UTC versus local display and input;
-BST transitions;
-midnight crossings;
-DOF boundaries;
-movements spanning two dates;
-ARR/DEP reciprocal time calculation;
-Calendar date generation;
-History period cutoffs;
-cancellation report local versus UTC dates;
-restore/export timestamps;
-timeline windows ending at 24:00;
-retrospective entries;
-updater timestamps.
+Covered:
 
-The Calendar implementation already constructs dates using a mixture of local Date constructors and toISOString(), which warrants deliberate review around timezone boundaries.
+UTC and local-time input and display;
+BST transitions, including repeated and missing civil times;
+DOF and midnight crossings;
+movements spanning more than one date;
+ARR/DEP reciprocal calculations;
+Save & Complete and retrospective-entry timing;
+duplication, reinstatement and restoration;
+formation actual times;
+Calendar month, week and year generation;
+multi-day events, recurrence and notifications;
+History cutoffs and Historic Calendar grouping;
+Monthly Return and CSV/XLSX exports;
+cancellation report date ranges;
+updater timestamps and open-session day rollover.
 
-Priority: High.
+Consolidated severity:
 
+High: 9
+Medium-high: 8
+Medium: 7
+Total: 24
+
+Principal findings:
+
+Flite does not have one canonical operational-time model;
+local/UTC conversion uses a current fixed offset rather than date-aware Europe/London rules;
+the movement model cannot represent start and end events on different dates;
+Save & Complete can fabricate actual times from planned values or the current clock;
+Booking and reinstatement paths can write local clock values directly into UTC movement fields;
+the primary Calendar shifts visible date keys backwards during BST;
+multi-day and recurring Calendar behaviour is exposed but not implemented;
+History period filters interpret UTC movement times as browser-local values;
+Monthly Return midnight allocation is incomplete and can present invented daily event distribution;
+report summaries and exported detail evidence can disagree at month boundaries;
+workstation-clock corrections can leave movements incorrectly autoactivated;
+exports omit sufficient timezone and next-day semantics.
+
+Detailed findings are recorded in docs/audit_findings.md.
+
+Priority: Complete - the operational time model requires remediation before final regression and release acceptance.
 5. Control-to-domain trace audit
 
 The current pass traced principal controls, but a more systematic audit can map every consequential visible action to its final domain mutation:
@@ -300,12 +324,11 @@ Recommended sequence
 
 The prudent remaining investigation sequence is:
 
-1. Date/time/timezone audit
-2. Cross-dataset integrity audit
-3. Control-to-domain trace audit
-4. Security/data-exposure audit
-5. Accessibility and keyboard-operation audit
-6. Performance and realistic-scale audit
-7. Installed-Tauri parity and clean-install/update audit
-8. Final backup/restore scenario audit
-9. Final documentation and regression audit
+1. Cross-dataset integrity audit
+2. Control-to-domain trace audit
+3. Security/data-exposure audit
+4. Accessibility and keyboard-operation audit
+5. Performance and realistic-scale audit
+6. Installed-Tauri parity and clean-install/update audit
+7. Final backup/restore scenario audit
+8. Final documentation and regression audit
