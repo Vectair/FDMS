@@ -1,4 +1,4 @@
-Audits completed so far
+﻿Audits completed so far
 1. Static operator-facing UX and production-copy audit
 
 This reviewed the visible structure and wording across the principal Flite screens and Admin sections.
@@ -20,10 +20,10 @@ initial checks that principal controls had real handlers
 Main findings:
 
 The Booking page still says booking-to-strip integration is a prototype and future work, despite it already being implemented.
-Admin → Calendar is only a roadmap placeholder.
-Admin → Reports is only a roadmap placeholder.
-Admin → Cancelled is only a roadmap placeholder.
-Admin → Booking combines real Booking Profile management with a future “Booking Rules & Charges” panel.
+Admin â†’ Calendar is only a roadmap placeholder.
+Admin â†’ Reports is only a roadmap placeholder.
+Admin â†’ Cancelled is only a roadmap placeholder.
+Admin â†’ Booking combines real Booking Profile management with a future â€œBooking Rules & Chargesâ€ panel.
 Danger Zone lists future destructive actions that do not exist.
 Clear Diagnostic Error History always reports success, even when clearing fails.
 Admin Overview exposes some developer-oriented storage/runtime information that may belong in Developer.
@@ -53,7 +53,7 @@ Main findings:
 
 High or near-blocking
 Booking Reset changes the CUIW default.
-Initial page load sets “Has CUIW” to unchecked, but Reset changes it to checked. This can remove the £25 waiver charge without deliberate operator action.
+Initial page load sets â€œHas CUIWâ€ to unchecked, but Reset changes it to checked. This can remove the Â£25 waiver charge without deliberate operator action.
 Calendar recurrence is exposed but not implemented.
 The form offers daily, weekly, monthly and annual repeat options, but events are displayed only on their original date.
 Calendar End Date is exposed but not implemented.
@@ -686,3 +686,237 @@ Required remediation direction
 Audit status
 
 The Date, time and timezone audit is complete as an investigation. Its findings require disposition and remediation planning before final regression and release acceptance.
+6. Cross-dataset integrity audit
+
+Completed 30 July 2026.
+
+This audit traced identity, references, lifecycle propagation, secondary-store semantics, audit causality, technical diagnostics, backup/restore effects and startup reconciliation across the complete local data model.
+
+Severity summary:
+
+Critical: 1
+High: 12
+Medium-high: 11
+Medium: 8
+Low-medium: 1
+Total: 33
+
+The 33 findings below are the final consolidated set. Repeated manifestations found in more than one pass have been merged into one finding.
+
+Critical finding
+
+1. Corrupt movement storage can be overwritten with an empty movement dataset during startup.
+
+A movement read or parse failure returns the same null-shaped result used for an absent dataset. Startup then initialises an empty movement array and saves it. Opening the application can therefore destroy the original malformed but potentially recoverable movement payload.
+
+High-severity findings
+
+2. Reusable numeric IDs do not identify one durable entity incarnation.
+
+Movement and booking IDs are generated from the current maximum numeric ID. After deletion or replacement, the highest ID can be reused. Secondary stores and audit retrieval use the numeric ID without a UUID, creation identity or dataset incarnation.
+
+3. Audit history can merge unrelated entities after ID reuse.
+
+Audit event retrieval filters principally by entity domain and numeric ID. A later movement or booking that reuses an old ID can inherit the earlier entity's displayed history.
+
+4. Cancelled Sorties can attach cancellation history to the wrong current movement.
+
+Cancellation records identify the source by reusable movement ID. After deletion, restore, replacement or ID reuse, an old cancellation record can appear to describe a different current movement.
+
+5. Deleted Strips can collide with a later movement using the same ID.
+
+Deleted snapshots retain the old movement ID and can coexist with a new live movement bearing that ID. Restore and operator interpretation cannot distinguish the two entity incarnations reliably.
+
+6. Normal booking creation leaves the reciprocal relationship incomplete.
+
+The created movement receives bookingId, but the booking is not immediately assigned linkedStripId. A standard successful workflow depends on a later startup reconciliation to complete its ordinary relationship.
+
+7. Multiple movements claiming one booking remain operationally live.
+
+Startup reconciliation reports the conflict but does not clear, quarantine or disable the contradictory movement bookingId values. Each movement can continue to synchronise against the same booking.
+
+8. Formation editing can erase element lifecycle state and actual values.
+
+Editing a formation reconstructs its elements as newly planned records. Existing completed, cancelled or active element states and actual times can be lost even when the operator intended only a structural or descriptive edit.
+
+9. Booking deletion with linked-strip cancellation leaves stale movement booking references.
+
+The booking can be deleted while affected movements remain cancelled with bookingId still pointing to the removed booking.
+
+10. Booking-originated strip cancellation bypasses the canonical movement cancellation path.
+
+The booking workflow can directly set movement status to CANCELLED without using the lifecycle path that creates the cancellation snapshot, cascades formation state, synchronises the booking consistently and correlates audit events.
+
+11. Restoring a Deleted Strip preserves a potentially stale booking reference.
+
+The stored movement snapshot can be recreated with its old bookingId even when that booking is missing, reused or now linked to another movement.
+
+12. Legacy movement-only restore leaves every secondary dataset untouched.
+
+Replacing the complete movement collection through a legacy backup does not clear or reconcile bookings, Cancelled Sorties, Deleted Strips, Calendar semantics or audit entity references. The restored movements can therefore collide with the current installation's unrelated secondary records.
+
+13. Full restore can expose a mixed pre-restore and post-restore application state.
+
+Restore writes several datasets but reloads only the movement cache immediately. Bookings, configuration, Calendar, Booking Profiles and VKB can continue using pre-restore memory until application reload, and a mutation in that interval can overwrite restored storage with stale cached data.
+
+Medium-high findings
+
+14. Some deterministic movement-booking repairs require a second startup.
+
+Reconciliation can clear an invalid booking linkedStripId without then assigning the one valid movement claimant during the same run. A second startup is needed to finish a repair that was already deterministically available.
+
+15. Booking-originated cancellation can create no Cancelled Sortie recovery record.
+
+Because it bypasses the canonical cancellation path, a movement can be cancelled without the immutable cancellation snapshot required for later reinstatement and investigation.
+
+16. Reinstatement intentionally leaves the booking lifecycle divergent.
+
+A cancelled movement can be reinstated while the linked booking remains cancelled. The relationship remains attached but the two lifecycle states no longer agree.
+
+17. Multiple Deleted Strip snapshots can remain live for one movement ID.
+
+The recovery store can contain more than one unexpired deletion record for the same reusable movement ID. Restore selection and historical interpretation become ambiguous.
+
+18. Calendar suppression trusts only the movement-side booking pointer.
+
+Movement-derived Calendar entries are hidden where movement.bookingId exists, even when the booking is missing or does not reciprocally link to that movement. One stale pointer can therefore remove the movement from Calendar without a valid booking entry replacing it.
+
+19. One lifecycle operation is not correlated across movement, formation and booking.
+
+Movement cancellation can correlate its parent and formation cascade, but the subsequent booking update receives a separate correlation ID. Completion, editing, creation and reconciliation similarly fragment one causal operation into unrelated audit events.
+
+20. Automatic startup reconciliation is recorded as local-user activity.
+
+Generic audit defaults are used for reconciliation repairs. The ledger therefore attributes system-generated repairs to the operator and does not distinguish detected corruption from deliberate editing.
+
+21. Nested audit changes retain inadequate before/after evidence.
+
+Object and array changes are detected, but compact values such as [object] and [array:N] can be identical before and after. Schedule and formation changes can therefore be recorded without evidence of what actually changed.
+
+22. Diagnostic deduplication can merge distinct failures.
+
+The deduplication key uses type, message and source but ignores severity, stack, context, entity and storage key. Two different dataset failures within the window can collapse into one entry retaining only the first context.
+
+23. Full-backup validation checks top-level dataset shape rather than cross-dataset integrity.
+
+A backup can pass validation while containing duplicate IDs, contradictory movement-booking links, malformed record internals, stale recovery references or audit identity ambiguity.
+
+24. Startup does not detect duplicate movement or booking IDs.
+
+Next-ID calculation uses the maximum value but does not validate uniqueness. Relationship lookups then resolve duplicate IDs by array order.
+
+Medium-severity findings
+
+25. Audit validation is advisory and event IDs are collision-unchecked.
+
+Structurally incomplete events can still be appended. Event and correlation IDs are generated probabilistically or accepted from callers without a uniqueness check.
+
+26. Central audit coverage is incomplete for bulk and secondary mutations.
+
+Bulk booking replacement, configuration changes and some recovery-store operations can alter meaningful persisted state without a corresponding central audit event.
+
+27. The diagnostic report omits stored stack traces and context.
+
+Persistent diagnostic entries retain stack and bounded context, but the principal generated report and Developer display show mainly time, type, message and source. The evidence most useful for identifying the affected dataset or entity is omitted.
+
+28. Bootstrap-stage and reconciliation summaries are session-only.
+
+Detailed startup stages and the consolidated reconciliation result disappear after restart or banner dismissal. There is no durable record of the checks executed, repairs made or conflicts left unresolved.
+
+29. Diagnostic-log corruption is treated as an empty log.
+
+Malformed diagnostic storage returns an empty logical store. The next diagnostic event can overwrite the corrupt payload, removing the evidence of earlier failures.
+
+30. Booking Profile startup does not canonicalise stored keys or report collisions.
+
+Profiles are loaded under literal object keys. Hyphenated, spaced and canonical variants that normalise to the same registration can coexist, leaving some entries hidden or unreachable.
+
+31. Local startup migrations persist changes without migration provenance.
+
+Movement normalisation, booking schedule migration, configuration compatibility and VKB migration can rewrite stored state merely by launching a newer version, without a durable system migration event identifying affected records.
+
+32. Calendar year totals omit movement-derived entries.
+
+Month and week views include movements, but year totals count stored Calendar events and bookings without equivalent movement-derived items, producing inconsistent summaries.
+
+Low-medium finding
+
+33. Standalone Calendar events are semantic records rather than relational records.
+
+Calendar events carry no durable movement or booking entity reference. Their operational relationship is inferred only from human-readable content, so startup cannot validate or reconcile them against primary datasets.
+
+Systemic conclusions
+
+Stable identity is missing.
+
+Numeric IDs are suitable display identifiers but not sufficient durable identity. Every primary entity needs an immutable UUID or incarnation identifier, and all secondary stores and audit events must reference it.
+
+Lifecycle authority is fragmented.
+
+Movements, bookings, formations and recovery stores do not share one canonical lifecycle service. UI-specific paths can bypass cancellation, completion, synchronisation and recovery behaviour.
+
+Integrity checking is too narrow.
+
+Startup checks only movement-booking pointers and planned activation. Duplicate IDs, recovery references, audit identity, Calendar suppression, profile collisions and formation lifecycle invariants are not checked.
+
+Restore is not an integrity boundary.
+
+Full restore can overlay rather than recreate a snapshot, legacy restore replaces only movements, and module caches can remain stale. Restore must be transactional, verified and followed by complete cache reload and integrity validation.
+
+Evidence is not sufficiently causal or durable.
+
+Audit events do not consistently identify the real actor, operation or entity incarnation. Diagnostic and reconciliation summaries do not preserve enough post-restart evidence.
+
+Required remediation direction
+
+1. Add immutable entity UUIDs/incarnation IDs to movements and bookings and propagate them to every reference-bearing secondary store.
+2. Retain numeric IDs only as operator-facing sequence numbers.
+3. Introduce one canonical lifecycle service for movement, formation and booking changes.
+4. Make relationship changes transactional or provide verified compensating rollback.
+5. Expand startup integrity into a registry of bounded checks with safe automatic repair only for deterministic cases.
+6. Quarantine ambiguous conflicts and unsafe datasets instead of leaving them operationally live.
+7. Preserve corrupt raw payloads and block mutation until recovery or explicit reset.
+8. Make restore an atomic snapshot operation with pre-restore recovery point, write verification, rollback and complete cache reload.
+9. Give audit and diagnostic events operation IDs, entity-incarnation IDs, explicit actor/source identity and useful bounded nested diffs.
+10. Persist startup migration and reconciliation summaries.
+11. Add failure-injection and contradictory-dataset tests covering every relationship family.
+
+Manual-test requirements
+
+1. Delete the highest movement ID, create another movement and inspect audit, cancellation and deletion histories.
+2. Create a booking-linked movement and verify whether both reciprocal pointers exist before restart.
+3. Seed two movements claiming one booking and test editing, cancellation and Calendar visibility.
+4. Edit a formation containing active, completed and cancelled elements.
+5. Delete a booking using each linked-strip option and inspect both directions of the relationship.
+6. Cancel a linked strip from the booking workflow and inspect Cancelled Sorties and formation elements.
+7. Restore Deleted Strips with missing, reused and conflicting booking IDs.
+8. Restore a legacy movement-only backup into a populated installation.
+9. Restore a full backup and mutate bookings or configuration before reload.
+10. Seed duplicate movement and booking IDs and launch the application.
+11. Trigger startup reconciliation and compare actor, source and correlation IDs across resulting events.
+12. Edit a booking schedule and same-size formation and inspect before/after audit evidence.
+13. Generate same-message diagnostic errors for different datasets within five seconds.
+14. Corrupt the movement, cancellation, deletion and diagnostic stores independently and launch.
+15. Seed Booking Profiles under multiple keys that normalise to the same registration.
+16. Dismiss the reconciliation banner, restart and inspect retained evidence.
+
+Confirmed-sound controls
+
+The ordinary movement and booking relationship repair clears pointers to missing primary records.
+A single unambiguous movement claimant can repair a missing booking-side pointer.
+Booking update no-ops are generally suppressed.
+Canonical movement cancellation correlates parent and formation events.
+Canonical movement completion and cancellation synchronise the linked booking.
+Cancelled Sorties guards against duplicate unreinstated records in the ordinary canonical path.
+Deleted Strip expiry uses elapsed-duration retention.
+Booking Profiles copy reusable template data rather than retaining live references to created records.
+Global JavaScript errors and unhandled promise rejections are captured persistently when storage functions.
+Diagnostic entries are bounded, retained and deduplicated.
+Backup preview and import share one inspection path.
+Unsupported future backup versions are blocked.
+Unknown backup storage keys are not restored.
+Startup reconciliation and activation catch-up run before the first operational render.
+
+Audit status
+
+The Cross-dataset integrity audit is complete as an investigation. Its findings require architecture and remediation planning before final regression and release acceptance.

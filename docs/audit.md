@@ -74,27 +74,60 @@ storage-unavailable mode is not treated as a blocking or read-only application s
 Detailed findings are recorded in docs/audit_findings.md.
 
 Priority: Complete - the systemic persistence architecture requires remediation before final regression.
-3. Cross-dataset integrity audit
+3. Cross-dataset integrity audit - COMPLETED 30 July 2026
 
-The canonical Data Inventory already established that only booking-to-movement links receive active reconciliation.
+Status: Complete.
 
-A targeted audit should check:
+The audit examined identity, reference and lifecycle consistency across movements, formations, bookings, Cancelled Sorties, Deleted Strips, Calendar, Booking Profiles, VKB/configuration, the central audit ledger, diagnostics, backup/restore and startup reconciliation.
 
-bookings whose linked movement no longer exists;
-movements referring to missing booking IDs;
-cancelled log entries pointing to missing or non-cancelled movements;
-deleted-strip snapshots with stale booking IDs;
-duplicate movement IDs;
-duplicate booking IDs;
-malformed formation parent/element relationships;
-VKB overrides that no longer correspond to valid datasets;
-calendar entries linked to missing bookings or movements;
-restored data containing contradictory references.
+Passes completed:
 
-This audit should initially produce findings, not immediately build a full Integrity Checker.
+primary identity and reference relationships;
+movement, booking and formation lifecycle integrity;
+secondary stores and semantic references;
+audit identity and causality;
+diagnostic and recovery evidence;
+backup, restore and movement replacement;
+startup reconciliation coverage;
+consolidation, deduplication and final severity review.
 
-Priority: High before final regression, although implementation may be deferred if the actual data risks are bounded.
+Consolidated severity:
 
+Critical: 1
+High: 12
+Medium-high: 11
+Medium: 8
+Low-medium: 1
+Total: 33
+
+Principal findings:
+
+reusable numeric IDs do not identify a specific entity incarnation;
+audit, cancellation and deletion histories can attach to a later unrelated entity after ID reuse;
+normal booking creation leaves its reciprocal movement link incomplete until startup reconciliation;
+duplicate movements claiming one booking remain operationally live;
+some deterministic booking-link repairs require a second startup;
+formation editing reconstructs elements and can erase lifecycle status and actuals;
+booking-originated cancellation bypasses the canonical movement cancellation, formation cascade and recovery path;
+booking deletion and unlinking can leave stale one-sided references;
+Cancelled Sorties and Deleted Strips resolve source movements by reusable numeric ID alone;
+restoration and reinstatement can preserve stale booking references or intentionally divergent lifecycle state;
+Calendar suppression trusts one-sided movement booking references;
+audit correlation stops at service boundaries and automatic reconciliation is attributed to the local user;
+nested audit changes are detected but do not retain useful before/after evidence;
+diagnostic and reconciliation summaries are not durable enough for post-restart investigation;
+full and legacy restore can create hybrid cross-dataset states;
+startup reconciliation checks only movement-booking links and planned activation;
+duplicate primary IDs, secondary-store conflicts and ambiguous recovery references are not checked at startup;
+corrupt primary and recovery stores can be overwritten with empty state during startup.
+
+Systemic conclusion:
+
+Flite does not yet have stable entity-incarnation identity or a general cross-dataset integrity boundary. Existing reconciliation is narrow, repair and restore are not transactional, and secondary stores can attach historical or recovery evidence to the wrong current record after deletion, restore or ID reuse.
+
+Detailed findings are recorded in docs/audit_findings.md.
+
+Priority: Complete - identity, transactional restore and integrity-state remediation are required before final regression and release acceptance.
 4. Date, time and timezone audit - COMPLETED 30 July 2026
 
 Status: Complete.
@@ -148,13 +181,13 @@ Priority: Complete - the operational time model requires remediation before fina
 The current pass traced principal controls, but a more systematic audit can map every consequential visible action to its final domain mutation:
 
 visible control
-→ event handler
-→ validation
-→ domain/service call
-→ persistence
-→ audit event
-→ diagnostic failure path
-→ UI acknowledgement
+â†’ event handler
+â†’ validation
+â†’ domain/service call
+â†’ persistence
+â†’ audit event
+â†’ diagnostic failure path
+â†’ UI acknowledgement
 
 This is particularly valuable for:
 
@@ -263,7 +296,7 @@ Priority: High before release.
 
 10. Backup and restore destructive-behaviour audit
 
-Items 1–3 established coverage and validation, but a final scenario-based audit should still test:
+Items 1â€“3 established coverage and validation, but a final scenario-based audit should still test:
 
 backup with every dataset populated;
 restoring into a non-empty installation;
