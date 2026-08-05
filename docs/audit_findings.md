@@ -1,4 +1,4 @@
-﻿Audits completed so far
+Audits completed so far
 1. Static operator-facing UX and production-copy audit
 
 This reviewed the visible structure and wording across the principal Flite screens and Admin sections.
@@ -920,3 +920,620 @@ Startup reconciliation and activation catch-up run before the first operational 
 Audit status
 
 The Cross-dataset integrity audit is complete as an investigation. Its findings require architecture and remediation planning before final regression and release acceptance.
+
+7. Control-to-domain trace audit
+
+Completed 5 August 2026.
+
+This audit traced consequential visible controls through their complete execution path:
+
+visible control
+-> event handler
+-> validation
+-> domain or service mutation
+-> persistence
+-> audit event
+-> diagnostic failure handling
+-> UI acknowledgement
+
+Passes completed:
+
+movement creation, editing, duplication, retrospective entry and Create From;
+movement lifecycle and status-transition controls;
+cancellation, deletion, reinstatement and restore;
+Booking, linked-strip and Calendar controls;
+Admin, configuration, backup/restore and import/export controls;
+cross-path consistency, duplicate activation, stale state, partial failure and recovery.
+
+Severity summary:
+
+Critical: 8
+High: 27
+Medium-high: 5
+Medium: 2
+Total: 42
+
+The 42 findings below are the final consolidated set. Repeated manifestations found across multiple passes have been merged.
+
+Critical findings
+
+1. The persistence boundary cannot prove durable success.
+
+The shared storage functions do not provide a result-bearing contract. A write may succeed, throw, be caught and suppressed by a dataset-owning module, or silently do nothing when localStorage is unavailable.
+
+Controls commonly interpret an in-memory mutation or non-null return value as successful persistence.
+
+The operator can therefore receive a success message and see changed state on screen even though the change will disappear after reload or restart.
+
+This affects movements, bookings, configuration, Booking Profiles, Calendar events, recovery stores, diagnostics and legacy restore.
+
+2. Consequential controls directly orchestrate non-transactional multi-store operations.
+
+The UI directly sequences operations such as:
+
+booking creation plus strip creation;
+movement completion plus formation cascade plus Booking update;
+cancellation plus cancellation-log append plus formation cascade plus Booking update;
+deletion plus recovery snapshot plus Booking unlink plus movement removal;
+reinstatement plus timing recalculation plus cancellation-log mutation;
+restore plus movement insertion plus timing update plus recovery-entry removal;
+Booking edits propagated to one or more strips.
+
+There is no transaction, rollback, compensating command or durable incomplete-operation record.
+
+A failure after any intermediate step can leave contradictory datasets with no automated way to identify which step failed.
+
+3. Lifecycle commands are duplicated and do not enforce one set of invariants.
+
+Completion can occur through:
+
+the canonical Complete lifecycle control;
+New Save & Complete;
+LOC Save & Complete;
+Edit Save & Complete;
+retrospective completed entry.
+
+Activation can occur through:
+
+creation-time automatic activation;
+the Active control;
+inline actual-time entry;
+startup or timer reconciliation.
+
+Cancellation can occur through:
+
+the movement cancellation control;
+Booking cancellation;
+Booking deletion with linked-strip cancellation;
+direct status mutation.
+
+These pathways apply different validation, timing, formation, Booking, audit and recovery behaviour.
+
+Movement status therefore does not prove that all required lifecycle side effects occurred.
+
+4. Full backup restore is non-atomic and can create a hybrid installation.
+
+Full restore writes datasets sequentially with no staging, rollback or commit marker.
+
+Datasets absent or null in the backup are retained locally rather than cleared. Existing dated generic-overflight keys absent from the backup are also retained.
+
+A restore can therefore combine some restored datasets, some current datasets, old dynamic keys and partially written data if a later write fails.
+
+The operation is described as a restore but behaves partly as an overlay or merge.
+
+5. Restore does not reliably replace running application state.
+
+After full restore, only the movement store is explicitly reinitialised.
+
+Bookings, Calendar events, Booking Profiles and other module-level caches can continue using pre-restore objects. Open modals and drawers can also retain references to entities from before the restore.
+
+Saving one of those stale editors can write old data back into the restored session.
+
+A complete application restart or explicit invalidation of every store and editor is required.
+
+6. Soft-delete restoration can destroy both the movement and its recovery snapshot.
+
+Restoring a Deleted Strip first inserts the movement into live memory, then removes the recovery entry.
+
+The movement insertion can be reported as successful even if it was not durably persisted. The subsequent Deleted Strips write may succeed.
+
+The resulting failure sequence is:
+
+movement inserted only in memory;
+Deleted Strips entry durably removed;
+application restarts;
+restored movement disappears;
+recovery snapshot is also gone.
+
+This is a confirmed complete-data-loss pathway.
+
+7. Booking and linked-strip creation are not one verified operation.
+
+Booking creation writes the Booking and movement independently.
+
+The movement receives bookingId, but the Booking is not immediately assigned linkedStripId. Normal successful creation therefore begins with a one-sided relationship and relies on a later startup reconciliation.
+
+Failure can leave:
+
+a Booking without a strip;
+a strip referencing a missing Booking;
+duplicate Booking and strip pairs after repeated submission;
+or a success message after one or both writes were not durable.
+
+8. Flite has no general integrity or recovery boundary.
+
+Startup reconciliation checks mainly Booking-to-movement pointers and planned activation.
+
+It does not validate or repair:
+
+lifecycle status against required actual times;
+missing cancellation records;
+movement and formation status divergence;
+reinstatement-log state;
+live movements coexisting with Deleted Strips snapshots;
+Booking and movement lifecycle mismatch;
+duplicate IDs;
+duplicate submissions;
+stale Calendar suppression;
+partial restore;
+stale module caches;
+incomplete multi-store commands.
+
+The system cannot distinguish deliberate unusual state from an interrupted or partially failed command.
+
+High-severity findings
+
+9. Save & Complete controls bypass canonical Save validation and mapping.
+
+New, LOC and Edit Save & Complete reconstruct movement data separately rather than invoking the ordinary validated builder and canonical completion command.
+
+Depending on the path, this can:
+
+accept values rejected by ordinary Save;
+omit fields;
+discard formation or PIC information;
+fail to enforce ZZZZ companion fields;
+weaken range and time validation;
+fabricate actuals from planned values or the current clock;
+bypass Booking completion synchronisation.
+
+10. Ordinary edits can report success after failed or partial updates.
+
+Inline and full Edit paths contain unchecked secondary updates for:
+
+timing recalculation;
+status changes;
+Booking synchronisation;
+follow-up field corrections.
+
+Some handlers continue to rerender, close and report success when the primary movement update returned no movement.
+
+Booking synchronisation can also receive a stale or pre-operation object rather than an explicit verified final state.
+
+11. Status transitions are multi-step and incompletely synchronised.
+
+Planned to Active, Active to Planned and Complete contain separate status and timing writes.
+
+Secondary timing writes are generally unchecked. Returning a movement to PLANNED does not synchronise the linked Booking.
+
+Manual completion performs Booking synchronisation and formation cascade, but these are not atomic with the master status change.
+
+12. ACTIVE status has different evidential meaning depending on the control used.
+
+Creation-time automatic activation can set ACTIVE without recording an actual activation time.
+
+Manual activation records an actual time for DEP, LOC and OVR.
+
+Inline actual-time activation directly patches status and bypasses the lifecycle function.
+
+The same ACTIVE status can therefore represent materially different operational evidence.
+
+13. Booking cancellation and deletion bypass canonical movement cancellation.
+
+Booking-driven linked-strip cancellation directly changes movement status to CANCELLED.
+
+It does not reliably:
+
+append a Cancelled Sorties snapshot;
+capture a reason;
+emit the dedicated cancellation audit action;
+cascade formation elements;
+use the established cancellation correlation;
+preserve the canonical recovery pathway.
+
+A movement can be CANCELLED without the evidence and side effects expected from movement cancellation.
+
+14. Reinstatement and Deleted Strip restoration use browser-local time in UTC movement fields.
+
+Recovery-time calculation uses browser-local hours and minutes and writes the resulting clock value directly into movement planned-time fields.
+
+During BST this can introduce a one-hour error. A workstation in another timezone can introduce a larger error.
+
+The same calculation compares time-of-day values without complete dates and fails across midnight.
+
+15. Recovery can produce PLANNED movements containing stale actual times.
+
+Cancelled-strip reinstatement and restoration of formerly ACTIVE Deleted Strips preserve the snapshot's actual-time fields while changing status to PLANNED.
+
+This can produce movements with PLANNED status, existing actual times and a new planned start time.
+
+The result conflicts with other replanning pathways and can affect sorting, counters, display and later lifecycle actions.
+
+16. Formation reinstatement can revive independently cancelled aircraft.
+
+Reinstatement converts every currently CANCELLED formation element back to PLANNED.
+
+It does not compare current elements with the immutable pre-cancellation snapshot to distinguish elements cancelled by the master cancellation from elements already independently cancelled beforehand.
+
+An aircraft intentionally removed before the master cancellation can therefore be unintentionally reinstated.
+
+17. Cancellation and deletion logs can claim recovery records that were not stored.
+
+Cancelled-sortie and Deleted Strips append functions do not return durable outcomes.
+
+Subsequent audit events can record the intended recovery-entry ID even if the recovery store was not written.
+
+The ledger can therefore state that a cancellation or deletion is recoverable when no durable recovery record exists.
+
+18. Cancellation reasons can be rewritten without audit history.
+
+Cancellation reason and free-text note edits overwrite mutable fields in the Cancelled Sorties store.
+
+The previous value, editor, change timestamp and before-and-after diff are not recorded in the central audit ledger.
+
+The immutable movement snapshot does not preserve the original cancellation reason.
+
+19. Booking edits can partially propagate and use contradictory relationship cardinality.
+
+A Booking edit is written first and then propagated to every movement whose bookingId matches.
+
+The system therefore treats Booking-to-movement as one-to-many during editing, while the Booking schema has one linkedStripId and startup reconciliation treats multiple movements claiming one Booking as a conflict.
+
+Partial propagation is not detected or rolled back.
+
+20. Booking local time is copied directly into UTC movement fields.
+
+Booking fields are explicitly represented as local time.
+
+Creation and edit propagation copy the same digits directly into movement planned-time fields that the rest of the movement model treats as UTC.
+
+During BST, a Booking for 14:00 local can create or overwrite a movement as 14:00 UTC instead of 13:00 UTC.
+
+21. LOC Booking creation and editing can collapse ETD and ETA to one time.
+
+For LOC Bookings, the Booking arrival time can be assigned to both depPlanned and arrPlanned.
+
+No canonical duration recalculation follows.
+
+A valid LOC can therefore be created or edited into a zero-duration movement.
+
+22. Booking-created strips use a hardcoded wake-turbulence category.
+
+Booking-created strips are assigned L (ICAO) regardless of the aircraft type or configured WTC system.
+
+This bypasses the normal type-to-WTC resolver and can create incorrect operational wake-turbulence information.
+
+23. Calendar suppression trusts one-sided or stale Booking references.
+
+Calendar movement suppression is based on the presence of movement.bookingId, not on a verified reciprocal link.
+
+A stale pointer can hide a movement even when the Booking is missing.
+
+A cancelled Booking is hidden from Calendar, while an active movement retaining that Booking pointer can also be suppressed, causing neither item to appear.
+
+24. Configuration controls can acknowledge undurable changes.
+
+Configuration updates change live configuration and save through a resultless or suppressed-error persistence path.
+
+The UI can report success while reload restores the previous configuration.
+
+This is operationally significant because configuration controls timing behaviour, automatic activation, WTC and display policy.
+
+25. Calendar controls can acknowledge undurable changes.
+
+Calendar-event creation, editing and deletion mutate the live collection before persistence is confirmed.
+
+The UI can display the changed Calendar and report success even though the event will revert after reload.
+
+26. Booking Profile controls can acknowledge undurable changes.
+
+Booking Profile save, delete and import mutate live profile state before durable persistence is confirmed.
+
+Import can report records as imported when they exist only in memory.
+
+27. Audit events can contradict the durable primary datasets.
+
+Movement and Booking audit events may be appended after primary writes that did not durably persist.
+
+Some operations write audit or recovery evidence before the primary mutation. Others omit correlation across service boundaries.
+
+The audit ledger records mutation attempts and diffs, but it is not a verified transaction journal.
+
+28. Restoring the audit dataset can erase recent audit history.
+
+Full restore writes the audit dataset from the backup.
+
+This can replace:
+
+audit events produced after the backup;
+evidence relating to the restore process itself if recorded before the audit key is replaced.
+
+The application has no separate immutable installation-level restore journal or archive of the pre-restore ledger.
+
+29. No concurrency or stale-editor protection exists.
+
+Entities have timestamps but update commands do not require an expected revision or updatedAtUtc.
+
+An editor opened against older data can overwrite newer changes made through:
+
+inline editing;
+another modal;
+Booking synchronisation;
+automatic activation;
+another application window;
+or a restore.
+
+There is no optimistic-concurrency warning.
+
+30. Consequential commands lack idempotency and duplicate-submission protection.
+
+Creation and destructive handlers do not consistently disable their controls or use an operation token.
+
+Rapid repeated activation can create:
+
+duplicate movements;
+duplicate Bookings and strips;
+repeated cancellation attempts;
+repeated recovery snapshots;
+repeated imports or restores.
+
+31. Multiple application windows can lose writes and reuse IDs.
+
+Whole-array datasets and in-memory next-ID counters are not protected by cross-window locking, revision comparison or atomic ID reservation.
+
+Two Flite windows can load the same state, generate the same next ID and overwrite each other's subsequent changes.
+
+This requires packaged-runtime confirmation but follows directly from the current persistence and ID-allocation design.
+
+32. Legacy restore can create widespread cross-dataset conflicts.
+
+Legacy restore replaces movements only and retains every current non-movement dataset.
+
+Existing Bookings, Cancelled Sorties, Deleted Strips, Calendar records and audit references may then point to removed movements or collide with imported movement IDs.
+
+No mandatory post-import integrity scan or reconciliation is performed.
+
+33. Restore success is not verified by readback.
+
+Full restore records keys in restoredKeys immediately after calling the write function.
+
+It does not reread each key, compare stored values, verify counts or prove that every module loaded the restored state.
+
+The returned success result therefore represents attempted writes rather than verified restoration.
+
+34. Correlated audit events do not prove command completeness.
+
+Some lifecycle operations use a shared correlation ID, but the audit model does not declare the complete set of expected steps.
+
+A correlation can contain whichever events were successfully emitted without revealing that a recovery snapshot, Booking update or formation cascade is missing.
+
+A command-level started, completed or incomplete record is required.
+
+35. Status alone is insufficient to establish lifecycle completeness.
+
+A COMPLETED movement may lack required actual times, Booking completion or completed formation elements.
+
+A CANCELLED movement may lack a cancellation record, cancellation reason, Booking cancellation or formation cascade.
+
+An ACTIVE movement may lack an actual activation time.
+
+Lifecycle integrity cannot be validated from status alone.
+
+Medium-high findings
+
+36. Partial outcomes cannot be represented clearly to the operator.
+
+The UI generally collapses a multi-step command into one success or failure toast.
+
+It cannot present a structured result such as:
+
+movement cancelled successfully;
+formation cascade completed;
+Booking update failed;
+recovery action required.
+
+Technical diagnostics are recorded separately and are not connected to the initiating control through a visible operation ID.
+
+37. Startup reconciliation reports attempted repairs as completed repairs.
+
+Reconciliation counters are incremented after mutation functions are called even though those functions cannot prove durable persistence.
+
+The integrity banner can therefore report a repaired relationship that will reappear after restart.
+
+38. Calendar and Profile import and export controls have weaker acknowledgement and audit than full backup export.
+
+Booking Profile export directly triggers a browser download and reports success without a detailed save result.
+
+Profile import is merge-only, has permissive structural validation, no conflict preview, no rollback and no batch audit.
+
+Calendar events also lack central create, edit and delete audit events.
+
+39. Deleted Strips expiry purge is silent and unaudited.
+
+Expired recovery entries are removed on initialisation and rendering.
+
+The final destruction of the retained snapshot is not recorded with movement ID, purge time or reason.
+
+Successful purge persistence is also not verified.
+
+40. Developer diagnostics are not reliable restore-verification evidence.
+
+Some diagnostic record counts inspect envelope keys rather than the contained record arrays.
+
+The panel also combines in-memory and storage-derived values, which may refer to different states after restore.
+
+It cannot currently verify that every restored dataset matches the backup and has been reloaded.
+
+Medium findings
+
+41. Calendar year counts omit eligible movement entries.
+
+Month and week views can show eligible movement events, while year-view item counts include only Bookings and general Calendar events.
+
+A month can therefore show zero items in year view despite containing movements visible in month view.
+
+42. Calendar and Booking editors cannot consistently clear values.
+
+Several edit handlers use newValue or existingValue fallback behaviour.
+
+An intentionally blank value is interpreted as retain the old value, while other fields allow clearing.
+
+This creates inconsistent edit semantics and can leave stale Booking notes, times or movement fields.
+
+Confirmed-sound controls
+
+The audit also confirmed several sound design elements:
+
+ordinary New Movement Save has substantial centralised validation;
+full-backup preflight blocks unrecognised, malformed and unsupported future formats before writing;
+dynamic generic-overflight restore keys are strictly allowlisted and validated;
+backup export distinguishes saved, cancelled, browser-download and fallback results;
+backup metadata is generated through the same inspection path used for restore;
+canonical manual completion does not substitute planned estimates as actuals;
+cancellation applies one correlation ID to the master cancellation and formation cascade;
+cancellation preserves already-completed formation elements;
+Cancelled Sorties current-state filtering separates reinstated and deleted entries;
+Deleted Strip restore rejects expired records and active ID collisions;
+Booking reconciliation conservatively refuses to choose among multiple claiming movements;
+diagnostic-log clearing is intentionally isolated from operational and audit data.
+
+Systemic conclusions
+
+The UI is acting as the domain-command layer.
+
+Visible handlers directly coordinate validation, lifecycle policy, persistence, related-record updates, audit and acknowledgement.
+
+This has caused the same operational action to acquire different semantics depending on the button used.
+
+In-memory state is treated as durable state.
+
+Most controls acknowledge whatever is visible after mutation and rerender.
+
+Because the render reads the same mutated memory, it is not independent verification of persistence.
+
+Audit correlation is not transaction evidence.
+
+A correlation ID links events that were emitted. It does not prove that every expected command step occurred or persisted.
+
+Status is not sufficient lifecycle evidence.
+
+ACTIVE, COMPLETED and CANCELLED do not consistently imply the corresponding actual times, formation state, Booking state, recovery record or canonical audit event.
+
+Startup repair is too narrow.
+
+Booking-pointer reconciliation cannot compensate for incomplete lifecycle commands, recovery conflicts, hybrid restores, duplicate submissions or stale editor state.
+
+Required remediation direction
+
+Phase 1 - Persistence and degraded-mode boundary
+
+1. Make every physical write return or throw an explicit result.
+2. Treat unavailable storage as a blocking failure, not an empty installation.
+3. Verify persisted values through readback where operationally practical.
+4. Distinguish durable success, failure and degraded persistence in the UI.
+5. Block further operational writes after a critical persistence failure until integrity is restored.
+
+Phase 2 - Authoritative domain commands
+
+Introduce one command for each consequential operation, including:
+
+create movement;
+edit movement;
+activate movement;
+return movement to planned;
+complete movement;
+cancel movement;
+create Booking with strip;
+edit Booking and linked strip;
+delete Booking;
+delete movement;
+reinstate cancelled movement;
+restore Deleted Strip;
+restore session.
+
+UI handlers should collect input and display the returned outcome. They should not directly sequence stores.
+
+Phase 3 - Transaction and incomplete-operation handling
+
+For commands affecting more than one dataset:
+
+1. generate one operation ID;
+2. record the expected steps;
+3. stage or snapshot affected state;
+4. perform each step;
+5. verify results;
+6. roll back or persist an explicit incomplete-operation record;
+7. expose retry or repair controls;
+8. append one command-level completion or failure event.
+
+Phase 4 - Lifecycle and temporal unification
+
+1. Route every completion path through one completion policy.
+2. Route every cancellation path through one cancellation policy.
+3. Route every activation path through one activation policy.
+4. Define required actual-time, formation, Booking and audit invariants for each status.
+5. Route Booking and recovery local-time values through the canonical date-aware UTC conversion boundary.
+6. Remove zero-duration LOC creation and uncontrolled planned-to-actual substitution.
+
+Phase 5 - Identity, concurrency and idempotency
+
+1. Replace reusable numeric-only identity with stable entity-incarnation IDs.
+2. Add entity revisions or expected-update timestamps.
+3. Reject stale saves with an operator-visible conflict.
+4. Add command idempotency tokens.
+5. Prevent duplicate activation of submit and destructive controls.
+6. Either prevent multiple operational windows or add cross-window locking and storage-event reconciliation.
+
+Phase 6 - Integrity scanning and recovery
+
+Create a general invariant scanner covering:
+
+unique identities;
+Booking pointer reciprocity;
+Booking and movement lifecycle compatibility;
+movement and formation lifecycle compatibility;
+cancellation-record requirements;
+Deleted Strips coexistence and restore state;
+PLANNED records carrying disallowed actuals;
+Calendar suppression references;
+dataset schema and parse state;
+incomplete command records;
+post-restore counts and cache state.
+
+Expose unresolved issues in an operator-facing recovery console rather than only in developer diagnostics.
+
+Mandatory manual-test requirements
+
+The following runtime tests must be completed after remediation:
+
+1. unavailable localStorage and quota-exceeded writes;
+2. failure at every step of cancellation, deletion, reinstatement and restore;
+3. duplicate clicks on movement and Booking submission;
+4. stale modal save after inline edit or automatic activation;
+5. Booking cancellation of formations;
+6. reinstatement during BST and across midnight;
+7. preservation of independently cancelled formation elements;
+8. restoration where the primary write fails but recovery-entry removal succeeds;
+9. restore interruption after each dataset write;
+10. restore into a populated installation with absent optional datasets;
+11. complete store reload and restart verification after restore;
+12. packaged-Tauri Booking cancellation and deletion confirmation behaviour;
+13. two-window creation and whole-array overwrite tests;
+14. configuration and Profile-import persistence failure;
+15. full invariant scan after every injected failure.
+
+Audit status
+
+The Control-to-domain trace audit is complete as an investigation.
+
+Its findings require architectural remediation planning before final regression and release acceptance.

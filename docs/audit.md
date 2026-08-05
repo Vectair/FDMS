@@ -176,35 +176,75 @@ exports omit sufficient timezone and next-day semantics.
 Detailed findings are recorded in docs/audit_findings.md.
 
 Priority: Complete - the operational time model requires remediation before final regression and release acceptance.
-5. Control-to-domain trace audit
+5. Control-to-domain trace audit - COMPLETED 5 August 2026
 
-The current pass traced principal controls, but a more systematic audit can map every consequential visible action to its final domain mutation:
+Status: Complete.
+
+The audit traced consequential visible controls through their complete execution path:
 
 visible control
-â†’ event handler
-â†’ validation
-â†’ domain/service call
-â†’ persistence
-â†’ audit event
-â†’ diagnostic failure path
-â†’ UI acknowledgement
+→ event handler
+→ validation
+→ domain or service mutation
+→ persistence
+→ audit event
+→ diagnostic failure handling
+→ UI acknowledgement
 
-This is particularly valuable for:
+Passes completed:
 
-edit menus;
-duplicate actions;
-cancellation/reinstatement;
-soft delete and restore;
-reciprocal strip creation;
-formation cascade actions;
-profile import/export;
-backup/restore;
-updater actions;
-Danger Zone.
+movement creation, editing, duplication, retrospective entry and Create From;
+movement lifecycle and status-transition controls;
+cancellation, deletion, reinstatement and restore;
+Booking, linked-strip and Calendar controls;
+Admin, configuration, backup/restore and import/export controls;
+cross-path consistency, duplicate activation, stale state, partial failure and recovery.
 
-It would reveal handlers that exist but call obsolete or incomplete pathways.
+Consolidated severity:
 
-Priority: Medium to high.
+Critical: 8
+High: 27
+Medium-high: 5
+Medium: 2
+Total: 42
+
+Principal findings:
+
+the shared persistence boundary cannot prove durable success;
+storage-unavailable writes can silently do nothing while controls continue to report success;
+consequential controls directly orchestrate non-transactional multi-store operations;
+completion, activation and cancellation have duplicate pathways with different validation and side effects;
+full backup restore is non-atomic, overlays absent datasets and can create a hybrid installation;
+restore does not reliably invalidate or reload all module-level state and open editors;
+Deleted Strip restoration can remove the only recovery snapshot after an undurable movement insertion;
+Booking plus strip creation is not one verified operation and deliberately begins with a one-sided link;
+Booking cancellation and deletion bypass canonical movement cancellation and formation cascade;
+Booking and recovery local times can be written directly into UTC movement fields;
+reinstatement and restoration can create PLANNED movements retaining stale actual times;
+cancellation and deletion audit records can claim recovery data that was never durably stored;
+configuration, Calendar and Booking Profile controls can acknowledge undurable changes;
+audit events can contradict the primary durable datasets and are not a transaction journal;
+stale editors, duplicate submissions and multiple application windows are not protected by revision or idempotency controls;
+startup reconciliation covers only a narrow subset of possible incomplete or contradictory states;
+the UI cannot clearly represent partial completion, degraded persistence or required recovery.
+
+Systemic conclusion:
+
+Flite does not yet have an authoritative command layer between visible controls and domain persistence. UI handlers directly coordinate validation, lifecycle policy, related-record mutation, persistence, audit and acknowledgement. In-memory state is routinely treated as durable state, while status and audit events do not prove that all required lifecycle side effects completed.
+
+Required remediation direction:
+
+introduce a result-bearing persistence boundary and explicit degraded-storage mode;
+move consequential operations into authoritative domain commands;
+add transaction, rollback or durable incomplete-operation handling for multi-store actions;
+unify completion, activation and cancellation policies;
+add stable entity-incarnation identity, revisions and idempotency;
+implement a general cross-dataset invariant scanner and operator-facing recovery controls;
+complete the defined failure-injection, concurrency, packaged-runtime and restart-level manual tests.
+
+Detailed findings are recorded in docs/audit_findings.md.
+
+Priority: Complete - architectural remediation is required before final regression and release acceptance.
 
 6. Security and data-exposure audit
 
