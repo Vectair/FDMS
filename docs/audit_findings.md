@@ -1537,3 +1537,189 @@ Audit status
 The Control-to-domain trace audit is complete as an investigation.
 
 Its findings require architectural remediation planning before final regression and release acceptance.
+
+8. Security and data-exposure audit
+
+Completed 6 August 2026.
+
+This audit examined rendering safety, hostile imports, spreadsheet and clipboard boundaries, diagnostic and backup privacy, the Tauri desktop boundary, updater trust, signing-key handling and security abuse cases.
+
+Severity summary for confirmed findings:
+
+Medium-high: 1
+Medium: 13
+Low-medium: 3
+Low: 4
+High: 0
+Critical: 0
+Total: 21
+
+Additional classifications:
+
+Inferred risks: 10
+Manual-test requirements: 3
+Confirmed-sound controls: 26
+
+Medium-high finding
+
+1. Full backup restore can leave a partially replaced installation after storage failure.
+
+Current-format backups are structurally inspected before writes begin, but accepted datasets are then written sequentially to localStorage without transaction, staging, rollback or complete capacity verification. If a later write exceeds quota or otherwise fails, earlier datasets remain replaced while later datasets remain from the previous installation.
+
+Medium findings
+
+2. Full-session backup validation does not validate nested record integrity.
+
+The inspector checks expected outer objects and arrays but does not validate individual movements, bookings, profiles, Calendar events, cancellation records, deleted snapshots, audit events or nested formation structures.
+
+3. Legacy movement backups accept arbitrary movement objects.
+
+Bare arrays, versioned movement envelopes and legacy backup envelopes are accepted without movement-level field validation, duplicate-ID checks, field allowlisting or nested-formation validation.
+
+4. Booking Profile import has no effective record schema.
+
+Any object-valued entry is merged into the live profile collection. Unknown fields, nested values, invalid types and conflicting normalised registrations are not adequately controlled.
+
+5. Imported file size, record count, text length and nesting depth are unbounded.
+
+FileReader and JSON.parse receive the complete selected file. Dataset and field limits are not applied before parsing, persistence or later rendering.
+
+6. Movement CSV export permits spreadsheet-formula injection.
+
+Operator or imported values beginning with formula markers are CSV-quoted for delimiters but are not neutralised for Excel interpretation.
+
+7. Cancellation CSV export permits spreadsheet-formula injection.
+
+Cancellation reason text, callsign, registration, aircraft type, captain and aerodrome values can become active spreadsheet formulas when the CSV is opened.
+
+8. Full-session backups contain personal and operational data in plaintext.
+
+Backups include movements, bookings, Booking Profiles, Calendar events, cancelled sorties, deleted snapshots, configuration, VKB overrides, hours and the operational audit ledger. The JSON can be read with an ordinary text editor.
+
+9. The operational audit ledger is unbounded.
+
+Every audit append reads, extends, serialises and rewrites the complete event array. No event-count, byte, age, archival or segmentation boundary is enforced.
+
+10. Audit scalar values have no length or sensitivity limit.
+
+Objects and arrays are compacted, but scalar strings pass through unchanged and can preserve long remarks, reasons, routes, corrections and personal values indefinitely.
+
+11. Corrupt operational audit storage is silently treated as an empty ledger.
+
+Malformed audit JSON returns an empty event set. A later append can overwrite the corrupt raw evidence with a new ledger without an operator-facing integrity warning.
+
+12. Native save commands accept unbounded renderer payloads.
+
+Text content and Base64 workbook content are passed through Tauri IPC without maximum size. The binary path holds the Base64 representation and decoded bytes in memory.
+
+13. The repository does not ignore common credential and private-key patterns.
+
+The current .gitignore does not exclude .env files, private-key extensions or common certificate containers, increasing accidental-commit risk.
+
+14. Production signing can occur from a dirty working tree.
+
+The internal build script normally blocks a dirty tree but permits bypass through -AllowDirty while production signing credentials may be loaded.
+
+Low-medium findings
+
+15. Native text-save failure automatically falls back to browser Downloads.
+
+Sensitive movement or cancellation exports can be written to an unintended default location after native save failure without prior operator consent.
+
+16. Diagnostic logs and reports can expose local paths and workstation details.
+
+Persisted errors may contain source paths, usernames embedded in paths, installation directories, native command details and stack traces.
+
+17. Signing-password unmanaged memory is not explicitly zeroed.
+
+The PowerShell workflow converts SecureString to a BSTR and managed plaintext value but does not explicitly zero and free the unmanaged BSTR immediately after conversion.
+
+Low findings
+
+18. CSV safety logic is duplicated and inconsistent.
+
+Movement and cancellation exports use separate quoting, BOM and line-ending policies, increasing the risk of divergent security fixes.
+
+19. METAR clipboard fallback can falsely report success.
+
+The return value from document.execCommand('copy') is ignored before the interface reports Copied.
+
+20. Application restart is directly callable from renderer code.
+
+The native restart command does not require a completed update state or native confirmation.
+
+21. Update checking contacts GitHub automatically by default.
+
+Unless disabled in local settings, Flite checks the configured GitHub release endpoint shortly after application startup.
+
+Inferred risks
+
+1. The large, decentralised innerHTML rendering surface remains omission-prone despite generally sound encoding in inspected paths.
+2. Pilot datalist attribute encoding is inconsistent with the stronger shared HTML encoders.
+3. Inline-edit restoration can preserve markup that entered the cell through an earlier unsafe pathway.
+4. Full-session exports lack a concise pre-export data-scope preview.
+5. Diagnostic context is size-bounded but not restricted by a permitted-field schema.
+6. Audit core validation is advisory and malformed events can still be appended.
+7. Global Tauri bindings increase the consequence of a future renderer compromise.
+8. Native save filters do not independently enforce the final extension.
+9. Native updater errors can expose low-level path or implementation details.
+10. Release provenance appears dependent on a manual local build and publication process.
+
+Manual-test requirements
+
+1. Run stored-data injection tests across every movement, formation, Booking, Profile, Calendar, cancellation, VKB and restored-data rendering surface.
+2. Test prototype-related keys and hostile nested structures through every supported import format.
+3. Verify History CSV and packaged SheetJS behaviour with formula-leading values in the supported Microsoft Excel environment.
+
+Confirmed-sound controls
+
+Principal movement, Booking, Calendar, toast and updater rendering paths generally encode dynamic values or use textContent.
+No directly exploitable stored script-injection route was confirmed.
+Current-format backup restore uses a fixed storage-key allowlist.
+Unknown storage keys are ignored.
+Dynamic generic-overflight keys use strict key and integer-value validation.
+Malformed present datasets block current-format restore before the first write.
+Unsupported future backup formats are blocked.
+The XLSX exporter supplies operator values as typed string data rather than explicit formula objects.
+Browser Blob URLs are revoked after export.
+Suggested export filenames are derived from fixed prefixes and internal dates.
+METAR clipboard content is copied from textContent.
+Technical diagnostics are capped at 100 events and apply message, stack, source and context limits.
+Rapid identical diagnostic events are deduplicated.
+Diagnostic-recording failure is isolated from operational actions.
+Technical diagnostics are excluded from normal session backups.
+Diagnostic clearing is deliberate and does not remove operational audit records.
+The Tauri capability grants only core defaults and Save dialog permission.
+No shell, broad filesystem, process or generic HTTP capability was identified.
+The packaged Content Security Policy blocks remote scripts, inline scripts, eval, objects and browser-network destinations.
+Native save commands require an operator-selected path.
+The updater endpoint and public verification key are fixed in packaged configuration.
+Update installation requires a prior successful native check.
+Updater release notes are rendered as plain text.
+No committed updater private key, password, API key or access token was identified.
+The signing key defaults to a user-local path outside the repository.
+Signing credentials set by the development script are removed in a finally block.
+
+Systemic conclusion
+
+Flite’s desktop privilege boundary is narrow and no direct remote-code-execution or committed-secret defect was confirmed. Its primary security risks occur at data and lifecycle boundaries rather than through broad native privilege.
+
+Hostile or malformed imports can enter insufficiently validated operational structures. A structurally accepted restore can fail partway and create a hybrid installation. Inert operator strings can become spreadsheet formulas after CSV export. Full backups carry readable personal and operational history. The audit ledger can grow indefinitely or silently lose corrupt evidence. Release signing is protected from repository disclosure but remains dependent on local process discipline.
+
+Required remediation
+
+Introduce bounded record-level validators for every imported dataset.
+Make restore staged, capacity-checked, transactional and reversible.
+Add a shared spreadsheet-safe CSV encoder.
+Require explicit consent before export fallback to Downloads.
+Present backup and row-level export sensitivity before file creation.
+Protect and surface corrupt audit evidence.
+Define operational audit retention and scalar-value limits.
+Redact workstation paths and personal data from diagnostic output.
+Limit Tauri IPC payload sizes and restart authority.
+Disable global Tauri bindings unless specifically required.
+Expand secret-file exclusions and add secret scanning.
+Separate development and production signing.
+Block production signing from dirty source trees.
+Record commit, hashes, signer and metadata provenance for each release.
+Complete the documented hostile-import, spreadsheet, diagnostic, Tauri, updater and signing manual tests.

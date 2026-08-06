@@ -246,27 +246,93 @@ Detailed findings are recorded in docs/audit_findings.md.
 
 Priority: Complete - architectural remediation is required before final regression and release acceptance.
 
-6. Security and data-exposure audit
+6. Security and data-exposure audit - COMPLETED 6 August 2026
 
-Flite is local-first and does not currently have authentication, but it stores personal and operational information.
+Status: Complete.
 
-A focused audit should examine:
+The audit examined Flite’s local security boundaries and the ways operational or personal data can enter, leave, persist within or cross trust contexts in the application.
 
-unescaped dynamic HTML and XSS exposure;
-imported JSON used in rendered fields;
-CSV formula injection in exports;
-spreadsheet formula injection;
-external links opened with unsafe window.open behaviour;
-diagnostic reports exposing personal contact details;
-backup files containing contact information;
-whether technical errors capture excessive record data;
-path/file naming leakage;
-clipboard actions;
-handling of malformed or hostile import files.
+Passes completed:
 
-This should be proportionate. Flite does not need enterprise penetration testing before V1, but imported data and generated HTML deserve review.
+rendering and DOM injection;
+import and deserialisation security;
+CSV, XLSX, file-export and clipboard exposure;
+diagnostics, operational audit records, backups and privacy;
+Tauri capabilities, native commands, updater and external-navigation boundaries;
+secrets, signing-key handling, abuse cases and final consolidation.
 
-Priority: Medium to high.
+Consolidated findings:
+
+Confirmed findings: 21
+Inferred risks: 10
+Manual-test requirements: 3
+Confirmed-sound controls: 26
+
+Confirmed-finding severity:
+
+Medium-high: 1
+Medium: 13
+Low-medium: 3
+Low: 4
+High: 0
+Critical: 0
+Total: 21
+
+Principal findings:
+
+full-session backup validation checks dataset containers but not nested record integrity;
+legacy movement restore and Booking Profile import accept insufficiently constrained objects;
+import size, nesting, field length and record counts are not bounded;
+full restore is non-transactional and can leave a partially replaced installation after quota failure;
+movement and cancellation CSV exports are vulnerable to spreadsheet-formula injection;
+CSV safety logic is duplicated and inconsistent;
+native text-save failure can redirect sensitive data to Downloads without prior consent;
+METAR clipboard fallback can report success without proving that the clipboard changed;
+full-session backups contain readable personal and operational data;
+the operational audit ledger is unbounded and retains unrestricted scalar values;
+corrupt audit storage is silently treated as an empty ledger and can later be overwritten;
+diagnostic output can expose local paths, workstation identity and implementation details;
+native save commands accept unbounded renderer payloads;
+application restart is directly callable from the renderer;
+automatic update checking creates an outbound GitHub request by default;
+the repository does not ignore common secret and signing-key file patterns;
+the local signing workflow does not explicitly zero the unmanaged password buffer;
+production signing can be performed from a deliberately dirty working tree;
+release provenance appears dependent on a manual local process.
+
+Confirmed strengths:
+
+no committed private signing key or credential was identified;
+the packaged updater contains only the public verification key;
+the Content Security Policy is restrictive;
+Tauri capabilities do not grant shell, process, broad filesystem or generic network access;
+native file destinations require operator selection;
+updater endpoint and signing verification key are fixed;
+update installation requires a prior successful native check;
+release notes are rendered as text;
+unknown backup storage keys are not restored;
+malformed current-format datasets block restore before mutation;
+technical diagnostics are bounded, deduplicated and excluded from normal backups;
+principal rendering pathways generally encode dynamic HTML values.
+
+Systemic conclusion:
+
+Flite’s desktop privilege boundary is comparatively narrow, and no direct remote-code-execution or committed-secret finding was confirmed. The principal risks arise when data crosses formats or persistence boundaries: hostile or oversized imports, non-transactional restore, spreadsheet interpretation of exported strings, plaintext backup distribution, audit-ledger corruption and growth, and manually controlled release signing.
+
+Required remediation direction:
+
+implement bounded record-level import validation and transactional restore;
+centralise spreadsheet-safe export encoding;
+protect corrupt audit evidence and define ledger retention;
+add sensitive-data warnings and explicit fallback consent for backups and exports;
+redact diagnostic workstation information;
+limit native command payloads and renderer restart authority;
+strengthen signing-key exclusions, custody, clean-tree enforcement and release provenance;
+complete the hostile-data, packaged-runtime, signing and restart-level manual tests.
+
+Detailed findings are recorded in docs/audit_findings.md.
+
+Priority: Complete - the confirmed Medium and Medium-high findings require disposition before final regression and release acceptance.
 
 7. Accessibility and keyboard-operation audit
 
