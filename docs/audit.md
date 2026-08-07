@@ -420,33 +420,123 @@ complete the defined packaged-runtime keyboard, screen-reader, rerender-focus, z
 Detailed findings are recorded in docs/audit_findings.md.
 
 Priority: Complete - the two High findings and broader keyboard/focus defects require disposition before final regression and release acceptance.
-8. Performance and scale audit
+8. Performance and scale audit - COMPLETED 7 August 2026
 
-The earlier Aircraft Registrations delay shows that performance defects can emerge only with realistic data volume.
+Status: Complete.
 
-A targeted scale audit should use:
+The audit examined how Flite's current browser/Tauri architecture scales as operational and historical datasets grow, with particular attention to whether retained lifetime data increases the cost of current-day operator actions.
 
-the full registration dataset;
-large movement histories;
-several years of generic-overflight keys;
-many bookings and profiles;
-large audit and diagnostic logs;
-History filters and calendar rendering;
-report generation and XLSX export;
-backup and restore of a mature installation.
+Passes completed:
 
-Measure:
+startup, dataset loading and retained state;
+Live Board, Timeline and high-frequency rendering;
+Search, History, Calendar, VKB and table scaling;
+persistence, logs, backup and restore-preflight scaling;
+reports, exports and mature-installation workloads;
+consolidation and benchmark specification.
 
-startup
-tab switching
-search response
-render duration
-save duration
-backup generation
-restore preflight
-report export
+Consolidated findings:
 
-Priority: Medium, but should occur before final acceptance.
+Confirmed findings: 19
+Inferred risks retained after consolidation: 2
+Critical: 0
+
+Confirmed-finding severity:
+
+High: 6
+Medium-high: 12
+Medium: 1
+Total: 19
+
+Principal findings:
+
+Live Board alert generation is algorithmically quadratic as concurrent movement count rises;
+routine movement mutations synchronously serialise and rewrite the complete retained movement store;
+the central operational audit ledger is an unbounded read, parse, append, serialise and rewrite document;
+Booking Calendar month and year views repeatedly rescan complete booking, movement and event datasets for each displayed date;
+Historic Strip Board performs complete history filtering, sorting and DOM reconstruction on every text-input keystroke;
+Aircraft Registrations Last Updated resolution can repeatedly parse and scan the complete audit ledger once per visible table row;
+startup booking reconciliation contains a bookings-by-movements relationship scan;
+startup eagerly and redundantly renders data-heavy views;
+formation normalisation can force a complete movement-store rewrite on startup;
+the 45-second maintenance tick repeats movement scans and Live Board/Timeline reconstruction;
+History Search Table limits rendered rows only after complete matching and sorting work;
+Cancelled Sorties rendering and reporting perform repeated joins against retained movement and cancellation history;
+Cancelled Sorties persistence rewrites the complete lifetime cancellation log for each append;
+backup generation reparses and duplicates the complete persisted installation state before export;
+successful restore performs complete backup inspection once for preflight and again before import;
+one-month reporting remains coupled to the complete retained movement history;
+Official Return and Dashboard hours calculations repeatedly reload and parse the complete lifetime Hours Log despite already receiving a loaded hours map;
+registration autocomplete and registration lookup unnecessarily rebuild the complete effective registration dataset before searching;
+several administrative and cancellation tables perform complete sorting or DOM reconstruction despite visible pagination or row limits.
+
+Systemic conclusion:
+
+Flite's principal scale risk is not simply the number of movements visible today. Historical retention progressively increases the cost of current operational actions.
+
+The dominant architectural causes are:
+
+monolithic synchronous localStorage datasets;
+an unbounded audit ledger stored as one JSON document;
+lack of persistent or per-render indexes for common date and relationship joins;
+full reconstruction rendering in several high-frequency interfaces;
+historical data sharing the same hot execution paths as current operational state.
+
+The current implementation therefore has an installation-age performance ceiling that cannot be established from small development datasets alone.
+
+Confirmed strengths:
+
+VKB source files load in parallel;
+technical diagnostics are bounded to 100 retained records;
+Deleted Strips has a 24-hour retention limit;
+Live Board global search is debounced;
+History Search Table caps DOM output at 500 rows;
+Aircraft Registrations Admin uses pagination, cached search text, search debounce and delegated actions;
+reporting builds a cached registration lookup map rather than scanning the registration dataset for every classification;
+restore validates the complete current-format backup before beginning mutation.
+
+Required benchmark programme:
+
+test fresh, mature and stress installation profiles;
+hold today's operational workload constant while independently increasing lifetime history;
+measure cold startup, reconciliation, Live Board rendering, Timeline rendering and the 45-second maintenance tick;
+measure ordinary movement and booking save latency as movement and audit histories grow;
+measure History Strip Board and History Search keystroke-to-paint latency;
+measure Booking Calendar month and year navigation;
+measure registration autocomplete and Aircraft Registrations pagination with the production registration dataset;
+measure cancellation reporting with independent growth of current cancellations and lifetime cancellation history;
+measure Official Return, Dashboard and Insights against increasing lifetime movement and Hours Log data;
+measure CSV and XLSX generation duration and peak memory;
+measure backup generation, restore preflight and confirmed restore phases separately;
+record main-thread long tasks and scaling curves rather than relying only on absolute elapsed time.
+
+Indicative mature-installation targets:
+
+ordinary control response: 100 ms preferred;
+search/autocomplete response: 150 ms or less;
+tab or view switch: 250 ms or less;
+calendar and report render: 500 ms or less;
+movement or booking save main-thread blocking: 200 ms or less;
+45-second maintenance work: 100 ms or less;
+cold startup to usable Live Board: 2.5 seconds or less;
+backup generation before Save dialog: 1 second or less;
+restore preflight: 1 second or less;
+normal-operation main-thread tasks should preferably remain below 50 ms and should not exceed 250 ms.
+
+Required remediation direction:
+
+optimise Live Board alert generation and other operator hot paths first;
+index Calendar, cancellation, reconciliation and report relationships rather than repeatedly rescanning full datasets;
+use the already-retained effective VKB registration data instead of reconstructing it for every lookup/search;
+remove repeated Hours Log parsing from report calculations;
+reduce unnecessary startup rendering and persistence;
+move movements and the operational audit stream toward record-oriented, partitioned or append-oriented durable persistence rather than lifetime JSON rewrites;
+paginate or virtualise unbounded detail tables;
+reduce redundant backup/restore parsing and XLSX memory amplification without weakening restore validation.
+
+Detailed findings and the benchmark specification are recorded in docs/audit_findings.md.
+
+Priority: Complete - the six High findings and systemic installation-age scaling risks require benchmarking and remediation disposition before final regression and release acceptance.
 
 9. Browser-harness versus installed-Tauri parity audit
 

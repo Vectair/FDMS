@@ -2146,3 +2146,544 @@ Overall disposition
 Audit 7 is complete.
 
 The two High-severity findings and the broader Medium-high keyboard/focus defects require disposition before final regression and release acceptance.
+
+8. Performance and scale audit
+
+Completed 7 August 2026.
+
+This audit examined startup, rendering, searching, persistence, retained logs, Calendar behaviour, VKB operations, reporting, exports, backup and restore-preflight behaviour under increasing data volume.
+
+The audit was source-based. No runtime timings are claimed. Where source behaviour proves an algorithmic or architectural scaling problem it is recorded as a confirmed finding; where practical impact depends on runtime size or memory behaviour it remains an inferred risk or benchmark requirement.
+
+Consolidated confirmed-finding severity:
+
+High: 6
+Medium-high: 12
+Medium: 1
+Critical: 0
+Total confirmed findings: 19
+
+Additional consolidated inferred risks: 2
+
+High-severity findings
+
+1. Live Board alert generation is algorithmically quadratic.
+
+Classification: Confirmed finding.
+Severity: High.
+
+Each Live Board render processes visible/current movements, while per-movement alert generation performs additional searches across the movement collection and relevant conflict candidates.
+
+As current movement volume rises, alert-generation work therefore grows faster than the number of rendered strips.
+
+Impact:
+
+A high-current-workload period can degrade the responsiveness of the principal operational screen even when historical storage remains unchanged.
+
+Remediation direction:
+
+Precompute the data required for cross-movement alerts once per render. Build callsign/conflict indexes before row generation rather than rescanning the movement array independently for each strip.
+
+2. Routine movement mutations synchronously rewrite the complete retained movement store.
+
+Classification: Confirmed finding.
+Severity: High.
+
+Movement create, update, delete, formation-element update and several lifecycle operations serialise the complete movements array and synchronously write it through localStorage.
+
+Individual movements also retain their own changeLog arrays, so the serialised object becomes larger both as more movements accumulate and as individual records are repeatedly edited.
+
+Impact:
+
+Changing one current scalar field becomes progressively more expensive as unrelated historical movement data accumulates.
+
+Remediation direction:
+
+Move operational movement persistence toward record-oriented or partitioned storage. At minimum, avoid making the complete lifetime history the persistence unit for every current mutation.
+
+3. The central operational audit ledger has an unbounded lifetime append cost.
+
+Classification: Confirmed finding.
+Severity: High.
+
+Every append reads and parses the complete audit-log document, pushes one event, serialises the complete event array and synchronously rewrites the whole ledger.
+
+There is no event-count, age, byte-size, archival or segmentation boundary.
+
+Impact:
+
+The cost of one future audit append grows with every previous audit event. Because movements, bookings, VKB and system actions all feed this ledger, the cost is cross-cutting.
+
+Cumulative work across a long installation trends towards quadratic growth in event count even though each logical operation appends only one small record.
+
+Remediation direction:
+
+Use genuinely append-oriented or segmented persistence for the operational audit stream. Preserve the logical append-only audit model while changing the physical representation.
+
+4. Booking Calendar repeatedly rescans full datasets once for every displayed date.
+
+Classification: Confirmed finding.
+Severity: High.
+
+Calendar helpers obtain bookings, movements and Calendar events for one date by filtering the respective complete collection.
+
+Month rendering invokes these date queries repeatedly for every displayed day. Year rendering repeats booking and Calendar-event filtering across roughly 365 dates.
+
+Impact:
+
+Calendar cost grows with both retained dataset size and number of dates rendered.
+
+Remediation direction:
+
+Build date-indexed Maps once per Calendar render and use direct date lookup for each cell. Historic Movement Calendar already demonstrates this more scalable pattern.
+
+5. Historic Strip Board filtering performs a complete history render for every text-input keystroke.
+
+Classification: Confirmed finding.
+Severity: High.
+
+The Historic Strip Board search/filter controls trigger immediate rerendering without debounce.
+
+Each rerender filters completed history, applies structured filters, sorts results and reconstructs the corresponding DOM.
+
+Impact:
+
+Typing responsiveness becomes coupled to complete retained movement history.
+
+Remediation direction:
+
+Debounce text input, cache normalised searchable values where appropriate and paginate or otherwise bound the amount of history that must be sorted and rendered interactively.
+
+6. Aircraft Registrations Last Updated resolution can repeatedly parse and scan the complete audit ledger per visible row.
+
+Classification: Confirmed finding.
+Severity: High.
+
+When a registration row has no direct override updatedAt value, Last Updated is derived from central audit events for that entity.
+
+The entity-audit lookup reads and parses the complete audit ledger and filters it. Registration Admin can perform this separately for each visible row.
+
+Impact:
+
+A 100-row page can cause approximately 100 complete audit-ledger reads/parses/scans; a 250-row page can approach 250.
+
+The cost grows with both selected page size and lifetime audit history.
+
+Remediation direction:
+
+Build an audit-summary/index Map once and reuse it for all visible rows, or persist a direct last-updated value alongside each effective VKB record.
+
+Medium-high findings
+
+7. Startup booking reconciliation contains a bookings-by-movements relationship scan.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Startup reconciliation examines retained bookings and movements through nested relationship searches.
+
+Impact:
+
+Startup cost grows with the product of both datasets rather than only unresolved links.
+
+Remediation direction:
+
+Build movement-by-booking and booking-by-ID Maps before reconciliation.
+
+8. Startup eagerly and redundantly renders data-heavy views.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Initialisation invokes render work in individual subsystem initialisers and then performs an explicit first-render stage that includes Live Board, Timeline, History, Reports and Calendar.
+
+Some data-heavy views are therefore constructed before the operator opens them, and Live Board/Timeline work can be duplicated.
+
+Impact:
+
+All downstream rendering inefficiencies are amplified during startup.
+
+Remediation direction:
+
+Make initialisers bind controls and initialise lightweight state only. Lazily render non-visible views on first activation and eliminate duplicate first-render paths.
+
+9. Formation presence can force a complete movement-store rewrite during startup.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Startup normalisation treats movements containing formations as requiring persistence after normalisation, which can cause a complete movement-store serialisation even where the retained formation was already effectively valid.
+
+Impact:
+
+A mature installation can perform a large synchronous write simply because historical formations exist.
+
+Remediation direction:
+
+Only mark normalised records dirty when the normalised representation differs from the persisted representation.
+
+10. The 45-second maintenance tick repeats scans and board/timeline reconstruction.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+The periodic maintenance cycle updates counters, performs planned-activation reconciliation and conditionally rerenders the Live Board and Timeline.
+
+Impact:
+
+Large current movement sets can create recurring main-thread work even when the operator is not actively editing data.
+
+Remediation direction:
+
+Benchmark the tick separately, avoid rebuilding unchanged UI and maintain indexes/derived state needed by recurring calculations.
+
+11. History Search Table limits DOM size only after complete filtering and sorting.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+The table has a 500-row visible-result limit, but the complete retained movement collection is filtered and the full matching result is sorted before the 500-row slice is applied.
+
+Text input also triggers immediate recalculation.
+
+Impact:
+
+The DOM ceiling protects rendering size but does not bound CPU cost.
+
+Remediation direction:
+
+Debounce input and introduce indexed/paginated history querying so the complete result set does not have to be sorted before retrieving one visible page.
+
+12. Cancelled Sorties current-state rendering contains repeated movement-array searches.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Cancellation rendering repeatedly searches the movement collection while counting, filtering and searching cancellation entries.
+
+Impact:
+
+Cancellation-history rendering can approach cancellations-by-movements scaling.
+
+Remediation direction:
+
+Build a movement-by-ID Map once before processing cancellation rows.
+
+13. Cancelled Sorties persistence is an unbounded full-log rewrite.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Appending a cancellation reads and parses the complete retained cancellation log, scans it for an existing active entry, appends the new entry and serialises/writes the complete log.
+
+Unlike Deleted Strips, the cancellation log has no short retention boundary.
+
+Impact:
+
+Cancellation operations become increasingly expensive over installation lifetime.
+
+Remediation direction:
+
+Use record-oriented or append-oriented persistence for cancellation history.
+
+14. Backup generation repeatedly processes the complete persisted installation and creates transient duplication.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Backup generation copies every recognised localStorage value into the backup object as raw strings, then runs the restore-inspection path to parse and validate each embedded JSON dataset for metadata, and finally serialises the entire outer backup for export.
+
+Impact:
+
+Backup generation duration and peak JavaScript memory grow with total installation storage. Multiple representations of the same large movement and audit datasets can coexist.
+
+Remediation direction:
+
+Benchmark both time and peak heap. Longer term, avoid JSON-inside-JSON duplication and consider a native/streamed backup architecture.
+
+15. Successful restore performs the full validation pass twice.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+The restore UI parses the selected backup and runs inspectSessionBackup for preflight.
+
+After the operator confirms, importSessionJSON defensively runs inspectSessionBackup over the same parsed backup again before the first write.
+
+Impact:
+
+Large backup datasets are reparsed and revalidated twice before restoration.
+
+Remediation direction:
+
+Preserve pre-write whole-backup validation, but pass an immutable validated representation or validation token into the importer rather than reparsing unchanged material.
+
+16. One-month reporting remains coupled to complete retained movement history.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Official Monthly Return receives the complete movement collection and scans it to locate records relevant to the selected month.
+
+Dashboard and Insights begin by filtering the complete retained movement collection for the selected month.
+
+Impact:
+
+Keeping the selected month constant while adding unrelated years of history increases report cost.
+
+Remediation direction:
+
+Maintain a movement date/month index or partition completed historical movements by operational period.
+
+17. Official Return and Dashboard repeatedly reload and parse the complete Hours Log.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Reporting functions accept an already-loaded hoursMap but then call getHoursForDate for individual dates.
+
+getHoursForDate independently reloads and JSON-parses the complete Hours Log.
+
+Official Return can therefore reparse the lifetime Hours Log once for every day of the selected month. Dashboard similarly repeats parsing for distinct dates represented in its movement set.
+
+Impact:
+
+A small keyed lookup becomes repeated whole-store parsing.
+
+Remediation direction:
+
+Use the supplied hoursMap directly throughout report calculation.
+
+18. Registration autocomplete and registration lookup rebuild the complete effective registration dataset before searching.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+VKB already retains vkbData.registrations as the effective post-override registration dataset.
+
+Despite this, searchRegistrations calls getEffectiveRegistrations before each search. getEffectiveRegistrations reconstructs baseline registrations plus overrides.
+
+lookupRegistration and fixed-callsign registration resolution follow the same reconstruction-before-search pattern.
+
+Impact:
+
+Per-keystroke registration autocomplete performs unnecessary full-dataset reconstruction before the actual linear search.
+
+This is particularly relevant with the full production registration dataset.
+
+Remediation direction:
+
+Use vkbData.registrations as the current effective array and rebuild it only when baseline or overrides change. Add registration and fixed-callsign lookup Maps for direct identity searches.
+
+Medium finding
+
+19. Several secondary tables perform complete work despite visible pagination or result limits.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+Examples include:
+
+Aircraft Registrations Admin filtering and sorting the complete result before slicing the current page;
+Booking Profile search regenerating the complete matching table on each keystroke;
+Cancellation Report rendering all detail rows for the selected range without pagination.
+
+Impact:
+
+Visible pagination or small headline tables can create an impression that processing is bounded when the expensive work has already occurred.
+
+Remediation direction:
+
+Apply pagination/query boundaries before expensive sorting or DOM generation, and debounce unbounded text-driven table rebuilds.
+
+Consolidated inferred risks
+
+1. XLSX export can produce material peak-memory amplification.
+
+Severity: Medium.
+
+The exporter constructs sheet arrays and SheetJS workbook objects, produces a complete Base64 XLSX representation and passes that through Tauri IPC.
+
+The native command receives the Base64 String and decodes a second complete binary buffer before writing the file.
+
+The source behaviour is confirmed; the practical memory consequence must be measured.
+
+2. Years of dated generic-overflight keys and complete CSV materialisation create secondary linear growth.
+
+Severity: Low to low-medium.
+
+Generic-overflight backup handling enumerates one localStorage key per retained operational date.
+
+CSV exporters construct complete row collections, complete line collections and a final complete output string before the save handoff.
+
+These are not currently comparable to the movement/audit persistence defects but belong in stress testing.
+
+Confirmed-sound controls
+
+The audit identified the following existing scale controls that should be preserved:
+
+VKB CSV files are loaded in parallel;
+VKB data remains cached in module-level memory after loading;
+technical diagnostic persistence is capped at 100 events;
+rapid duplicate diagnostic errors are deduplicated;
+Deleted Strips has a 24-hour retention boundary;
+Live Board global search uses debounce;
+History Search Table limits rendered output to 500 rows;
+Aircraft Registrations Admin provides 50, 100 and 250 row page sizes;
+Aircraft Registrations Admin caches normalised search text;
+Aircraft Registrations Admin uses search debounce;
+Aircraft Registrations Admin delegates row actions rather than binding separate top-level listeners indefinitely;
+Historic Movement Calendar builds a date map once rather than rescanning movements for every displayed date;
+Booking Profiles use direct keyed registration lookup for ordinary profile retrieval;
+report classification uses a cached registration Map;
+booking updates perform no-op detection before persistence and audit;
+current-format restore validates all recognised standard datasets before beginning writes;
+backup restore uses an explicit standard-key allowlist and strict dynamic generic-overflight-key validation.
+
+Systemic conclusion
+
+Flite's principal performance risk is installation-age coupling.
+
+Today's movement, search, save, report and administrative workload should ideally depend on today's relevant working set. In the current architecture, retained historical movements, bookings, cancellations, hours and especially the central audit ledger increasingly participate in current operations.
+
+The four principal architectural causes are:
+
+1. monolithic synchronous localStorage persistence;
+2. missing indexes for repeated relationship and date joins;
+3. complete reconstruction rendering;
+4. lifetime historical data sharing current operational execution paths.
+
+No Critical finding was confirmed from static source inspection.
+
+The six High findings require either remediation or explicit benchmark evidence that realistic mature installations remain within acceptable operational latency.
+
+Benchmark specification
+
+Three installation profiles should be maintained.
+
+Fresh profile:
+
+250 lifetime movements;
+20 current Live movements;
+100 bookings;
+50 Booking Profiles;
+100 Calendar events;
+50 cancellation-log entries;
+10 currently cancelled movements;
+500 audit events;
+90 Hours Log dates;
+90 generic-overflight date keys.
+
+Mature profile:
+
+10,000 lifetime movements;
+100 current Live movements;
+2,000 bookings;
+1,000 Booking Profiles;
+2,000 Calendar events;
+2,000 cancellation-log entries;
+250 currently cancelled movements;
+20,000 audit events;
+5 years of Hours Log entries;
+approximately 1,825 generic-overflight date keys;
+full production registration VKB.
+
+Stress profile:
+
+25,000 lifetime movements;
+250 to 500 current Live movements;
+5,000 bookings;
+5,000 Booking Profiles;
+10,000 Calendar events;
+10,000 cancellation-log entries;
+1,000 currently cancelled movements;
+50,000 or more audit events;
+10 years of Hours Log entries;
+approximately 3,650 generic-overflight date keys;
+full production registration VKB.
+
+Required benchmark operations
+
+Measure:
+
+cold startup to usable Live Board;
+VKB fetch, parse and effective-data construction;
+startup movement migration/normalisation;
+booking/movement reconciliation;
+first Live Board render;
+first Timeline render;
+first History, Reports and Calendar render;
+Live Board scaling at 10, 25, 50, 100, 250 and 500 current movements;
+callsign-conflict-heavy Live Board fixtures;
+inline movement save;
+movement activation and completion;
+ordinary counter updates;
+45-second maintenance tick;
+Timeline low-overlap and high-overlap fixtures;
+Historic Strip Board search keystroke-to-paint;
+History Search Table search keystroke-to-paint;
+Booking Calendar month render;
+Booking Calendar year render;
+Booking Profile search;
+registration autocomplete;
+Aircraft Registrations page navigation at 50, 100 and 250 row sizes;
+Aircraft Registrations Last Updated work with small and mature audit ledgers;
+Cancellation Report with independent scaling of current cancellations and lifetime cancellation history;
+Official Monthly Return with constant selected-month volume and increasing lifetime movement history;
+Dashboard and Insights with the same controlled-history fixture;
+reporting with one, five and ten years of Hours Log entries;
+CSV generation at increasing row counts;
+XLSX generation at increasing detail-sheet sizes;
+peak JavaScript and native-process memory during XLSX export;
+backup generation duration, output size and peak memory;
+restore outer JSON parse;
+restore first inspectSessionBackup pass;
+confirmed restore second inspection pass;
+restore storage-write phase;
+complete restore preflight-to-completion time;
+tab switching between all principal views;
+main-thread long-task duration throughout the benchmark.
+
+Indicative mature-installation acceptance budgets
+
+These targets are proposed benchmark criteria, not measurements of current Flite performance.
+
+Ordinary control/input response: 100 ms preferred.
+Search/autocomplete response: 150 ms or less.
+Tab/view switch: 250 ms or less.
+Calendar/month/report render: 500 ms or less.
+Movement or Booking save main-thread blocking: 200 ms or less.
+45-second maintenance work: 100 ms or less.
+Cold startup to usable Live Board: 2.5 seconds or less.
+Backup generation before Save dialog: 1 second or less.
+Restore preflight: 1 second or less.
+Normal-operation main-thread tasks should preferably remain below 50 ms and should not exceed 250 ms.
+
+Benchmark interpretation
+
+Absolute latency alone is insufficient.
+
+The benchmark must also record scaling curves.
+
+A controlled test should hold the selected/current working set constant while increasing unrelated lifetime history. This is necessary to expose installation-age coupling.
+
+Doubling retained data should not unexpectedly quadruple latency. Where a source-confirmed quadratic path exists, nonlinear runtime growth should be treated as validation of the finding even if the smallest fixture still appears responsive.
+
+Recommended remediation order
+
+1. Live Board alert generation and other current-operation hot paths.
+2. Calendar and History indexing/debounce.
+3. Aircraft Registrations audit-summary handling and effective-registration lookup.
+4. Movement and audit persistence architecture.
+5. Booking/cancellation/reconciliation relationship indexes.
+6. Report Hours Log reuse and date/month indexing.
+7. Backup/restore duplicate processing.
+8. XLSX and administrative-table memory/render optimisation.
+
+Overall disposition
+
+Audit 8 is complete as a source investigation.
+
+Runtime performance at mature-installation scale remains unverified until the benchmark programme is executed.
+
+The principal release concern is not simply whether Flite performs acceptably on today's development data. It is whether current operational latency remains stable after months or years of retained operational and audit history.
