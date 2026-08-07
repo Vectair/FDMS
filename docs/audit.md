@@ -334,25 +334,92 @@ Detailed findings are recorded in docs/audit_findings.md.
 
 Priority: Complete - the confirmed Medium and Medium-high findings require disposition before final regression and release acceptance.
 
-7. Accessibility and keyboard-operation audit
+7. Accessibility and keyboard-operation audit - COMPLETED 7 August 2026
 
-A complete accessibility programme is too large for this phase, but a basic operational audit is prudent:
+Status: Complete.
 
-every modal closable with Escape;
-Enter does not trigger unintended actions;
-keyboard focus enters and returns from modals;
-dropdown menus work without a mouse;
-visible controls have useful accessible names;
-table actions are reachable;
-disabled controls explain why;
-colour is not the only status indicator;
-text contrast is adequate;
-focus is not lost after render.
+The audit examined Flite's principal keyboard, focus, semantic, dynamic-feedback and visual-accessibility behaviour across the operational interface.
 
-The existing code contains substantial custom modal and dropdown handling, making keyboard regression plausible.
+Passes completed:
 
-Priority: Medium.
+semantic structure and accessible naming;
+modal, dialog and focus-management behaviour;
+keyboard activation, Enter/Space and dropdown menus;
+dynamic rendering, focus retention and status announcements;
+visual accessibility and non-colour cues;
+consolidation and manual-test preparation.
 
+Consolidated findings:
+
+Confirmed findings: 23
+Inferred risks: 10
+
+Confirmed-finding severity:
+
+High: 2
+Medium-high: 5
+Medium: 13
+Low-medium: 3
+Critical: 0
+Total: 23
+
+Principal findings:
+
+shared button and field styling removes native focus outlines without a consistent replacement;
+the shared movement-modal document-level Enter handler can trigger unintended Save actions;
+custom modals lack complete dialog semantics, initial focus, focus containment, background inertness and reliable focus return;
+Booking and Calendar dialogs bypass the shared Escape mechanism;
+Live Board inline editing cannot be initiated by keyboard even though the editor itself has strong Enter, Escape and Tab handling;
+History sortable column headers are mouse-only;
+Live Board Edit and Create From menus do not implement a complete keyboard menu/submenu model;
+top-level navigation declares tablist semantics without implementing the corresponding ARIA tab keyboard model;
+many visible form labels, filters and searches lack reliable programmatic association or accessible naming;
+repeated table actions and some table headings provide insufficient context to assistive technology;
+toast notifications, METAR validation, METAR Copy feedback and updater state changes are not exposed through appropriate live status semantics;
+Calendar and Live Board rerenders can destroy keyboard context outside the specially protected inline-edit workflow;
+the Booking Details drawer opens dynamically without focus transfer or announcement;
+disabled controls frequently lack a programmatically associated explanation;
+some persistent header text and the FIS-total colour fail normal-text contrast targets;
+several operational labels are rendered at approximately 8-10px and require packaged-runtime zoom and readability validation;
+icon-only modal close controls have weak accessible naming;
+the visual timeline lacks a sufficiently explicit alternative semantic representation.
+
+Confirmed strengths:
+
+native buttons, inputs and selects are used extensively;
+principal buttons generally retain native Enter and Space activation;
+shared movement modals support Escape and deliberately clean up their document key handler;
+closed row menus are removed from sequential focus;
+inline editors support Enter commit, Escape cancel and deliberate Tab/Shift+Tab traversal;
+failed inline validation prevents unintended advancement;
+background Live Board rerenders are deferred while inline editing is active;
+formation inputs have explicit visible focus outlines;
+reconciliation uses alert semantics and exposes expanded state correctly;
+METAR, updater, exports and reconciliation generally provide textual information in addition to colour or icons;
+active navigation uses weight, borders and background as well as colour;
+flight types are explicitly labelled LOC, DEP, ARR and OVR;
+formation divergence includes textual DIVERGED and status information.
+
+Systemic conclusion:
+
+Flite is not yet fully keyboard-accessible or assistive-technology accessible. The underlying use of native controls is generally sound, but custom interaction layers do not provide one consistent accessibility model. The principal systemic weaknesses are focus visibility, modal focus lifecycle, keyboard entry into custom interactions, non-standard menu operation, silent dynamic status changes and loss of focus context after rerender.
+
+Required remediation direction:
+
+restore a strong application-wide focus-visible treatment;
+remove document-level Enter-to-save and use semantic form submission;
+centralise all custom dialogs behind one accessible modal service;
+make inline-edit initiation, History sorting and all row menus fully keyboard operable;
+either implement complete ARIA tab/menu patterns or simplify those controls to ordinary native disclosure/navigation patterns;
+centralise live-region handling for success, warning, error and asynchronous status messages;
+preserve logical focus identity across rerenders;
+complete form-label, table-heading and repeated-action accessible naming;
+correct confirmed contrast and very-small-text problems;
+complete the defined packaged-runtime keyboard, screen-reader, rerender-focus, zoom, forced-colours and computed-contrast tests.
+
+Detailed findings are recorded in docs/audit_findings.md.
+
+Priority: Complete - the two High findings and broader keyboard/focus defects require disposition before final regression and release acceptance.
 8. Performance and scale audit
 
 The earlier Aircraft Registrations delay shows that performance defects can emerge only with realistic data volume.

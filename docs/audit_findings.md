@@ -1723,3 +1723,426 @@ Separate development and production signing.
 Block production signing from dirty source trees.
 Record commit, hashes, signer and metadata provenance for each release.
 Complete the documented hostile-import, spreadsheet, diagnostic, Tauri, updater and signing manual tests.
+7. Accessibility and keyboard-operation audit
+
+Completed 7 August 2026.
+
+This audit examined the static accessibility and keyboard-operation model of the principal Flite operator interface. It traced semantic structure, accessible naming, modal behaviour, keyboard activation, dropdowns, inline editing, dynamic rendering, focus retention, status announcements, visual focus, colour dependence and static contrast risks.
+
+The audit was source-based. Runtime behaviour that cannot be proved from static evidence remains explicitly classified as an inferred risk or manual-test requirement.
+
+Severity summary:
+
+High: 2
+Medium-high: 5
+Medium: 13
+Low-medium: 3
+Critical: 0
+Total confirmed findings: 23
+
+High-severity findings
+
+1. Shared button and field styling suppresses visible keyboard focus.
+
+Classification: Confirmed finding.
+Severity: High.
+
+The shared .btn and .field rule explicitly sets outline: none. Fields receive only a border-colour change on focus and there is no equivalent application-wide .btn:focus or .btn:focus-visible treatment. Some formation controls independently provide a 2px outline, proving that focus treatment is inconsistent rather than intentionally delegated to the browser.
+
+Impact:
+
+Keyboard focus can move onto consequential controls without a dependable visible indication of the current control. This affects movement creation, modal actions, Booking, Calendar, Reports, METAR, Admin and updater workflows.
+
+Remediation direction:
+
+Introduce one strong application-wide :focus-visible treatment and do not suppress browser focus unless an equal or stronger replacement exists.
+
+2. The shared movement-modal Enter handler can trigger unintended Save actions.
+
+Classification: Confirmed finding.
+Severity: High.
+
+The shared modal mechanism installs a document-level keydown handler. An unmodified Enter press triggers the modal's primary save control unless focus is in a textarea or inline-edit input. Other interactive controls are not excluded.
+
+Impact:
+
+Enter intended to operate a select, checkbox, radio, secondary action, lookup or other control can also submit the complete movement form. Because these operations create or alter operational movement records, unintended submission is operationally significant.
+
+Remediation direction:
+
+Remove document-wide Enter-to-save behaviour. Use semantic form submission with an explicit submit event and deliberately define where Enter is permitted to submit.
+
+Medium-high findings
+
+3. Modal focus lifecycle is incomplete.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Custom modal implementations do not consistently move focus into the opened dialog, contain Tab and Shift+Tab within it, make the underlying application inert, remember the opening control or restore focus after closure.
+
+Impact:
+
+Keyboard users can remain in visually obscured background content, tab outside the apparent modal or lose their position after closing it.
+
+Remediation direction:
+
+A shared dialog service should own initial focus, focus containment, background inertness and focus restoration.
+
+4. Booking and Calendar dialogs bypass the shared Escape mechanism.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Edit Booking, Edit Calendar Event, Booking Profile create/edit and Add Calendar Event directly populate modalRoot and bind click handlers rather than using the shared openModal keyboard pathway.
+
+Impact:
+
+Escape behaviour differs according to which Flite subsystem opened the dialog.
+
+Remediation direction:
+
+Route all custom dialogs through the same accessible dialog service.
+
+5. Live Board inline editing cannot be initiated using the keyboard.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Editable cells initiate startInlineEdit through dblclick. The original cells are not keyboard focusable and provide no Enter or Space equivalent.
+
+Once editing has started, the implementation is comparatively strong: Enter commits, Escape cancels, Tab and Shift+Tab commit and advance through an explicit field order, and failed validation prevents advancement.
+
+Impact:
+
+A keyboard-only operator cannot begin editing many principal movement fields.
+
+Remediation direction:
+
+Provide an explicit native Edit control or make each editable location focusable with a defined keyboard activation model.
+
+6. Live Board Edit menus do not implement a complete keyboard menu pattern.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+The Edit trigger is a native button and aria-expanded is maintained, but the menu lacks a complete menu-button model. Opening does not move focus to an item, arrow navigation is absent, Escape does not explicitly restore trigger focus, and menu versus ordinary-button semantics are mixed.
+
+Impact:
+
+Users must discover actions through sequential Tab rather than a predictable menu interaction model and can lose focus context when the menu closes.
+
+Remediation direction:
+
+Either implement a complete menu-button pattern or simplify the UI to an ordinary disclosure containing native buttons.
+
+7. The Create From submenu lacks standard keyboard submenu behaviour.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+The trigger exposes aria-haspopup and aria-expanded and child options use menuitem roles, but no complete Right Arrow, Left Arrow, Up Arrow, Down Arrow, focus-entry or parent-focus-return model was identified.
+
+Impact:
+
+Keyboard interaction with the submenu is non-standard and difficult to predict.
+
+Remediation direction:
+
+Implement the complete submenu keyboard contract or replace the menu semantics with a simpler disclosure interface.
+
+Medium findings
+
+8. Custom modals do not expose complete dialog semantics.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+Inspected custom dialogs use generic modal containers rather than native dialog elements and do not consistently expose role=dialog, aria-modal, aria-labelledby or equivalent programmatic title relationships.
+
+Impact:
+
+Assistive technology may not identify newly displayed content as a modal dialog or announce its purpose.
+
+9. History sortable table headers are mouse-only.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+Sorting is attached directly to clickable th[data-sort] elements. Those headers are not made keyboard focusable and no Enter or Space activation is supplied.
+
+Impact:
+
+Keyboard operators cannot sort History through these controls.
+
+Remediation direction:
+
+Place a native button in each sortable heading and maintain aria-sort.
+
+10. Top navigation declares tablist semantics without the complete tab keyboard model.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+The primary navigation container declares role=tablist, but the controls do not implement the corresponding complete ARIA tab pattern and initTabs binds ordinary click activation rather than Left/Right/Home/End keyboard navigation.
+
+Impact:
+
+The semantics announced by assistive technology do not match actual keyboard behaviour.
+
+Remediation direction:
+
+Either implement a complete ARIA tabs pattern or remove tab semantics and retain ordinary navigation buttons.
+
+11. Many visible form labels are not programmatically associated with their controls.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+Multiple movement, Booking and METAR labels are visually adjacent to their controls but lack a for/id relationship and do not contain the input. Other checkbox/radio patterns correctly use nested labels, showing inconsistent implementation.
+
+Impact:
+
+Screen readers may announce the field type and value without the visible field purpose.
+
+12. Several filters, searches and table headings lack sufficiently clear accessible names.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+Affected examples include Reports selectors and date controls, VKB global search, blank or incompletely scoped table headings and repeated row actions with insufficient row identity.
+
+Impact:
+
+Users navigating through lists of controls or table structures can lose the context of what a control or column affects.
+
+13. Toast notifications are not exposed as live status messages.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+The shared toast service inserts ordinary visual DOM without role=status, role=alert or aria-live.
+
+Toast messages are used for consequential success, warning, failure, export and fallback outcomes.
+
+Impact:
+
+An assistive-technology user can complete an operation without hearing whether it succeeded or failed.
+
+Remediation direction:
+
+Centralise severity-appropriate live-region semantics inside the toast service.
+
+14. METAR validation and Copy feedback are not announced.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+METAR validation dynamically rewrites textual error, warning and valid-state content and controls whether Copy is enabled, but the validation container is not a live region. Temporary Copy feedback similarly changes visually without status semantics.
+
+Impact:
+
+A screen-reader operator can remain unaware that validation changed, the report became valid or Copy completed.
+
+15. Updater state changes are not announced.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+Updater status is updated through textContent and inline colour changes but no live-region mechanism was identified.
+
+Impact:
+
+An operator initiating a check may receive no accessible indication when an update becomes available, confirmation becomes required or the state changes asynchronously.
+
+16. Calendar rerendering can destroy keyboard focus.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+Month, week and year Calendar views replace the complete grid using innerHTML. No semantic focus capture and restoration mechanism was identified.
+
+Impact:
+
+A focused date, booking, event or month can be destroyed during rendering, causing the operator to lose their keyboard position.
+
+17. Live Board rerender protection applies only to inline editing.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+Flite deliberately defers fdms:data-changed rerenders while an inline-edit session is active. When no inline editor is active, Live Board and timeline rerenders proceed without an equivalent focus-preservation mechanism for row buttons, expanded controls, menus or formation controls.
+
+Impact:
+
+Background data changes can replace the currently focused operational control.
+
+18. Booking Details drawer opens without deliberate focus transfer or announcement.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+Opening the Booking Details drawer rewrites its content, exposes the drawer and binds its actions without moving focus or announcing the newly displayed region.
+
+Impact:
+
+Keyboard and screen-reader users may not know where the new content appeared or how to reach it efficiently.
+
+19. Several static foreground/background combinations fail normal-text contrast targets.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+Declared stylesheet values produce approximately:
+
+white on header #5f858e: 4.01:1;
+secondary header text #e5eff1 on #5f858e: 3.43:1;
+FIS-total green #8bc990 on white: 1.93:1.
+
+The affected header and FIS content is normal-sized text.
+
+Impact:
+
+Persistent information is unnecessarily difficult to read for operators with reduced contrast sensitivity or in bright environments.
+
+20. Some persistent operational text is extremely small.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+The stylesheet includes navigation statistic labels at 8px, other statistic labels at 9px and several supporting operational labels and controls around 10px.
+
+Impact:
+
+Persistent operational information can be difficult to read at normal scaling and places increased reliance on zoom behaviour.
+
+Low-medium findings
+
+21. Dynamically disabled controls do not consistently explain why they are unavailable.
+
+Classification: Confirmed finding.
+Severity: Low-medium.
+
+METAR Copy has useful visible validation and incomplete-report text, but the disabled button is not programmatically associated with that explanation. Other disabled controls commonly rely on grey styling, opacity or cursor changes.
+
+Impact:
+
+Assistive-technology users can encounter an unavailable action without learning the prerequisite needed to enable it.
+
+22. Icon-only modal close controls have weak accessible naming.
+
+Classification: Confirmed finding.
+Severity: Low-medium.
+
+Several custom modal headers use a cross glyph with title="Close" but no explicit aria-label.
+
+Impact:
+
+The control can be announced inconsistently by assistive technology.
+
+23. The timeline lacks a sufficiently explicit alternative semantic representation.
+
+Classification: Confirmed finding.
+Severity: Low-medium.
+
+The timeline is primarily a visual arrangement of generic elements and does not expose a clear equivalent labelled structure or summary. The Live Board contains overlapping underlying movement information, so this is not a complete denial of the data.
+
+Impact:
+
+The timeline's spatial representation is not independently understandable to non-visual users.
+
+Consolidated inferred risks
+
+1. Timeline PLANNED versus ACTIVE distinction may rely too strongly on opacity.
+2. Admin dirty versus clean state may rely too strongly on orange versus green unless accompanying text changes.
+3. Booking Profile/VKB autofill can alter fields without announcing which values changed.
+4. Modal minimise behaviour may retain unexpected keyboard/focus state.
+5. Replacing one modal with another has no explicit dialog-stack focus-return model.
+6. Portal menus closed by scroll or resize may strand focus on a hidden or removed item.
+7. Repeated row actions such as Edit and Details may be ambiguous in screen-reader button lists because names often omit movement identity.
+8. Essential information may exist only in title/hover tooltips.
+9. Additional innerHTML-based table renders may destroy focused controls in the same way confirmed for Calendar.
+10. Computed contrast in tinted, disabled, hovered and color-mix states may reveal additional packaged-runtime failures.
+
+Confirmed-sound controls and patterns
+
+The audit identified the following controls and behaviours that should be preserved during remediation:
+
+native buttons, inputs and selects are used extensively;
+principal native buttons receive browser Enter and Space activation;
+shared movement modals support Escape;
+shared modal key handlers are deliberately removed on close;
+closed row menus use display:none and therefore do not leave hidden descendants in sequential focus;
+inline editors move focus into the created input;
+inline editors support Enter commit;
+inline editors support Escape cancel;
+inline editors provide deliberate Tab and Shift+Tab field traversal;
+inline traversal skips fields not applicable to the movement;
+inline traversal re-resolves the DOM after save-triggered rerender;
+failed inline validation prevents automatic navigation to another field;
+background Live Board rerenders are deferred while an inline editor is active;
+formation controls provide explicit 2px focus outlines;
+reconciliation uses role=alert;
+reconciliation Details maintains aria-expanded and aria-controls;
+METAR provides textual validation rather than relying solely on colour;
+METAR Copy is genuinely disabled while blocking errors remain;
+updater states use descriptive text rather than colour alone;
+exports distinguish saved, cancelled, downloaded, fallback and failed outcomes textually;
+top-level active navigation uses font weight, borders and background in addition to colour;
+flight-type controls explicitly identify LOC, DEP, ARR and OVR;
+formation divergence includes textual DIVERGED and per-status information;
+Booking Profile search rerenders the table body rather than destroying the search input;
+Reports rendering generally leaves its initiating selectors outside the replaced report-content region.
+
+Manual-test programme
+
+The following packaged-runtime tests remain required because static inspection cannot prove the relevant runtime behaviour.
+
+Keyboard-only operational test:
+
+complete a representative workflow without using a mouse, including movement creation, Live Board editing, activation/completion, Details, Create From, cancellation/deletion/recovery, Booking, Calendar, History sorting/filtering, Reports, METAR, VKB, Admin and updater controls.
+
+Modal keyboard test:
+
+for every custom dialog verify initial focus, visible focus, Tab and Shift+Tab containment, Escape, Cancel, Save, invalid-field focus, background inaccessibility and focus return.
+
+Enter safety test:
+
+press Enter while focused on every significant control type inside movement dialogs and confirm that no unintended Save or duplicate action occurs.
+
+Screen-reader announcement test:
+
+verify dialog opening and title, toast success/warning/error, METAR validation, Copy feedback, updater state, reconciliation alerts, Booking autofill, disabled-action explanations and Booking Details drawer behaviour.
+
+Rerender-focus test:
+
+maintain focus while triggering movement updates, fdms:data-changed, Booking synchronisation, filters, Calendar rerenders, History sorting and other dynamic replacement paths.
+
+Visual runtime test:
+
+measure actual computed contrast and test 200% zoom, 400% zoom, Windows high-contrast/forced-colours mode, disabled-state readability, focus visibility and greyscale/non-colour comprehension.
+
+Systemic conclusion
+
+Flite is not currently fully keyboard-accessible or assistive-technology accessible, but the underlying interface already uses native controls extensively and contains several strong isolated accessibility mechanisms.
+
+The principal architectural problem is inconsistent behaviour at custom-interaction boundaries. Modal systems, inline-edit entry, dropdown menus, rerendered interfaces and dynamic feedback do not share one coherent accessibility layer.
+
+Recommended remediation order
+
+1. Restore strong application-wide visible keyboard focus.
+2. Remove the document-level Enter-to-save mechanism.
+3. Centralise all custom dialogs behind one accessible modal service.
+4. Make inline-edit entry, History sorting and row menus fully keyboard operable.
+5. Resolve the top-navigation semantic/keyboard mismatch.
+6. Centralise live status and alert announcements.
+7. Add semantic focus preservation across rerenders.
+8. Complete accessible names, labels and table relationships.
+9. Correct confirmed contrast and very-small-text issues.
+10. Run the defined packaged-runtime keyboard, screen-reader, zoom, forced-colours and rerender-focus test programme.
+
+Overall disposition
+
+Audit 7 is complete.
+
+The two High-severity findings and the broader Medium-high keyboard/focus defects require disposition before final regression and release acceptance.
