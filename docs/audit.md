@@ -538,25 +538,81 @@ Detailed findings and the benchmark specification are recorded in docs/audit_fin
 
 Priority: Complete - the six High findings and systemic installation-age scaling risks require benchmarking and remediation disposition before final regression and release acceptance.
 
-9. Browser-harness versus installed-Tauri parity audit
+9. Browser-harness versus installed-Tauri parity audit - COMPLETED 7 August 2026
 
-Some features deliberately differ between browser and installed app:
+Status: Complete.
 
-updater;
-native Save As;
-filesystem behaviour;
-external links;
-clipboard;
-restart;
-installer teardown;
-browser download fallback.
+The audit compared Flite's browser harness with the installed Tauri runtime and traced environment-specific capability branches through operator feedback, diagnostics and persistence consequences.
 
-A parity audit should identify every environment-specific branch and confirm that the UI accurately reflects capability in both environments.
+Passes completed:
 
-The browser harness should not be allowed to create false confidence about installed behaviour, and the installed app should not expose browser-only assumptions.
+environment detection and the Tauri capability boundary;
+Save As, CSV, XLSX and file-export parity;
+clipboard, external navigation and browser-API parity;
+updater, restart and installed lifecycle behaviour;
+persistence, reload, dialogs and runtime behaviour;
+consolidation and packaged-runtime parity-test specification.
 
-Priority: High before release.
+Consolidated findings:
 
+Confirmed findings: 11
+Inferred risks retained after consolidation: 4
+Critical: 0
+High: 0
+
+Confirmed-finding severity:
+
+Medium-high: 3
+Medium: 8
+Total: 11
+
+Principal findings:
+
+installed native-version IPC failure can leave browser-only dev identity in backup and audit provenance;
+full JSON backup uses the generic native text-save command even though that command exposes a CSV-only Save As filter;
+Booking Profile JSON export bypasses the native Save As path and retains browser/WebView download behaviour in the installed application;
+METAR Copy assumes navigator.clipboard exists and can fail before its fallback is reached;
+CAA and FAA registry-copy controls report Copied before asynchronous clipboard success is known;
+CAA and FAA external navigation relies on unchecked window.open behaviour rather than an explicit installed-app opener path;
+failed update installation consumes the native pending-update object but re-enables an Install control that cannot actually retry without another update check;
+automatic updater checks can refresh Last checked while Status remains Not checked, and failed or offline attempts are recorded as checked timestamps;
+failure of the installed-only Restart action is silently discarded;
+storage-capacity reporting and preflight use a fixed 5 MB localStorage assumption rather than measured runtime capacity;
+Admin Restore has no explicit FileReader read-error path.
+
+Confirmed strengths:
+
+browser mode explicitly identifies itself as browser/dev and disables or hides installed-only updater controls;
+renderer command names inspected by the audit match the registered Rust command surface;
+CSV generation occurs before the browser/native save split, reducing content divergence;
+native Save cancellation is distinguished from successful saving;
+native-save fallback paths inspected by the audit tell the operator when Downloads fallback is used;
+XLSX native failure proceeds to an explicit browser fallback and records critical failure if that fallback also fails;
+restore parsing and validation are shared frontend logic once the selected file is readable;
+destructive restore confirmation uses an application-owned HTML dialog rather than browser/native confirm semantics;
+ordinary renderer reload and native application restart are deliberately separate operations;
+updater installation confirmation deliberately avoids the unsupported native-confirm ACL path;
+the Windows NSIS updater close/relaunch lifecycle has previously been validated end to end.
+
+Systemic conclusion:
+
+The browser harness remains useful for shared UI, validation and domain behaviour, but it cannot be treated as acceptance evidence for installed-product capabilities. Filesystem operations, application identity, clipboard availability, external navigation, updater lifecycle, process restart and installed persistence characteristics require an explicit packaged-Tauri parity gate.
+
+Required remediation direction:
+
+correct the native JSON Save As filter and verify backup-to-restore interoperability in the packaged application;
+use an explicit installed-runtime identity state rather than retaining dev provenance after native version failure;
+centralise clipboard operations behind a result-bearing capability wrapper;
+define and test the intended installed external-navigation mechanism;
+make updater pending-state, Last checked, Status and retry behaviour accurately reflect native state;
+report restart invocation failure;
+replace assumed storage availability/capacity checks with result-bearing runtime checks where feasible;
+add explicit restore file-read failure handling;
+retain a small mandatory packaged-Tauri acceptance suite alongside browser regression testing.
+
+Detailed findings and the packaged-runtime parity test specification are recorded in docs/audit_findings.md.
+
+Priority: Complete - the three Medium-high findings and installed-runtime truthfulness gaps require remediation disposition and packaged-Tauri acceptance before final regression and release acceptance.
 10. Backup and restore destructive-behaviour audit
 
 Items 1â€“3 established coverage and validation, but a final scenario-based audit should still test:

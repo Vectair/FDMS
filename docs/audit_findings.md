@@ -2687,3 +2687,460 @@ Audit 8 is complete as a source investigation.
 Runtime performance at mature-installation scale remains unverified until the benchmark programme is executed.
 
 The principal release concern is not simply whether Flite performs acceptably on today's development data. It is whether current operational latency remains stable after months or years of retained operational and audit history.
+9. Browser-harness versus installed-Tauri parity audit
+
+Completed 7 August 2026.
+
+Authoritative inspected baseline: ec90865 - Complete performance and scale audit.
+
+This audit examined whether Flite's browser harness provides reliable evidence for the behaviour of the installed Tauri application, and whether environment-specific branches accurately report what happened to the operator.
+
+The central trace model was:
+
+Browser implementation
+-> Installed-Tauri implementation
+-> capability detection
+-> failure
+-> fallback
+-> operator message
+-> diagnostics
+-> persistence or data consequence
+
+Passes completed:
+
+environment detection and Tauri capability boundary;
+Save As, CSV, XLSX and file-export parity;
+clipboard, external navigation and browser-API parity;
+updater, restart and installed lifecycle behaviour;
+persistence, reload, dialogs and runtime behaviour;
+consolidation and packaged-runtime parity-test specification.
+
+Severity summary:
+
+Medium-high: 3
+Medium: 8
+Critical: 0
+High: 0
+Total confirmed findings: 11
+
+Inferred risks retained after consolidation: 4
+
+Confirmed findings
+
+1. Installed native-version failure can contaminate provenance with browser-only dev identity. - Medium
+
+The browser harness legitimately uses dev as its running application version.
+
+In installed Tauri, however, initAppVersion() also retains that value if the Tauri bridge exists but flite_get_app_version fails. The failure is silently caught.
+
+The retained value is subsequently available to backup metadata and backup/restore audit provenance.
+
+The updater UI handles the same installed-version failure differently by displaying an unknown version, so one abnormal installed runtime can simultaneously describe itself as unknown in one surface and dev in persisted provenance.
+
+Browser acceptance cannot expose this installed-only failure mode.
+
+2. Full JSON backup uses a native Save As command whose filter is hard-coded to CSV. - Medium-high
+
+Admin Backup creates a filename of the form:
+
+vectair-flite-backup-YYYYMMDD-HHMMSS.json
+
+and sends the JSON text through saveTextFileWithDialogOrDownload().
+
+In installed Tauri that invokes save_text_file_with_dialog.
+
+The Rust implementation of that generic text-save command always configures:
+
+CSV (*.csv)
+
+as the file-dialog filter.
+
+The restore workflow is explicitly presented as Restore from JSON and its file input accepts .json.
+
+The browser path therefore proposes and downloads JSON directly, while the installed path presents a native dialog configured as CSV.
+
+Static source proves the filter mismatch. The exact Windows/Tauri extension result must be established by packaged testing. If the native dialog changes or appends the extension, the primary backup can become difficult or impossible to select through the ordinary Restore from JSON picker.
+
+3. Booking Profile JSON export bypasses native Save As in the installed application. - Medium
+
+Booking Profile export creates a Blob, object URL and anchor with a download attribute.
+
+That same browser-style mechanism is used when Flite is installed under Tauri.
+
+It therefore behaves differently from movement/report CSV exports and full backup, which detect the native bridge and use a Save As command.
+
+The resulting toast says only that profiles were exported and does not identify the destination.
+
+The packaged WebView destination and feedback require installed testing.
+
+4. METAR Copy assumes navigator.clipboard exists. - Medium-high
+
+The METAR Copy handler directly calls navigator.clipboard.writeText().
+
+Its fallback is reached only through rejection of the returned Promise.
+
+If navigator.clipboard itself is absent, the property access/call fails synchronously before a Promise exists and the fallback is never reached.
+
+The Booking code elsewhere in the same application explicitly checks for navigator.clipboard before using it, demonstrating that the safer capability pattern already exists.
+
+This creates a direct browser/WebView capability dependency.
+
+The previously identified security-audit defect whereby the execCommand fallback may report Copied without proving success is not duplicated as a new Audit 9 finding.
+
+5. CAA and FAA registry-copy controls report success before clipboard success is known. - Medium
+
+The Booking registry controls call copyToClipboard(searchKey) and immediately show a toast stating that the value was copied.
+
+copyToClipboard() does not return a success result to its caller.
+
+If the Web Clipboard API rejects, a fallback is attempted asynchronously after the success toast has already been displayed.
+
+The fallback also does not reliably report whether document.execCommand('copy') succeeded.
+
+An installed-WebView clipboard restriction can therefore be masked behind feedback identical to a successful browser copy.
+
+6. External registry navigation is unchecked. - Medium
+
+CAA G-INFO and FAA Registry use window.open(url, '_blank').
+
+The return value is ignored.
+
+The inspected Tauri application does not configure a dedicated opener plugin or custom external-navigation command for these actions.
+
+Flite therefore has no application-level acknowledgement of:
+
+popup blocking;
+navigation refusal;
+whether the destination opened in the system browser;
+whether it opened in another WebView;
+whether the current application context was affected.
+
+Browser success does not establish the intended installed behaviour.
+
+7. Failed update installation consumes the pending native update but leaves Install apparently retryable. - Medium-high
+
+A successful native update check stores the Tauri Update object in pending_update.
+
+flite_download_and_install_update removes it with pending.take() before attempting download_and_install().
+
+If download or installation fails, that Update object is not restored to pending state.
+
+The renderer then reports Update failed and re-enables Download and install update.
+
+A second Install attempt therefore cannot retry the failed update and instead encounters the native No pending update state until another Check for Updates is performed.
+
+The visible control state does not accurately represent the native state.
+
+8. Updater Last checked and Status do not truthfully represent automatic startup checks. - Medium
+
+The native updater generates lastChecked before performing the update check and returns it for successful, offline and generic-error results.
+
+The renderer persists that timestamp whenever it is present.
+
+During automatic startup checking, up-to-date, offline and generic-error outcomes can leave the visible Status unchanged as Not checked.
+
+The resulting UI can therefore display a recent Last checked timestamp together with Status: Not checked.
+
+The timestamp can mean:
+
+successfully confirmed current;
+offline attempt;
+generic updater failure.
+
+The field therefore behaves partly as Last attempted rather than reliably meaning Last successfully checked.
+
+This finding consolidates the two closely related Pass 4 observations rather than recording them twice.
+
+9. Installed-only Restart failure is silently swallowed. - Medium
+
+The Restart Flite control invokes flite_restart_app and attaches an empty rejection handler.
+
+A failed native invocation therefore produces no:
+
+toast;
+status change;
+diagnostic record;
+retry guidance.
+
+The operator can activate an installed-only lifecycle control, observe no restart and receive no explanation.
+
+This finding concerns failure acknowledgement and does not duplicate the security audit's separate renderer restart-authority finding.
+
+10. Storage-capacity reporting uses a fixed 5 MB assumption rather than measured runtime capacity. - Medium
+
+getStorageQuota() calculates current LocalStorage usage but assigns a fixed 5 MB quota.
+
+hasEnoughStorageSpace() relies on that estimated quota.
+
+The browser harness and installed WebView use different storage profiles and are not guaranteed to expose identical effective storage capacity.
+
+The application can therefore show identical apparent quota and availability values in both environments without establishing that the same amount can actually be written.
+
+11. Admin Restore has no explicit FileReader read-error path. - Medium
+
+Restore uses a normal HTML file input and FileReader.
+
+Once FileReader.onload occurs, the same inspection, parsing and restore logic is used in browser and installed Flite.
+
+However, the restore workflow defines no FileReader.onerror handler.
+
+An environment-specific file-read failure can therefore stop the workflow before normal malformed-file or restore-preflight feedback is reached.
+
+Inferred risks
+
+A9-R01. Runtime identity is inferred solely from the existence of window.__TAURI__.core.invoke. - Low-medium
+
+An invoke-compatible browser shim could be treated as native, while an abnormal installed runtime in which the global bridge failed to initialise could be treated as browser.
+
+No evidence was found that the supported current environments actually exhibit either condition.
+
+A9-R02. Installed registry links may have unintended navigation semantics. - Medium
+
+Without an explicit Tauri opener path, static source cannot prove whether the packaged application opens CAA/FAA links in the system browser, another WebView, the current context or nowhere.
+
+A9-R03. Failed native update checks can retain a stale pending-update object. - Low-medium
+
+A successful up-to-date result clears pending_update.
+
+Updater creation, network and other failed-check paths do not.
+
+A pending update from an earlier successful check can therefore remain in native state after a later failed check, although the normal manual UI substantially masks that state.
+
+A9-R04. LocalStorage presence is treated as proof of storage availability. - Low-medium
+
+The shared storage boundary tests whether window.localStorage exists.
+
+It does not perform a write/read/remove capability probe.
+
+Existence therefore does not prove that writes are permitted, quota remains or persistence is durable.
+
+No supported packaged-runtime failure was established, so this remains an inferred risk.
+
+Confirmed-sound controls
+
+Browser updater degradation is explicit.
+
+When the native bridge is absent, Version & Updates identifies the environment as browser/dev and browser harness, states that the updater is unavailable outside the installed desktop app, disables Check on launch and hides or disables installed-only controls.
+
+The renderer and Rust command surfaces inspected by this audit agree.
+
+The custom native commands inspected were:
+
+save_text_file_with_dialog;
+save_binary_file_with_dialog;
+flite_get_app_version;
+flite_check_for_update;
+flite_download_and_install_update;
+flite_restart_app.
+
+CSV generation is structurally shared.
+
+The CSV string is generated in JavaScript before the browser/native save branch. Browser and Tauri therefore do not use separate reporting algorithms for the inspected CSV exports.
+
+Native Save cancellation is explicitly distinguished.
+
+The native save commands return cancelled and callers inspected by the audit do not claim successful saving after cancellation.
+
+Native text-save fallback is visible to the operator.
+
+Where inspected exports fall back from native text saving to browser download, the UI warns that native Save As failed and directs the operator to Downloads.
+
+The security consequences of placing sensitive exports in Downloads were recorded by the earlier security audit and are not duplicated here.
+
+XLSX fallback handling is explicit.
+
+The installed path serialises the workbook to Base64 and invokes the native binary-save command.
+
+If that route fails, the reporting code attempts XLSX.writeFile() as browser fallback.
+
+If the fallback also fails, a critical export diagnostic is recorded and an error result is returned.
+
+Restore parsing and validation are shared frontend behaviour.
+
+Both browser and installed Flite use the same FileReader, backup inspection and import logic once the selected file has been read.
+
+Restore confirmation is application-owned.
+
+Admin destructive confirmation is an HTML dialog rather than browser/native confirm(), avoiding the known packaged ACL difference for plugin-dialog confirm.
+
+Renderer reload and application restart are deliberately separate.
+
+Reload App uses location.reload().
+
+Restart Flite uses the installed-only native restart command.
+
+Updater install confirmation deliberately avoids an unsupported native dialog.
+
+The install action uses a two-click inline confirmation with a 30-second arming period because the packaged application's ACL does not grant the native confirm route.
+
+Windows updater teardown has previously been validated.
+
+The repository records an end-to-end Windows NSIS update from 0.9.0 to 0.9.1, including application close/relaunch and persistence survival.
+
+Packaged-runtime parity acceptance specification
+
+Environment identity
+
+Before testing feature parity:
+
+confirm navigator/browser harness does not expose the normal Tauri invoke bridge;
+confirm installed Flite exposes window.__TAURI__.core.invoke;
+confirm browser identifies itself as dev/browser;
+confirm installed Flite resolves the package version;
+confirm updater controls are unavailable in browser and operational only when installed;
+treat browser and installed LocalStorage as deliberately separate persistence identities.
+
+CSV parity
+
+With equivalent source data, compare browser and installed exports for:
+
+filename;
+extension;
+headers;
+row count;
+field values;
+quoting;
+commas and embedded text;
+Unicode;
+BOM where expected;
+newline semantics.
+
+The environment may change the save interaction and destination but should not change report content.
+
+Full JSON backup parity
+
+This is a mandatory packaged-runtime test.
+
+In installed Flite:
+
+open Backup to JSON;
+inspect the native Save As filter;
+accept the proposed .json filename without manually changing it;
+record the exact file created on disk;
+verify its extension;
+verify the contents parse as JSON;
+immediately open Restore from JSON;
+confirm the same file is selectable by the normal restore picker.
+
+Also test Save cancellation and native text-write failure fallback.
+
+Booking Profile export
+
+In installed Flite:
+
+export a distinctive profile;
+identify the actual output location;
+verify filename and JSON contents;
+record what WebView feedback is presented.
+
+XLSX parity
+
+Generate an equivalent Official Monthly Return in browser and installed Flite.
+
+Compare:
+
+sheet names;
+row counts;
+cell values;
+key formulas or formats where relevant;
+Movement Details content.
+
+Binary identity is not mandatory where SheetJS legitimately serialises workbook metadata differently. Semantic workbook equality is the acceptance requirement.
+
+Also test:
+
+native Save cancellation;
+native XLSX failure followed by browser fallback;
+fallback failure where practicable.
+
+Clipboard parity
+
+Test METAR, CAA registration and FAA registration copying in browser and installed Flite.
+
+Exercise:
+
+normal Web Clipboard availability;
+permission rejection;
+Clipboard API absence where reproducible;
+legacy fallback.
+
+After every claimed success, independently paste into a neutral field.
+
+Displayed Copied feedback is not sufficient evidence.
+
+External navigation parity
+
+For CAA G-INFO and FAA Registry, establish in the packaged application:
+
+whether the destination opens in the system browser;
+whether a new WebView is created;
+whether the current Flite window navigates away;
+what occurs if navigation is blocked or refused;
+whether closing the destination affects Flite.
+
+Updater lifecycle
+
+In installed Flite test:
+
+manual check while current;
+manual check while offline;
+automatic Check on launch while current;
+automatic Check on launch while offline;
+Last checked and Status after each case;
+available-update detection;
+first and second install-confirmation clicks;
+successful NSIS installation;
+automatic close/relaunch;
+new running version after update;
+persistence survival;
+failed update installation where practicable;
+immediate Install retry without another check;
+recovery after a fresh update check;
+manual Restart path where available;
+restart invocation failure where reproducible.
+
+Persistence and reload parity
+
+Use deliberately different marker data in browser and installed Flite.
+
+Verify that each environment keeps its own dataset.
+
+For installed Flite verify persistence across:
+
+location.reload();
+normal close and reopen;
+update/relaunch where tested.
+
+Browser persistence surviving localhost reload is not evidence of installed persistence.
+
+Storage behaviour
+
+Compare the fixed quota display with actual safe write behaviour in both environments.
+
+Do not treat the displayed 5 MB capacity as independently measured runtime capacity.
+
+Restore file handling
+
+In browser and installed Flite test:
+
+picker cancellation;
+valid JSON;
+malformed JSON;
+recognised but non-restorable backup;
+reselecting the same file;
+file-read failure where a reproducible case can be constructed.
+
+The destructive semantic correctness of restore remains the scope of Audit 10 rather than Audit 9.
+
+Systemic conclusion
+
+Flite's shared frontend creates substantial parity for ordinary UI and domain logic, but browser regression testing does not exercise or prove several installed-product capabilities.
+
+The required release model is therefore:
+
+browser harness for broad shared regression;
+plus a small explicit packaged-Tauri parity gate for native identity, filesystem, clipboard, external navigation, updater, restart and installed persistence behaviour.
+
+Audit 9 is complete.
+
+The three Medium-high findings and the broader installed-runtime truthfulness gaps require remediation disposition and packaged-Tauri acceptance before final regression and release acceptance.
