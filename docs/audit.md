@@ -692,25 +692,94 @@ The final destructive-restore acceptance specification contains 48 scenario test
 Detailed findings and the destructive-restore test specification are recorded in docs/audit_findings.md.
 
 Priority: Complete - the four High findings require remediation before final regression and release acceptance.
-11. Release artefact and clean-install audit
+11. Release artefact and clean-install audit - COMPLETED 10 August 2026
 
-Before V1, test from outside the development environment:
+Status: Complete.
 
-clean Windows installation;
-upgrade from 0.9.4;
-update check on launch enabled and disabled;
-manual update;
-update failure and retry;
-preservation of data across update;
-uninstall behaviour;
-reinstall behaviour;
-application name, icon, publisher and version;
-Start Menu shortcut;
-installer warnings;
-first-launch state;
-whether demo data is appropriate on a clean production install.
+The audit examined the real Windows release lifecycle from release configuration and installer identity through clean installation, first launch, update, manual upgrade, uninstall/reinstall and release artefact provenance.
 
-Priority: Essential, but after the current code corrections.
+Passes completed:
+
+release configuration and artefact contract;
+installer identity and Windows integration;
+clean install and first-launch state;
+upgrade and updater lifecycle;
+uninstall, residual-data and reinstall lifecycle;
+release artefact provenance and clean-build acceptance.
+
+Consolidated findings:
+
+Confirmed findings / verification gaps: 13
+Critical: 0
+High: 1
+Medium-high: 2
+Medium: 7
+Low-medium: 2
+Low: 1
+Total: 13
+
+Principal findings:
+
+the audited source baseline is 29 commits beyond the public v0.9.4 tag while package.json, Cargo.toml and tauri.conf.json still identify the application as 0.9.4, allowing materially different binaries to share the same release identity;
+the packaged application exposes its semantic version but reports buildSource as unknown, so an installed binary cannot be traced to an immutable source commit;
+release production is manually assembled rather than mechanically tied to an exact tested tag;
+the clean-build toolchain is not fully pinned or reproducibly specified;
+the default Windows NSIS configuration can require network access to obtain WebView2 where the runtime is absent;
+the custom NSIS hook forces a Desktop shortcut and can recreate it during later installs or updates;
+production retains an explicitly confirmed Danger Zone Reset to Demo control capable of placing synthetic movements into the ordinary operational movement store;
+the historical packaged updater-survival test covers only part of the current persistence surface;
+the documented manual NSIS upgrade path does not have equivalent packaged acceptance evidence;
+the uninstall/reinstall WebView data-retention contract is not defined or demonstrated;
+downgrade guidance addresses Windows version ordering but not compatibility of newer persisted schemas with an older application;
+publishing both MSI and NSIS exposes an untested cross-installer lifecycle;
+package-lock.json retains stale historical product/version metadata.
+
+Systemic conclusion:
+
+The Tauri application-side packaging architecture is broadly coherent, but the release lifecycle around it is insufficiently controlled.
+
+The strongest release risk is source-to-version provenance. Public v0.9.4 refers to commit 41bbeed16f475fb32bd30624a5f9327d70464d7a, while the audited baseline 76a20a1a89f1e3eac3d163ef2f212f62470f5552 is 29 commits later and contains substantial runtime changes while still declaring version 0.9.4.
+
+A clean build from the audited baseline would therefore produce a materially different application carrying the same semantic version as the already-published July release.
+
+Confirmed strengths:
+
+productName Vectair Flite and identifier com.vectair.flite are stable and coherent;
+the principal version-bearing manifests are mutually aligned at the frozen baseline;
+the Tauri updater public key is committed while private signing material remains external;
+createUpdaterArtifacts is enabled and updater artefacts are signed;
+the public v0.9.4 release has an exact Git tag;
+GitHub records SHA-256 digests for the published release assets;
+a real Windows NSIS updater transition from 0.9.0 to 0.9.1 previously preserved significant operational state;
+a genuinely fresh application profile starts with no operational movements, bookings, calendar events or booking profiles;
+movement persistence includes explicit v1/v2 to v3 migration;
+configuration loading preserves existing values while merging newly introduced defaults;
+update installation requires explicit operator action;
+Rust dependencies are substantially pinned through Cargo.lock;
+the local development reinstall helper refuses dirty-tree builds by default.
+
+Required remediation direction:
+
+assign a new unique semantic version before any further distributable build;
+make version advancement a mandatory release gate;
+embed or expose an immutable Git commit/build identifier in the packaged application;
+build releases from an exact accepted tag rather than moving main;
+introduce a hardened release script or CI workflow;
+define the supported Windows installer channel and remove MSI if it is not intentionally supported;
+repeat updater acceptance using every current persistence class;
+test manual NSIS-over-existing-install separately from the in-app updater;
+establish and document the actual uninstall/reinstall WebView-data contract;
+require a verified backup before destructive uninstall/downgrade operations until that contract is proven;
+define downgrade schema compatibility;
+decide whether Reset to Demo belongs in production;
+resolve offline WebView2 installation policy;
+respect user Desktop-shortcut choice across install and upgrade;
+pin and document the supported clean-build toolchain;
+remove stale package-lock identity/version metadata.
+
+Detailed findings and the final release-lifecycle acceptance specification are recorded in docs/audit_findings.md.
+
+Priority: Complete - the High provenance finding and the remaining Medium-high/Medium lifecycle gaps require remediation and packaged Windows acceptance before final regression and V1 release.
 
 12. Documentation-to-product audit
 

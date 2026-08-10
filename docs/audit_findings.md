@@ -3757,3 +3757,306 @@ Overall disposition
 Audit 10 is complete.
 
 The four High findings and the three Medium-high findings require remediation before final regression and release acceptance.
+11. Release artefact and clean-install audit
+
+Completed 10 August 2026.
+
+Authoritative inspected baseline: 76a20a1 - Complete backup and restore destructive behaviour audit.
+
+This audit examined the complete Windows release lifecycle rather than only whether Tauri can produce an installer.
+
+It traced:
+
+release configuration and artefact contract;
+application identity and version metadata;
+NSIS Windows integration;
+clean-install and first-launch state;
+production demo-data behaviour;
+updater configuration and operator controls;
+packaged updater persistence;
+manual installer upgrade;
+uninstall and reinstall;
+residual WebView application data;
+downgrade behaviour;
+NSIS versus MSI distribution;
+source-to-binary provenance;
+semantic-version discipline;
+release signing;
+release asset hashes;
+clean-build controls;
+toolchain reproducibility.
+
+Consolidated confirmed-finding severity:
+
+High: 1
+Medium-high: 2
+Medium: 7
+Low-medium: 2
+Low: 1
+Critical: 0
+Total confirmed findings / verification gaps: 13
+
+High-severity findings
+
+1. Materially different source states share the same semantic release version.
+
+Classification: Confirmed finding.
+Severity: High.
+
+The public v0.9.4 tag resolves to commit:
+
+41bbeed16f475fb32bd30624a5f9327d70464d7a
+
+The authoritative Audit 11 baseline is:
+
+76a20a1a89f1e3eac3d163ef2f212f62470f5552
+
+The audit baseline is 29 commits ahead of the public v0.9.4 tag.
+
+Those intervening commits include substantial runtime changes while the audited baseline still declares version 0.9.4 in package.json, src-tauri/Cargo.toml and src-tauri/tauri.conf.json.
+
+Impact:
+
+semantic version no longer identifies a unique application state;
+support and acceptance evidence labelled only 0.9.4 is ambiguous;
+the updater cannot distinguish two materially different builds carrying the same version;
+a newer local build can identify itself as already current against the older public release.
+
+Remediation direction:
+
+assign a new unique version before any further distributable build;
+make version advancement a hard release prerequisite;
+verify all authoritative manifests, Git tag, GitHub release and updater manifest agree before publication.
+
+Medium-high findings
+
+2. Packaged builds do not expose immutable source provenance.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+The native version command returns the semantic version and buildSource: unknown.
+
+No Git commit SHA, tag or immutable build identity is exposed by the packaged application.
+
+Remediation direction:
+
+embed the accepted Git commit SHA during release build;
+surface it in System Status and diagnostic output.
+
+3. Release production is manually assembled and is not mechanically bound to an exact accepted Git tag.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+There is no committed release workflow at the frozen baseline.
+
+scripts/install-latest-dev-build.ps1 is explicitly a development reinstall helper. It builds current main by default, can be run with -SkipGitUpdate or -AllowDirty, and does not create the GitHub Release or publish latest.json.
+
+The public v0.9.4 release was assembled manually, with latest.json uploaded separately after the installer assets.
+
+Remediation direction:
+
+introduce a hardened release workflow or release script;
+require clean repository state;
+require an exact immutable release ref;
+verify version consistency;
+run required tests;
+build and sign from that ref;
+record source SHA and hashes;
+publish only the accepted outputs.
+
+Medium findings
+
+4. A clean Windows installation is not guaranteed to be completely offline when WebView2 is absent.
+
+Classification: Confirmed configuration with conditional runtime consequence.
+Severity: Medium.
+
+No explicit WebView2 install mode is configured.
+
+Remediation direction:
+
+decide whether fully offline installation is required and either bundle an appropriate WebView2 strategy or document the network prerequisite.
+
+5. Production retains a control capable of populating synthetic operational movements.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+A genuinely fresh installation starts empty.
+
+However, Admin Danger Zone retains Reset to Demo, which persists realistic synthetic movements into the ordinary operational movement store after explicit confirmation.
+
+Remediation direction:
+
+remove or development-gate it, or make synthetic/demo state unmistakable throughout the product.
+
+6. Existing packaged updater-survival evidence does not cover the complete current persistence surface.
+
+Classification: Confirmed verification gap.
+Severity: Medium.
+
+The historical Windows updater test covered movements, VKB overrides, audit history, bookings/calendar and settings.
+
+The current application contains additional persistence classes that have not been equivalently verified across a packaged update.
+
+Remediation direction:
+
+populate every current persistence class in an older installed build, update without restore, and verify every value survives.
+
+7. Manual NSIS-over-existing-install upgrade lacks equivalent packaged acceptance evidence.
+
+Classification: Confirmed verification gap.
+Severity: Medium.
+
+Documentation supports manual installer upgrade, but current evidence covers the in-app updater rather than the equivalent manual NSIS lifecycle.
+
+Remediation direction:
+
+add a separate fully populated manual NSIS upgrade test.
+
+8. Uninstall/reinstall data retention is undefined and unverified.
+
+Classification: Confirmed lifecycle-assurance gap.
+Severity: Medium.
+
+All authoritative application state resides in the WebView localStorage profile.
+
+Flite has no custom uninstall-data policy.
+
+Remediation direction:
+
+test populated uninstall, inspect residual WebView data, reinstall and define the resulting behaviour as the supported contract.
+
+9. Downgrade guidance does not address persisted-schema compatibility.
+
+Classification: Confirmed release-lifecycle gap.
+Severity: Medium.
+
+Uninstalling a higher version and installing a lower one may satisfy Windows installer ordering but does not establish that newer persisted data is compatible with the older application.
+
+Remediation direction:
+
+require backup and define explicitly supported downgrade/schema paths.
+
+10. The clean-build environment is not fully pinned or reproducibly specified.
+
+Classification: Confirmed reproducibility gap.
+Severity: Medium.
+
+Cargo.lock pins Rust dependencies, but the repository does not fully pin the external Rust, cargo-tauri, Node/npm and Windows build environment.
+
+Remediation direction:
+
+pin or explicitly document the supported release toolchain.
+
+Low-medium findings
+
+11. The custom NSIS hook forces and can recreate a Desktop shortcut.
+
+Classification: Confirmed finding.
+Severity: Low-medium.
+
+The post-install hook creates the Desktop shortcut directly and suppresses the normal finish-page shortcut callback.
+
+Remediation direction:
+
+retain the icon fix while respecting user shortcut choice and update mode.
+
+12. Publishing both MSI and NSIS creates an untested cross-installer lifecycle.
+
+Classification: Confirmed release-process / acceptance gap.
+Severity: Low-medium.
+
+The public release exposes both installer technologies while documentation primarily directs users to NSIS.
+
+Remediation direction:
+
+publish only the supported installer technology, or explicitly test both and their transition paths.
+
+Low findings
+
+13. package-lock.json retains stale product/version metadata.
+
+Classification: Confirmed finding.
+Severity: Low.
+
+The stale lockfile identity does not appear to control Tauri installer identity but creates avoidable release metadata inconsistency.
+
+Remediation direction:
+
+regenerate or correct the lockfile.
+
+Release invariants established by Audit 11
+
+com.vectair.flite remains stable unless an explicit persisted-data migration is designed;
+every materially new distributable build receives a unique monotonically increasing semantic version;
+package.json, Cargo.toml and tauri.conf.json agree;
+the Git tag, GitHub Release and updater manifest use the same release version;
+the packaged application exposes the exact source commit;
+release builds originate from the immutable accepted release ref;
+updater artefacts remain signed using the external private key;
+release hashes are retained;
+final acceptance installs the artefact downloaded back from the public release.
+
+Final packaged Windows acceptance specification
+
+RA-01 - First-ever clean profile installation.
+RA-02 - Windows application identity, icons, shortcuts and Installed Apps registration.
+RA-03 - Authenticode status and publisher identity.
+RA-04 - Installation with WebView2 already present.
+RA-05 - Installation with WebView2 absent and network available.
+RA-06 - Installation with WebView2 absent and no network.
+RA-07 - First-launch check-on-launch default.
+RA-08 - Check-on-launch disabled across restart.
+RA-09 - Manual update check.
+RA-10 - Offline update failure and retry.
+RA-11 - Populate every persistence class before upgrade.
+RA-12 - In-app updater upgrade with complete persistence survival.
+RA-13 - Manual NSIS upgrade with complete persistence survival.
+RA-14 - Same-version reinstall.
+RA-15 - Uninstall populated application and inspect residual state.
+RA-16 - Reinstall after uninstall and determine whether old state returns.
+RA-17 - Genuine clean profile after explicit residual-data removal.
+RA-18 - Explicitly supported downgrade using controlled test data.
+RA-19 - MSI lifecycle only if MSI remains a supported release channel.
+RA-20 - Reset to Demo production behaviour.
+RA-21 - Clean release build from exact tag.
+RA-22 - Installed source provenance.
+RA-23 - Version/tag/release/latest.json consistency.
+RA-24 - Final acceptance using artefacts downloaded back from the public GitHub Release.
+
+Systemic conclusion
+
+Audit 11 found no evidence that the fundamental Tauri packaging or updater architecture is unusable.
+
+The release-blocking issue is provenance discipline.
+
+The repository has evolved materially beyond public v0.9.4 while retaining the same 0.9.4 application identity.
+
+Before any further installer is distributed, Flite needs a unique new version and a release process that binds accepted source, semantic version, immutable tag, tests, build, signing, artefact hashes, updater metadata, public release and installed build identity.
+
+Recommended remediation order
+
+1. Assign a new unique version before any further distributable build.
+2. Add immutable source SHA/build provenance to the packaged application.
+3. Introduce a tag-bound clean release procedure or workflow.
+4. Define the supported Windows installer channel.
+5. Execute complete updater and manual-upgrade persistence tests.
+6. Establish the uninstall/reinstall residual-data contract.
+7. Define safe downgrade policy and schema compatibility.
+8. Decide the production disposition of Reset to Demo.
+9. Resolve offline WebView2 installation policy.
+10. Correct Desktop shortcut lifecycle behaviour.
+11. Pin/document the clean-build toolchain.
+12. Correct stale package-lock metadata.
+13. Execute the final public-download Windows acceptance suite.
+
+Overall disposition
+
+Audit 11 is complete.
+
+One High provenance finding is release-blocking before another installer is distributed.
+
+The Medium-high and Medium lifecycle findings require remediation or explicit release disposition, followed by packaged Windows acceptance before final regression and V1 release.
