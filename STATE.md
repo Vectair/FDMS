@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-07-14 (Europe/London, rev 25 — Phase 1 Item 3 complete and merged: backup validation, metadata, restore preview/summary, compatibility enforcement and backup/restore audit events)
+Last updated: 2026-08-10 (Europe/London, rev 26 — twelve-audit Pre-V1 investigation complete; remediation programme established)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -21,52 +21,109 @@ The working rule is:
 ## 0. Current headline status
 
 * **Main branch is the authoritative baseline.**
-* **Current confirmed `main`:** `143ab12 Merge pull request #157 from Vectair/claude/wizardly-einstein-l5752h`
+* **Current confirmed `main`:** `3f19b7a Add audit remediation register`
 * **Current released version:** `0.9.4`
 * **Vectair Flite** (“Flite”) is the current product name.
-* Legacy references to **FDMS**, **FDMS Lite**, **Vectair FDMS**, or **Vectair FDMS Lite** refer to the same product unless explicitly stated otherwise.
-* Flite is approaching its first V1 operational deployment at EGOW.
-* Major feature development is sufficiently mature that current work is focused on resilience, auditability, maintainability, operational robustness and final UX closeout.
-* The current programme is the **Pre-V1 resilience and robustness roadmap**.
-* The recent V1 snag list is cleared.
-* **Known V1 snags remaining from the cleared snag list:** `0`
-* Completed work must not be reopened without evidence that implementation has changed or a regression has occurred.
+* The twelve planned Pre-V1 repository audits are complete.
+* The investigation phase is closed.
+* The project is now in the **Pre-V1 remediation, regression and release-acceptance phase**.
+* The complete programme-level audit record is `docs/audit.md`.
+* Detailed evidence and acceptance specifications are in `docs/audit_findings.md`.
+* The controlled remediation register is `docs/vectair_flite_remediation_register.xlsx`.
+* The ordered implementation programme is `docs/REMEDIATION_PLAN.md`.
+* New feature expansion remains subordinate to remediation of V1-readiness defects.
 
-### Current Pre-V1 programme status
-
-```text
-Phase 1 — Data Safety, Persistence and Audit Foundations
-
-✅ Item 1 — Backup / Restore Completeness
-✅ Item 2 — Canonical Data Inventory
-✅ Item 3 — Backup Validation & Restore Summary
-▶ Next — continue with the next defined Pre-V1 roadmap item
-```
-
-### Immediate engineering baseline
-
-The following are now proven or complete:
+### Current programme status
 
 ```text
-Windows updater                     Proven
-Signed update pipeline              Proven
-In-app update from 0.9.3 to 0.9.4   Proven
-Check for updates on launch         Implemented
-Backup / Restore completeness       Proven
-Canonical persistence inventory     Complete
-Backup validation                   Complete
-Restore preview and summary         Complete
-Backup/restore audit events          Complete
-History improvements                Proven
-Formation system                    Proven
-PIC/VKB fixes                       Proven
-```
+Pre-V1 investigation
 
-### Current project rule
+✅ Audit 1  — Form-state and validation
+✅ Audit 2  — Persistence-result and partial-operation
+✅ Audit 3  — Cross-dataset integrity
+✅ Audit 4  — Date, time and timezone
+✅ Audit 5  — Control-to-domain trace
+✅ Audit 6  — Security and data exposure
+✅ Audit 7  — Accessibility and keyboard operation
+✅ Audit 8  — Performance and scale
+✅ Audit 9  — Browser-harness versus installed-Tauri parity
+✅ Audit 10 — Backup and restore destructive behaviour
+✅ Audit 11 — Release artefact and clean-install
+✅ Audit 12 — Documentation-to-product
 
-Do not resume broad feature expansion before the outstanding Pre-V1 resilience, audit, maintainability and UX closeout work is complete.
+Investigation status: COMPLETE
 
----
+Current phase:
+▶ Remediation
+  → targeted regression
+  → immutable release candidate
+  → packaged acceptance
+  → V1 release
+Current remediation priorities
+
+The remediation programme must address root causes rather than applying isolated patches in audit order.
+
+The first dependency chain is:
+
+Runtime resource profiling                     Run in parallel
+        +
+Result-bearing persistence boundary
+        ↓
+Degraded-storage / safe read-only behaviour
+        ↓
+Transactional restore
+        ↓
+Authoritative domain-command layer
+        ↓
+Verified cancellation / deletion / recovery
+        ↓
+Atomic Booking ↔ Strip lifecycle
+        ↓
+Stable entity-incarnation identity
+        ↓
+Cross-dataset integrity scanner
+        ↓
+Canonical operational-time model
+        ↓
+Workflow consolidation
+
+Release provenance work proceeds independently and must complete before another installer is distributed.
+
+Immediate next work
+
+The first two remediation tickets are:
+
+T25 — Runtime resource profiling
+
+Purpose:
+measure reported CPU/RAM/resource slowdown in the installed application before
+performing performance optimisation.
+
+T1 — Result-bearing persistence contract
+
+Purpose:
+make the persistence boundary reliably distinguish durable success from failure
+so that callers can stop treating in-memory state as proof of saved state.
+
+T25 may run in parallel with T1.
+
+The principal implementation chain begins with T1.
+
+Current project rule
+
+Do not hand an implementer the complete audit ledger and request broad remediation.
+
+For every remediation ticket:
+
+inspect the current repository first;
+identify the audit findings and remediation-register entries being addressed;
+define the smallest coherent root-cause change;
+state explicit non-goals;
+specify automated and manual verification;
+preserve unrelated behaviour;
+record the implementation commit;
+update the remediation register only after verification;
+retain the original audit finding as historical evidence rather than rewriting it.rnrn---
 
 ## 1. Product identity and naming
 
@@ -687,59 +744,149 @@ Legacy formats remain movement-only restores and continue to warn the operator a
 
 ---
 
-## 7. Current active engineering priority
 
-### 7.1 Immediate status
+7. Current active engineering priority
+7.1 Programme transition
 
-Phase 1 Items 1–3 are complete.
+The twelve-audit investigation programme is complete.
 
-The next task must be taken from the authoritative Pre-V1 roadmap rather than invented from this file.
+The previous roadmap model in which individual resilience items were selected sequentially has been superseded by the audit-derived remediation programme.
 
-Likely remaining Pre-V1 work includes:
+The controlling remediation documents are:
 
-* storage wrappers / persistence abstraction;
-* operational audit schema expansion;
-* operator identity where required;
-* workstation/session identity where required;
-* remaining UX closeout items;
-* final installer/release documentation;
-* final regression and acceptance work.
+docs/audit.md
+docs/audit_findings.md
+docs/vectair_flite_remediation_register.xlsx
+docs/REMEDIATION_PLAN.md
 
-Before beginning the next implementation:
+Their roles are distinct:
 
-1. Inspect the authoritative roadmap item.
-2. Inspect current repository implementation.
-3. Define the smallest correct ticket.
-4. Avoid bundling later phases into the active item.
+audit.md
+    programme-level audit history and conclusions
 
-### 7.2 Known major remaining V1-readiness themes
+audit_findings.md
+    detailed evidence, findings and acceptance specifications
 
-```text
-Storage abstraction / wrappers
-Operational audit schema
-Error visibility / diagnostic hardening
-Remaining operator-facing UX polish
-Final installer and release documentation
-Final regression and acceptance sweep
-```
+vectair_flite_remediation_register.xlsx
+    disposition, priority, workstream, dependency and closure control
 
-### 7.3 Post-launch or later preparation
+REMEDIATION_PLAN.md
+    ordered engineering execution plan
+7.2 Remediation principles
 
-Unless promoted by evidence:
+Remediation is organised by root cause and dependency, not by audit number.
 
-```text
+The principal systemic themes are:
+
+durable persistence and failure visibility
+multi-record transactional integrity
+authoritative domain commands
+stable entity identity and relationship integrity
+canonical operational date/time semantics
+backup and restore safety
+runtime performance and resource usage
+installed-Tauri parity
+security and data-exposure hardening
+accessibility and keyboard operation
+release provenance and installer lifecycle
+documentation synchronisation
+final regression and packaged acceptance
+
+One architectural remediation may close findings from several audits.
+
+Do not create duplicate implementation work merely because the same root cause appears in multiple audit sections.
+
+7.3 First implementation wave
+
+Run immediately:
+
+T25 — Runtime resource profiling
+
+This is an evidence-gathering ticket prompted by reported operator feedback that leaving Flite open can noticeably slow workstation performance.
+
+Measure before optimising.
+
+In parallel, begin the main architectural dependency chain:
+
+T1 — Result-bearing persistence contract
+T2 — Degraded-storage / safe read-only mode
+T3 — Transactional restore core
+T5 — Authoritative domain-command framework
+T9 — Verified cancellation/deletion/recovery commands
+
+Release-provenance remediation also begins independently before any further public installer is produced.
+
+7.4 Subsequent remediation sequence
+
+After the first architectural foundations:
+
+Atomic Booking + Strip creation
+Reinstatement and restoration lifecycle
+Stable entity-incarnation identity
+General cross-dataset integrity scanner
+Canonical operational-time model
+Save / Save & Complete unification
+Activation lifecycle unification
+Booking lifecycle consolidation
+Import/export and audit-data security hardening
+Accessibility foundation and keyboard remediation
+Performance optimisation based on profiling evidence
+Release-engineering hardening
+Documentation synchronisation
+Full regression
+Immutable packaged release-candidate acceptance
+7.5 Finding disposition
+
+Every audit finding must eventually be assigned one of:
+
+Remediated
+Accepted for V1
+Deferred post-V1
+Requires further evidence
+
+A finding is not Remediated merely because code changed.
+
+Closure requires:
+
+implementation reference
+relevant automated tests
+required manual or packaged-runtime verification
+confirmation that the original failure mode is no longer reproducible
+
+The audit ledger remains historical evidence and should not be rewritten to remove closed findings.
+
+7.6 Release constraint
+
+The current source has evolved materially beyond the public 0.9.4 release while retaining the same semantic version.
+
+Therefore:
+
+No further distributable installer should be published as 0.9.4.
+
+Before the next distributable release:
+
+assign a unique new semantic version
+align package.json / Cargo.toml / tauri.conf.json
+build from an immutable accepted source ref
+record source SHA
+require clean-tree release state
+run required regression
+sign accepted artefacts
+record hashes
+publish only accepted outputs
+verify the downloaded public artefact
+7.7 Work explicitly deferred until justified
+
+Unless promoted by remediation evidence or a specific V1 dependency:
+
 SQLite migration
-Signing-key rotation
-MAB package filtering
-Learned PIC ranking
-Advanced historical lifecycle analytics
-Broad multi-user concurrency
-Hosted/cloud persistence
-```
+broad hosted/cloud persistence
+general multi-user concurrency
+major new feature expansion
+advanced historical analytics
+non-essential post-launch feature work
 
-remain later work.
-
----
+remain outside the active remediation programme.rnrn---
 
 ## 8. Current source architecture
 
