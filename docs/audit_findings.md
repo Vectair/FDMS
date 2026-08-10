@@ -4060,3 +4060,482 @@ Audit 11 is complete.
 One High provenance finding is release-blocking before another installer is distributed.
 
 The Medium-high and Medium lifecycle findings require remediation or explicit release disposition, followed by packaged Windows acceptance before final regression and V1 release.
+12. Documentation-to-product audit
+
+Status: Complete.
+Frozen baseline: a0dbffe.
+Completed: 10 August 2026.
+
+Scope
+
+The audit compared current-facing documentation against the frozen Flite source, current application structure, published release identity and the evidence established by Audits 1-11.
+
+The review covered:
+
+README and project-state documentation;
+product identity, branding, version and release references;
+architecture and persistence specifications;
+operator workflows;
+installation and clean-install expectations;
+backup and destructive restore instructions;
+updater instructions;
+troubleshooting;
+historical/demo material;
+cross-document authority and consistency.
+
+Consolidated severity
+
+Critical: 0
+High: 1
+Medium-high: 5
+Medium: 8
+Low-medium: 4
+Low: 2
+Total: 20
+
+High findings
+
+1. Restore documentation materially understates destructive and partial-failure behaviour.
+
+Classification: Confirmed documentation safety defect.
+Severity: High.
+
+Current operator guidance describes restore principally as overwriting current data and recommends taking a backup if the existing state may be required.
+
+Audit 10 established a materially more hazardous contract:
+
+current-format restore is non-atomic;
+a failed restore can leave an arbitrary hybrid of restored and pre-restore datasets;
+there is no rollback;
+successful full restore leaves writable Booking, Calendar and Booking Profile caches stale until reload;
+continued operator activity before reload can overwrite successfully restored data;
+Full backup restore is overlay-like when datasets are omitted or null;
+target-only generic-overflight state can survive;
+restoredKeys records attempted rather than verified durable writes;
+VKB/reporting state is not comprehensively refreshed until reload.
+
+Remediation direction:
+
+make a verified pre-restore backup a required safety step;
+state explicitly that restore is not transactional;
+warn that failed restore can leave partial replacement;
+prohibit continued operational use until full reload/restart after restore;
+describe replace-versus-overlay behaviour accurately;
+provide recovery instructions for failed or uncertain restore.
+
+Medium-high findings
+
+2. Published release and current source share semantic version 0.9.4 without adequate documentation provenance.
+
+Classification: Confirmed documentation/release-provenance defect.
+Severity: Medium-high.
+
+Public v0.9.4 refers to commit 41bbeed16f475fb32bd30624a5f9327d70464d7a.
+
+The Audit 12 baseline is materially later while package.json, Cargo.toml and tauri.conf.json still identify the product as 0.9.4.
+
+Documentation using "current version 0.9.4" therefore cannot uniquely identify a source state or binary.
+
+Remediation direction:
+
+distinguish current source version, immutable source SHA, latest public release version and release tag/source SHA;
+require each distributable source state to have a unique version.
+
+3. Canonical timing documentation states invariants that the audited product does not consistently maintain.
+
+Classification: Confirmed architecture-documentation contradiction.
+Severity: Medium-high.
+
+TIMING.md states that movement time fields are stored as UTC HH:MM and that local time is UI-only.
+
+STRIP_LIFECYCLE_AND_COUNTERS.md describes the same time fields as local HH:MM.
+
+Audit 4 established actual pathways in which local clock values can be written into fields otherwise treated as UTC.
+
+Remediation direction:
+
+separate intended canonical timing semantics from current implementation;
+do not state a universal UTC invariant until all write paths enforce it;
+retire or correct contradictory canonical specifications.
+
+4. Canonical strip-lifecycle documentation describes obsolete cancellation and deletion semantics.
+
+Classification: Confirmed obsolete canonical documentation.
+Severity: Medium-high.
+
+The lifecycle document describes cancelled records as History content and deletion as permanent hard deletion with no recovery.
+
+Current Flite instead has separate Cancelled Sorties and Deleted Strips stores, reinstatement and a 24-hour deleted-strip recovery path.
+
+Remediation direction:
+
+rewrite the lifecycle specification against the current cancellation, deletion, retention, reinstatement and restoration architecture.
+
+5. Operator lifecycle documentation omits default automatic ARR and OVR activation.
+
+Classification: Confirmed operator-documentation omission.
+Severity: Medium-high.
+
+Quick Start and User Guide present Activate as an operator lifecycle action.
+
+Current default configuration enables:
+
+ARR automatic activation 30 minutes before ETA;
+OVR automatic activation 30 minutes before EOFT.
+
+DEP and LOC remain manual by default.
+
+Remediation direction:
+
+document automatic activation, its defaults, governing times, configuration location and interaction with manual activation.
+
+6. Current-facing updater instructions contradict the implemented updater lifecycle.
+
+Classification: Confirmed cross-document contradiction.
+Severity: Medium-high.
+
+Quick Start, User Guide and installation guidance retain older wording that describes update checking as manual-only and points to Admin -> System Status.
+
+Current implementation/documentation uses Admin -> Overview -> Version & Updates, supports optional launch checking, requires an inline two-click installation confirmation and may close/relaunch automatically on Windows NSIS.
+
+Remediation direction:
+
+make one updater procedure authoritative and update all operator-facing copies from it.
+
+Medium findings
+
+7. STATE.md presents a stale historical commit as current main.
+
+Classification: Confirmed stale project-state documentation.
+Severity: Medium.
+
+STATE.md identifies an old commit as the current confirmed main while also carrying source-of-truth/continuity authority.
+
+Remediation direction:
+
+either keep STATE.md mechanically current or clearly redefine it as historical continuity context rather than current repository truth.
+
+8. Operator backup documentation materially understates actual backup coverage.
+
+Classification: Confirmed backup-documentation mismatch.
+Severity: Medium.
+
+README/User Guide/install documentation describe seven principal backed-up categories.
+
+Actual backup coverage contains ten static keys plus dynamic generic-overflight keys.
+
+Documentation omits:
+
+vectair_fdms_bookings_v1;
+vectair_fdms_vkb_overrides_v1;
+vectair_flite_audit_log_v1;
+fdms_generic_overflights_YYYY-MM-DD dynamic state.
+
+Remediation direction:
+
+derive operator backup coverage from the canonical SESSION_BACKUP_KEYS/dynamic-key implementation and keep one authoritative coverage table.
+
+9. Booking UI contains an obsolete prototype statement contradicting current behaviour.
+
+Classification: Confirmed embedded documentation defect.
+Severity: Medium.
+
+The Booking page states that wiring into the actual Live Board model is a future step.
+
+Current submission creates a real booking and a real movement record and moves the operator to Live Board.
+
+Remediation direction:
+
+remove the prototype note and replace it with current linked Booking/Strip behaviour.
+
+10. Operator guidance does not adequately document consequential current workflows.
+
+Classification: Confirmed documentation-completeness gap.
+Severity: Medium.
+
+Materially under-documented or absent workflows include:
+
+formations;
+formation-element lifecycle;
+retrospective strip entry;
+Manual FIS;
+general Calendar events;
+Booking Profile management;
+Booking-to-Strip creation and linkage;
+linked booking cancellation/deletion behaviour.
+
+Remediation direction:
+
+expand the User Guide from a feature overview into a complete operator workflow guide for consequential actions.
+
+11. "Official Monthly Return" wording communicates assurance not supported by the current audited implementation.
+
+Classification: Confirmed assurance/documentation mismatch.
+Severity: Medium.
+
+The User Guide describes official movement reporting and the UI labels the view Official Monthly Return.
+
+Audit 4 identified unresolved midnight allocation, timezone and summary/detail consistency defects.
+
+Remediation direction:
+
+qualify the reporting output until the relevant defects are remediated and regression accepted, or explicitly require operator verification.
+
+12. Backup instructions present native JSON Save As as accepted despite a known packaged-runtime defect.
+
+Classification: Confirmed installed-runtime documentation gap.
+Severity: Medium.
+
+Audit 9 found that full JSON backup uses a native text-save path whose Save As filter is CSV-oriented and required packaged backup-to-restore interoperability verification.
+
+Remediation direction:
+
+correct the native file filter and complete packaged backup/save/reopen/restore acceptance before representing the installed path as fully accepted.
+
+13. Downgrade guidance addresses Windows installer ordering but not persisted-data compatibility.
+
+Classification: Confirmed lifecycle documentation gap.
+Severity: Medium.
+
+The documented uninstall-then-install-older-version procedure solves executable version ordering only.
+
+It does not establish that the older application can safely consume state written by the newer application.
+
+Remediation direction:
+
+define supported downgrade/schema compatibility and require verified backup before destructive downgrade until demonstrated safe.
+
+14. Installation lifecycle guidance omits unresolved clean-install and uninstall/reinstall contracts.
+
+Classification: Confirmed installation-documentation gap.
+Severity: Medium.
+
+The current Windows installer may require network access to obtain WebView2 when the runtime is absent.
+
+Uninstall/reinstall WebView localStorage retention has not been established by packaged testing.
+
+Remediation direction:
+
+document the possible clean-install network prerequisite;
+test and define uninstall/reinstall data retention;
+require backup before uninstall/reinstall until the contract is known.
+
+Low-medium findings
+
+15. Documentation authority is fragmented and insufficiently governed.
+
+Classification: Confirmed documentation-governance defect.
+Severity: Low-medium.
+
+STATE.md, DATA_INVENTORY.md, FORMATIONS.md, TIMING.md and STRIP_LIFECYCLE_AND_COUNTERS.md each carry varying authoritative/canonical/source-of-truth implications.
+
+Some are current, some partially obsolete and some mutually contradictory.
+
+Remediation direction:
+
+create one documentation/architecture index recording for each document:
+
+status;
+purpose;
+current versus historical classification;
+version/date;
+source baseline inspected;
+superseding document if any.
+
+16. Installation guide advertises Linux release artefacts not present in the current public release.
+
+Classification: Confirmed release-documentation mismatch.
+Severity: Low-medium.
+
+The guide directs users to download .deb or .rpm packages from the release.
+
+The current public release provides Windows NSIS/MSI artefacts and updater metadata, not Linux packages.
+
+Remediation direction:
+
+document only published/supported release platforms, or publish and accept the Linux artefacts before advertising them.
+
+17. Obsolete runnable FDMS Lite material remains directly under docs/ without adequate historical classification.
+
+Classification: Confirmed obsolete-documentation exposure.
+Severity: Low-medium.
+
+docs/index.html is an older runnable FDMS Lite/demo application with obsolete navigation and branding.
+
+Its location under docs/ does not clearly distinguish it from current Flite material.
+
+Remediation direction:
+
+move it under an explicitly historical/archive path, remove it if no longer required, or place unmistakable historical/demo labelling around it.
+
+18. Root README contains accidentally retained authoring instructions and obsolete roadmap material.
+
+Classification: Confirmed documentation hygiene defect.
+Severity: Low-medium.
+
+After the actual README product documentation, the file contains an old "STATE.md section 6 replacement" block, obsolete DP-06/DP-07/DP-08 planning material and git add/commit/push instructions.
+
+Remediation direction:
+
+remove the accidentally retained authoring-session material and keep README limited to current product/development documentation.
+
+Low findings
+
+19. Current canonical architecture documents retain obsolete FDMS Lite branding.
+
+Classification: Confirmed branding/documentation inconsistency.
+Severity: Low.
+
+Historical naming is acceptable in historical documents, but current canonical specifications should use Vectair Flite or explicitly state that the old title is retained for historical reasons.
+
+Remediation direction:
+
+rebrand current canonical documents when next revised.
+
+20. package-lock.json retains stale FDMS Lite / 1.0.0 metadata.
+
+Classification: Confirmed metadata inconsistency.
+Severity: Low.
+
+package.json identifies vectair-flite 0.9.4 while the lockfile retains historical fdms-lite-dev-tooling / 1.0.0 metadata.
+
+Remediation direction:
+
+regenerate or correct package-lock.json as part of release metadata cleanup.
+
+Confirmed documentation strengths
+
+DATA_INVENTORY.md remains substantially accurate for the frozen persistence implementation.
+
+Current application branding and principal manifest identity are coherently Vectair Flite.
+
+updater-validation.md accurately documents the historically validated Windows NSIS update path, inline confirmation and possible automatic close/relaunch.
+
+Weather / METAR operator documentation is substantially aligned with the current UI.
+
+Environment-specific browser/Tauri storage and export distinctions are documented in several current-facing locations.
+
+Historical audit evidence is retained rather than silently rewritten.
+
+Systemic conclusion
+
+Audit 12 found a documentation synchronization and authority problem rather than a simple lack of documentation.
+
+Several generations coexist:
+
+FDMS Lite-era documentation;
+desktop-productization documentation;
+current Flite operator documentation;
+later specialist updater/persistence documentation;
+architecture files carrying different canonical claims;
+audit evidence recording known deviations from those specifications.
+
+The most serious issue is that destructive recovery and consequential lifecycle behaviour is documented less accurately than lower-risk interface behaviour.
+
+Required remediation order
+
+1. Correct destructive restore guidance.
+2. Correct updater procedure and launch-check policy across all operator documentation.
+3. Reconcile backup coverage everywhere.
+4. Document automatic activation.
+5. Remove obsolete Booking prototype guidance.
+6. Document missing consequential operator workflows.
+7. Qualify Monthly Return assurance until underlying defects are accepted.
+8. Establish source/version/release provenance terminology.
+9. Define the documentation authority hierarchy.
+10. Establish uninstall/reinstall, clean-install and downgrade contracts.
+11. Archive or clearly classify obsolete/demo documentation.
+12. Remove accidental README authoring material.
+13. Complete branding and package metadata cleanup.
+
+Final documentation acceptance specification
+
+DA-01 - Freeze one immutable release-candidate source commit.
+
+DA-02 - Confirm README, Quick Start, User Guide and installation guide identify the same product and supported release version.
+
+DA-03 - Confirm semantic version, source SHA, release tag and public release identity are distinguishable and mutually consistent.
+
+DA-04 - Verify every documented navigation/Admin path in the packaged release.
+
+DA-05 - Verify documented manual activation behaviour.
+
+DA-06 - Verify and document default ARR/OVR automatic activation.
+
+DA-07 - Verify formation creation/edit/lifecycle documentation against the packaged UI.
+
+DA-08 - Verify retrospective-strip documentation against all four movement types.
+
+DA-09 - Verify Manual FIS documentation.
+
+DA-10 - Verify Booking creation creates the documented booking and movement/link state.
+
+DA-11 - Verify Booking Profile create/import/export/delete documentation.
+
+DA-12 - Verify general Calendar-event create/edit/delete documentation.
+
+DA-13 - Verify Cancelled Sorties reinstatement documentation.
+
+DA-14 - Verify Deleted Strips 24-hour retention/restore documentation.
+
+DA-15 - Confirm all backup documentation lists the exact current static datasets plus dynamic generic-overflight coverage.
+
+DA-16 - Prove packaged JSON Backup Save As -> close/reopen -> Restore interoperability.
+
+DA-17 - Verify restore preview documentation for current and legacy formats.
+
+DA-18 - Verify documentation accurately describes omitted/null dataset behaviour.
+
+DA-19 - Verify failed restore instructions against injected partial-write failures.
+
+DA-20 - Verify post-restore reload/restart is mandatory in documentation and acceptance.
+
+DA-21 - Verify updater Admin location.
+
+DA-22 - Verify check-on-launch default, enable/disable persistence and offline behaviour.
+
+DA-23 - Verify updater inline two-click installation confirmation.
+
+DA-24 - Verify Windows automatic close/relaunch wording against packaged NSIS behaviour.
+
+DA-25 - Verify manual Restart fallback wording.
+
+DA-26 - Verify clean install with WebView2 present.
+
+DA-27 - Verify clean install with WebView2 absent and network available.
+
+DA-28 - Verify clean install with WebView2 absent and network unavailable.
+
+DA-29 - Establish and document uninstall/reinstall local-data retention.
+
+DA-30 - Establish and document supported downgrade/schema behaviour.
+
+DA-31 - Verify current release documentation advertises only artefacts actually published and supported.
+
+DA-32 - Re-run Monthly Return acceptance before retaining unqualified "official" documentation.
+
+DA-33 - Ensure each current architecture document has status, date/version and inspected source baseline.
+
+DA-34 - Ensure no two current canonical documents state contradictory core invariants.
+
+DA-35 - Ensure obsolete/demo/planning documents are visibly historical or archived.
+
+DA-36 - Ensure README contains no authoring-session instructions, replacement blocks or obsolete commit commands.
+
+DA-37 - Ensure current canonical documents use Vectair Flite branding.
+
+DA-38 - Ensure package metadata is internally consistent.
+
+DA-39 - Search the repository for obsolete Admin navigation, old backup counts, FDMS Lite current-facing references and manual-only updater wording.
+
+DA-40 - Perform final packaged-application walkthrough using only the operator documentation; every consequential operator task must be executable without relying on undocumented product knowledge.
+
+Overall disposition
+
+Audit 12 is complete.
+
+One High documentation safety finding requires remediation before the restore function can be considered acceptably documented for operational use.
+
+The Medium-high and Medium findings require correction or explicit release disposition before final V1 documentation acceptance.
+
+The planned twelve-audit pre-V1 investigation programme is complete. Remediation, regression and release acceptance remain follow-on work.

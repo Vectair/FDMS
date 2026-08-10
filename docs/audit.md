@@ -781,33 +781,94 @@ Detailed findings and the final release-lifecycle acceptance specification are r
 
 Priority: Complete - the High provenance finding and the remaining Medium-high/Medium lifecycle gaps require remediation and packaged Windows acceptance before final regression and V1 release.
 
-12. Documentation-to-product audit
+12. Documentation-to-product audit - COMPLETED 10 August 2026
 
-Once UI behaviour settles, compare:
+Status: Complete.
 
-README;
-STATE.md;
-architecture documentation;
-installer/release notes;
-operator guidance;
-backup/restore instructions;
-updater instructions;
-screenshots;
-version references.
+The audit reconciled Flite's current-facing documentation with the frozen source baseline, the installed product model and the findings established by the preceding technical audits.
 
-This should identify documentation that describes old storage counts, old branding, obsolete workflows or features that no longer exist.
+Passes completed:
 
-Priority: Later in this phase.
+documentation inventory and authority map;
+product identity, version, branding and release documentation;
+architecture and persistence documentation;
+operator workflow documentation;
+backup, restore, updater, installation and troubleshooting documentation;
+cross-document consistency, consolidation and final documentation acceptance specification.
 
-Recommended sequence
+Consolidated findings:
 
-The prudent remaining investigation sequence is:
+Critical: 0
+High: 1
+Medium-high: 5
+Medium: 8
+Low-medium: 4
+Low: 2
+Total: 20
 
-1. Cross-dataset integrity audit
-2. Control-to-domain trace audit
-3. Security/data-exposure audit
-4. Accessibility and keyboard-operation audit
-5. Performance and realistic-scale audit
-6. Installed-Tauri parity and clean-install/update audit
-7. Final backup/restore scenario audit
-8. Final documentation and regression audit
+Principal findings:
+
+restore guidance materially understates destructive and partial-failure behaviour: current-format restore is non-atomic, can leave hybrid state after partial failure, behaves as an overlay for omitted or null datasets and requires reload before restored writable subsystems are safe to use;
+the published v0.9.4 release and materially later source continue to share semantic version 0.9.4 without documentation adequately distinguishing release artefact, source state and immutable source identity;
+canonical timing documentation states universal UTC-storage invariants that the audited product does not consistently maintain;
+canonical strip-lifecycle documentation describes obsolete cancellation, deletion and recovery semantics that predate the current Cancelled Sorties and 24-hour Deleted Strips architecture;
+operator lifecycle documentation describes activation primarily as a manual action while ARR and OVR auto-activate by default;
+current-facing updater instructions contradict the implemented updater lifecycle, including the optional launch check, current Admin location, inline install confirmation and Windows close/relaunch behaviour;
+STATE.md presents a stale historical commit as the current confirmed main baseline;
+README, User Guide and installation documentation understate current backup coverage, omitting bookings, VKB overrides, the central audit log and dynamic generic-overflight state;
+the Booking UI still contains an obsolete prototype statement claiming Live Board wiring is a future step even though booking submission creates a real movement;
+operator documentation omits or inadequately covers formations, retrospective strips, Manual FIS, Calendar events and the actual Booking-to-Strip workflow;
+documentation describes the Monthly Return as official without qualifying the unresolved reporting and time-boundary defects established by Audit 4;
+backup instructions present native JSON Save As as an accepted packaged workflow despite an unresolved installed-Tauri Save As/filter defect and missing end-to-end packaged interoperability acceptance;
+downgrade instructions address Windows installer version ordering but not compatibility of persisted data written by newer Flite versions;
+installation guidance does not define uninstall/reinstall data retention and does not qualify the possible WebView2 network dependency on a clean Windows machine;
+documentation authority is fragmented across several files that independently describe themselves as canonical, authoritative or source-of-truth material without a single document-status index;
+the installation guide advertises Linux .deb/.rpm release artefacts that are not present in the current public release;
+an obsolete runnable FDMS Lite application/demo remains directly under docs/ without adequate historical classification;
+README contains accidentally retained authoring instructions, obsolete roadmap text and git commit/push commands after the actual product documentation;
+some current canonical architecture documents retain obsolete FDMS Lite branding;
+package-lock.json retains stale FDMS Lite / 1.0.0 project metadata.
+
+Confirmed strengths:
+
+docs/architecture/DATA_INVENTORY.md remains a substantially accurate persistence inventory for the frozen runtime;
+the current production application and principal manifests consistently use Vectair Flite identity;
+the specialist updater-validation document accurately records the historical Windows updater test, inline confirmation and NSIS close/relaunch behaviour;
+Weather / METAR operator documentation is comparatively mature and closely reflects the current interface;
+several documents correctly distinguish browser-harness storage/export behaviour from the installed Tauri environment;
+historical audit and discovery material is generally retained rather than silently rewritten.
+
+Systemic conclusion:
+
+Flite does not primarily suffer from a lack of documentation. It suffers from documentation-authority and synchronization drift.
+
+Several generations of material coexist simultaneously: FDMS Lite-era documents, desktop-productization documentation, current Flite operator guides, specialist technical documents updated during later fixes, architecture documents labelled canonical at different historical points and audit evidence documenting known deviations from those specifications.
+
+The most recently maintained specialist documents are often more accurate than the current-facing Quick Start, User Guide and installation/troubleshooting material most likely to be used by an operator.
+
+The most serious consequence is that safety-significant recovery and lifecycle behaviour is less accurately documented than lower-risk interface behaviour.
+
+Required remediation direction:
+
+correct restore safety instructions first and make pre-restore backup plus post-restore restart/reload requirements explicit;
+reconcile updater instructions with the current launch-check, Admin location, confirmation and Windows relaunch behaviour;
+make all backup coverage lists agree with SESSION_BACKUP_KEYS plus dynamic generic-overflight keys;
+document default automatic activation and the major missing operational workflows;
+remove obsolete Booking prototype guidance;
+qualify Monthly Return authority until its known reporting defects are remediated and accepted;
+distinguish semantic version, immutable source commit and published release identity;
+introduce one current-document/architecture authority index and give each specification explicit status and inspected baseline;
+archive or clearly label obsolete demo, roadmap and historical documentation;
+define clean-install, uninstall/reinstall and downgrade data contracts from packaged-runtime acceptance evidence;
+remove accidentally retained authoring instructions from README;
+align current canonical documentation with Vectair Flite branding.
+
+Final documentation acceptance requires one immutable release candidate against which operator paths, backup coverage, restore behaviour, updater behaviour, installer lifecycle, operational workflows, reporting claims, architecture authority, version provenance and cross-document consistency are all verified.
+
+Detailed findings and the final documentation acceptance specification are recorded in docs/audit_findings.md.
+
+Priority: Complete - the High restore-guidance defect and remaining Medium-high/Medium documentation mismatches require remediation before final V1 documentation and release acceptance.
+
+Audit programme status:
+
+The twelve planned pre-V1 repository audits are complete. Remediation, regression and final release acceptance remain separate follow-on work.
