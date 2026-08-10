@@ -3144,3 +3144,616 @@ plus a small explicit packaged-Tauri parity gate for native identity, filesystem
 Audit 9 is complete.
 
 The three Medium-high findings and the broader installed-runtime truthfulness gaps require remediation disposition and packaged-Tauri acceptance before final regression and release acceptance.
+10. Backup and restore destructive-behaviour audit
+
+Completed 10 August 2026.
+
+Authoritative inspected baseline: 2c474f6 - Complete browser and Tauri parity audit.
+
+This audit examined the destructive semantics of backup restoration rather than merely whether a recognised backup can be parsed and imported.
+
+It traced:
+
+backup representation and replacement semantics;
+preflight and validation boundaries;
+current-format write ordering;
+partial persistence failure;
+legacy movement-only replacement;
+runtime versus durable state;
+post-restore module caches;
+reload and startup reconciliation;
+cross-generation identity;
+operator-visible success and failure claims.
+
+Consolidated confirmed-finding severity:
+
+High: 4
+Medium-high: 3
+Medium: 1
+Critical: 0
+Total confirmed findings: 8
+
+High-severity findings
+
+1. Current-format restore can fail after destructively replacing only part of the installation.
+
+Classification: Confirmed finding.
+Severity: High.
+
+Current-format restore writes supplied fixed datasets sequentially in this order:
+
+1. movements;
+2. configuration;
+3. cancelled sorties;
+4. Deleted Strips;
+5. Booking Profiles;
+6. Calendar events;
+7. Hours Log;
+8. VKB overrides;
+9. operational Audit Log;
+10. Bookings.
+
+Valid dated generic-overflight keys are written afterwards.
+
+Each supplied non-null key is written directly to its live LocalStorage key. There is no staging namespace, pre-restore installation snapshot, transactional commit, rollback or per-key read-back verification.
+
+If a storage write throws after earlier writes have succeeded, later writes are abandoned but the earlier replacements remain.
+
+For example, failure writing Bookings can leave:
+
+movements through Audit Log from the backup;
+Bookings from the pre-restore installation;
+some or all target-only generic-overflight counters unchanged.
+
+The importer then reports failure.
+
+The accumulated restoredKeys list is local to the successful path and is not returned from the failure result, so the caller cannot report which datasets were already replaced.
+
+Movement storage is the first write. The in-memory movement reload occurs only after all fixed and dynamic writes succeed. A later write failure can therefore leave restored movement LocalStorage under the still-running pre-restore movement array.
+
+Subsequent movement activity before reload can persist that stale pre-restore movement array back over the movement data that had successfully restored.
+
+Impact:
+
+Restore failed does not mean the installation was left unchanged.
+
+A failed restore can create an arbitrary source/target hybrid and can subsequently change again depending on operator activity before reload.
+
+No exact automatic rollback path exists.
+
+Remediation direction:
+
+Stage the complete proposed restored state away from the live keys, verify every write, then commit atomically where possible.
+
+If atomic commit cannot be provided by the storage technology, capture and verify an exact pre-restore rollback set before mutating any live key.
+
+On failure, return the precise successful/failed/not-attempted mutation boundary and prevent normal operation until rollback or safe restart has completed.
+
+2. Successful full restore leaves writable secondary-store caches stale, allowing restored data to be overwritten before reload.
+
+Classification: Confirmed finding.
+Severity: High.
+
+Current restore explicitly reloads movement and configuration state after successful writes.
+
+It does not similarly invalidate and reload all other writable module caches.
+
+Bookings retain a module-level bookings array and bookingsInitialised flag.
+
+Calendar retains a module-level calendarEvents array and calendarEventsInitialised flag.
+
+Booking Profiles retain a module-level bookingProfiles object and bookingProfilesInitialised flag.
+
+These stores are normally initialised during application startup before an operator later reaches Admin Restore.
+
+Writing their LocalStorage keys during restore therefore does not replace those already-loaded runtime collections.
+
+The success handler rerenders selected views and instructs the operator to reload Flite, but reload is optional and normal controls remain available.
+
+If the operator edits a Booking before reload, the Booking store mutates the stale pre-restore array and serialises the complete array back to storage.
+
+That can overwrite the newly restored Booking dataset.
+
+Calendar event creation, editing or deletion can perform the same stale-array overwrite against restored Calendar storage.
+
+Saving or deleting a Booking Profile can likewise rewrite restored profile storage from the old pre-restore object.
+
+Impact:
+
+A restore can report success and correctly write backup data, yet normal operator activity during the same session can subsequently erase that restored state.
+
+The reload instruction is therefore not merely cosmetic. It is an un-enforced safety requirement.
+
+Remediation direction:
+
+After successful restore, invalidate and synchronously reload every restored writable subsystem before restoring operator control.
+
+Alternatively force an immediate controlled application reload as part of the restore completion path and prevent mutations until that reload has occurred.
+
+3. Legacy movement restore can report success even when the replacement was never durably persisted.
+
+Classification: Confirmed finding.
+Severity: High.
+
+Legacy envelope, legacy v1 and legacy v2 restore all use the same movement-only mutation path.
+
+The importer first replaces the module-level movements array with the imported movement array, recomputes nextId and marks movement state initialised.
+
+Only then does it call the ordinary movement save helper.
+
+The ordinary movement save helper catches persistence exceptions internally and does not rethrow them to the importer.
+
+The importer consequently returns success after saveToStorage() returns, even where the movement write failed.
+
+The immediate state can therefore be:
+
+runtime movements = imported legacy backup;
+durable movement store = previous installation;
+restore result = success.
+
+Because the Admin success path trusts that result, the normal backup-restored audit event can also be appended.
+
+After restart, the still-durable old movement store can load again and the apparently restored legacy movements disappear.
+
+Impact:
+
+Successful legacy restoration does not prove durable movement replacement.
+
+The operational Audit Log can contain restore-success provenance for a replacement that did not survive application restart.
+
+Remediation direction:
+
+Legacy restore must use the same verified result-bearing persistence and transactional boundary as current-format restore.
+
+Never replace authoritative runtime movement state before durability has been established.
+
+4. Legacy movement replacement can attach preserved modern bookings to a different restored movement incarnation through numeric ID reuse.
+
+Classification: Confirmed finding.
+Severity: High.
+
+Legacy restore intentionally replaces only movements.
+
+Modern Bookings, Cancelled Sorties, Deleted Strips, Booking Profiles, Calendar, Hours, VKB, Audit Log and generic-overflight data survive from the target installation.
+
+Bookings can reference movement IDs through linkedStripId.
+
+Movements can reference booking IDs through bookingId.
+
+Startup reconcileLinks() checks whether those numeric IDs exist and whether pointers reciprocate.
+
+It has no immutable movement-incarnation or generation identifier.
+
+A preserved target Booking can therefore point to movement ID 37.
+
+Legacy restore can replace the original movement 37 with an unrelated historic movement that also uses ID 37.
+
+If the imported movement also carries the reciprocal bookingId, reconciliation considers the relationship valid.
+
+No integrity banner is required because the numeric pointers are internally consistent.
+
+Impact:
+
+A successful legacy restore can silently connect a preserved modern Booking to a different historical movement while passing startup reconciliation.
+
+The same reusable numeric-ID model also creates ambiguity for preserved cancellation, deletion and audit history, although those secondary consequences were retained as manual-test requirements rather than additional confirmed findings.
+
+Remediation direction:
+
+Introduce stable entity-incarnation identity independent of reusable display/numeric IDs.
+
+Relationship reconciliation must verify identity lineage, not only reciprocal numeric pointers.
+
+Medium-high findings
+
+5. Restore preflight does not validate complete record semantics before authorising destructive replacement.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Current-format validation performs conservative top-level dataset checks.
+
+Examples include:
+
+a movement container must be an object with the current schema version and a movements array;
+cancelled sorties and Deleted Strips must be arrays;
+Bookings must be an object with a bookings array;
+Calendar must be an object with an events array;
+configuration need only be a non-array object.
+
+The validators do not comprehensively prove the semantic validity of every nested movement, booking, event, profile, audit record or configuration field.
+
+Legacy validation is weaker.
+
+A bare array qualifies as legacy v1 movement data.
+
+Legacy v2 principally requires a numeric version and movements array.
+
+Accepted legacy records become the live movement array and are then serialised inside the current movement-storage envelope.
+
+Impact:
+
+A backup can pass restore preflight and replace valid operational data with records that could not necessarily have been created through normal current application validation.
+
+Legacy records can be promoted into the current canonical movement store without having satisfied current record requirements.
+
+Remediation direction:
+
+Add bounded, record-level semantic validation for every restored dataset.
+
+Validation should enforce required fields, types, ranges, supported enum values, identifier constraints and cross-record integrity before any live mutation.
+
+6. A Full backup restore is an overlay, not a complete replacement of installation state.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+Full backup export writes each fixed backup key as either its raw value or null.
+
+Current-format restore writes a fixed dataset only when the storage property exists and its value is not null.
+
+Therefore:
+
+missing source key -> existing target dataset survives;
+source value null -> existing target dataset survives;
+valid empty source dataset -> existing target dataset is replaced by an empty dataset.
+
+Dated generic-overflight keys are dynamic.
+
+Only recognised valid source keys are written.
+
+Target-only dated generic-overflight keys are not removed.
+
+Malformed dynamic values are warning-and-skip cases, so an existing target value for that date can survive while the rest of the backup is restored.
+
+A structurally recognised current backup can even be restorable with storage:{} or with no meaningful non-null sections.
+
+The confirmation UI describes the format as Full backup and reports a count of restorable keys, but does not present a complete before/after inventory of every target section that will remain.
+
+Impact:
+
+Even a completely successful restore can deliberately produce a hybrid of backup data and pre-existing target data.
+
+The word Full does not mean complete replacement of the installation represented by the backup.
+
+Remediation direction:
+
+Define one explicit restore policy.
+
+If restore means replacement, encode source absence explicitly and remove target-only managed state.
+
+If overlay remains intentional, label it as such and show the complete resulting-state plan before confirmation.
+
+7. Restore success accounting does not prove durable persistence.
+
+Classification: Confirmed finding.
+Severity: Medium-high.
+
+The shared writeRaw() storage wrapper returns silently when LocalStorage is considered unavailable and otherwise calls localStorage.setItem().
+
+It returns no result-bearing acknowledgement.
+
+Current restore calls writeRaw() and then immediately adds the key to restoredKeys.
+
+No read-back comparison is performed.
+
+The restore success UI reports the number of restored storage keys from this attempted-key list.
+
+Impact:
+
+restoredKeys means that the importer attempted the key without receiving a propagated exception.
+
+It does not prove that the expected value was durably stored.
+
+Silent storage unavailability can therefore produce success-shaped restored-key accounting without verified persistence.
+
+Remediation direction:
+
+Use structured persistence results.
+
+Every restored key must be read back and compared, or otherwise receive a durable acknowledgement, before it contributes to restoredKeys or overall success.
+
+Medium finding
+
+8. Restored VKB override state is not consistently propagated through all runtime and reporting caches until reload.
+
+Classification: Confirmed finding.
+Severity: Medium.
+
+VKB stores bundled baseline rows and effective override-derived rows in module-level memory.
+
+Normal VKB override mutations call a rebuild helper that refreshes effective arrays.
+
+Backup restore directly writes the raw VKB override LocalStorage key and does not call that rebuild helper.
+
+Some VKB lookup paths derive effective data by rereading the override store.
+
+Other paths operate from cached effective arrays.
+
+Reporting additionally maintains a registrationIndex that is built once and reused.
+
+The restore success path calls refreshVkbAdminDisplay() and renderReports(), but does not invalidate every VKB-derived runtime cache.
+
+Impact:
+
+Immediately after restore, different consumers can temporarily use different generations of VKB-derived reference data.
+
+A report rendered before reload can therefore use stale registration-derived classification state even though restored overrides are already present in LocalStorage.
+
+Remediation direction:
+
+Provide one authoritative post-restore VKB reload/invalidation operation that rebuilds every effective array and invalidates downstream reporting indexes before any dependent view is rendered.
+
+Confirmed-sound controls
+
+The following controls were confirmed and should be preserved during remediation:
+
+current-format inspection completes before intended mutation begins;
+malformed outer JSON is blocked;
+unrecognised backup structures are blocked;
+unsupported future current-format versions are blocked;
+every present fixed dataset must parse as JSON and satisfy its defined top-level shape;
+malformed fixed datasets block current restore rather than being silently skipped;
+arbitrary unknown backup storage keys are not restored;
+dynamic generic-overflight keys use a strict allowlist;
+preview and import use the same inspection routine;
+the importer reinspects immediately before mutation;
+legacy backups are explicitly identified and warned as movement-only;
+successful current restore reloads movement and configuration state;
+Hours data is read fresh from storage;
+Cancelled Sorties and Deleted Strips do not use the same long-lived module-cache pattern confirmed for Bookings, Calendar and Booking Profiles;
+fresh application startup recreates JavaScript module state;
+startup booking reconciliation runs after subsystem initialisation;
+simple missing or mismatched booking/movement pointers are cleared or repaired;
+reconciliation repairs and conflicts are surfaced through a visible integrity banner;
+successful current restore appends restore provenance to the restored operational Audit Log;
+technical diagnostic history exists independently of the normal backup set and records material persistence failures.
+
+Destructive-restore manual-test specification
+
+The manual tests below use deliberately distinguishable SOURCE backup data and TARGET installation data.
+
+For every destructive, failure-injection or stale-cache case capture:
+
+raw LocalStorage before restore;
+raw LocalStorage immediately after restore or failure;
+the visible restore result;
+the operational Audit Log;
+the technical diagnostic log;
+raw LocalStorage and visible state after reload or full restart.
+
+DR-01 - Complete current backup over a populated target.
+
+Assert that every supplied fixed dataset becomes SOURCE state and document the treatment of target-only dynamic state.
+
+DR-02 - Omit one fixed dataset from a current backup.
+
+Assert that the omitted TARGET dataset survives unchanged.
+
+DR-03 - Set the same fixed dataset explicitly to null.
+
+Assert that the TARGET dataset survives unchanged.
+
+DR-04 - Supply a valid empty representation for the same dataset.
+
+Assert that the TARGET data is replaced with the valid empty SOURCE state.
+
+DR-05 - Give the target a dated generic-overflight key absent from the source backup.
+
+Assert that the TARGET counter survives.
+
+DR-06 - Put a malformed dated generic-overflight value in the source where the target already has a valid value.
+
+Assert that the warning is shown, the source value is skipped and the TARGET value survives while other restore sections continue.
+
+DR-07 - Restore a recognised current backup whose storage object is empty.
+
+Verify the exact preflight, confirmation, success and mutation behaviour.
+
+DR-08 - Restore a current backup whose fixed keys are all null.
+
+Verify the apparent success/no-op behaviour and resulting summary.
+
+DR-09 - Include an arbitrary unknown LocalStorage-style key.
+
+Assert that it is not restored.
+
+DR-10 - Use an unsupported future current backup formatVersion.
+
+Assert that confirmation is blocked and target storage remains unchanged.
+
+DR-11 - Use malformed outer JSON.
+
+Assert that confirmation is blocked and target storage remains unchanged.
+
+DR-12 - Put malformed JSON inside one fixed current-format dataset.
+
+Assert that the complete current restore is blocked before the first intended write.
+
+DR-13 - Supply a valid movement envelope containing malformed individual movement records.
+
+Determine the runtime, persistence and reload consequences.
+
+DR-14 - Supply a valid Booking envelope containing malformed individual Booking records.
+
+Determine the runtime, persistence and reload consequences.
+
+DR-15 - Restore configuration values that the normal Admin UI would reject.
+
+Determine the effective post-restore and post-reload configuration behaviour.
+
+DR-16 - Inject storage failure on fixed write 1, movements.
+
+Assert that later restore writes are not attempted.
+
+DR-17 - Inject failure on fixed write 2, configuration.
+
+Assert that movements are SOURCE while configuration and later fixed stores remain TARGET.
+
+DR-18 - Inject failure on fixed write 6, Calendar.
+
+Assert that writes 1-5 are SOURCE and write 6 onward remains TARGET.
+
+DR-19 - Inject failure on fixed write 9, Audit Log.
+
+Assert that writes 1-8 are SOURCE while Audit Log and Bookings remain TARGET.
+
+DR-20 - Inject failure on fixed write 10, Bookings.
+
+Assert that writes 1-9 are SOURCE, Bookings remains TARGET and dynamic writes are not attempted.
+
+DR-21 - Inject failure on the first dynamic generic-overflight write.
+
+Assert that applicable fixed stores are SOURCE while dynamic target state remains.
+
+DR-22 - Inject failure on a later dynamic generic-overflight write.
+
+Assert that fixed plus earlier dynamic keys are SOURCE while later dynamic state remains TARGET.
+
+DR-23 - After a partial current-format failure occurring after movement replacement, edit a movement before reload.
+
+Verify whether stale pre-restore movement memory overwrites restored movement LocalStorage.
+
+DR-24 - Repeat the same partial failure but reload immediately without further mutation.
+
+Record the exact persisted hybrid used at startup and any reconciliation changes.
+
+DR-25 - Make the storage wrapper consider LocalStorage unavailable during current restore.
+
+Compare claimed restoredKeys and success feedback with actual persistence.
+
+DR-26 - Complete a successful current restore, do not reload, then edit an existing Booking.
+
+Verify whether the stale TARGET Booking cache overwrites restored SOURCE Booking storage.
+
+DR-27 - Complete a successful current restore, do not reload, then add, edit or delete a Calendar event.
+
+Verify whether the stale TARGET Calendar cache overwrites restored SOURCE Calendar storage.
+
+DR-28 - Complete a successful current restore, do not reload, then save or delete a Booking Profile.
+
+Verify whether the stale TARGET profile cache overwrites restored SOURCE profile storage.
+
+DR-29 - Restore substantially different VKB overrides and inspect lookups, Admin and Reports immediately without reload.
+
+Identify fresh versus stale consumers.
+
+DR-30 - Repeat DR-29 after full reload.
+
+Assert convergence on restored VKB state.
+
+DR-31 - Complete a successful current restore and fully close/reopen the packaged application.
+
+Assert stable durable restoration across restart.
+
+DR-32 - Restore a legacy v1 bare movement array over a populated modern target.
+
+Assert that movements become SOURCE while modern secondary stores remain TARGET.
+
+DR-33 - Repeat with legacy v2.
+
+Assert the same movement-only replacement semantics.
+
+DR-34 - Repeat with the legacy envelope format.
+
+Assert movement-only replacement and expected warning/provenance behaviour.
+
+DR-35 - Inject movement-storage failure during legacy restore.
+
+Assert that runtime movements become SOURCE while durable movement storage remains TARGET and restore still reports success if source behaviour is reproduced.
+
+DR-36 - Reload immediately after DR-35.
+
+Assert whether TARGET movements return and inspect whether a backup-restored operational audit event survives.
+
+DR-37 - Restore legacy v1 containing malformed movement members.
+
+Determine how those members are promoted into current v3 movement storage and behave after reload.
+
+DR-38 - Restore legacy v2 using an unexpected or extreme numeric schema version.
+
+Verify exact preflight and resulting persistence behaviour.
+
+DR-39 - Use a legacy envelope whose metadata schema version disagrees with the payload version.
+
+Determine which value governs restore behaviour.
+
+DR-40 - Preserve a TARGET Booking whose linkedStripId is reused by an unrelated SOURCE legacy movement.
+
+Verify startup reconciliation behaviour.
+
+DR-41 - Construct a fully reciprocal but semantically wrong relationship: preserved TARGET Booking 12 points to restored SOURCE movement 37 and SOURCE movement 37 carries bookingId 12.
+
+Assert whether reconciliation reports the pair as clean despite the entity-incarnation mismatch.
+
+DR-42 - Give a SOURCE movement a bookingId that collides with an unrelated preserved TARGET Booking.
+
+Verify repair or attachment behaviour.
+
+DR-43 - Reuse a TARGET Cancelled Sortie sourceMovementId as a SOURCE restored movement ID.
+
+Inspect cancellation, reinstatement and duplicate-suppression semantics.
+
+DR-44 - Reuse a TARGET Deleted Strip snapshot movement ID as a SOURCE restored movement ID.
+
+Assert that same-ID reinstatement remains blocked and document historic ambiguity.
+
+DR-45 - Reuse a movement ID already present in preserved operational Audit Log history.
+
+Inspect whether historic entity presentation can distinguish the pre-restore and restored incarnations.
+
+DR-46 - Restore a PLANNED movement already inside its configured activation window.
+
+After reload, verify startup activation reconciliation and resulting operational/audit state.
+
+DR-47 - Restore genuinely dangling booking/movement relationships and reload.
+
+Assert that startup reconciliation clears or repairs them and exposes the integrity banner.
+
+DR-48 - Restore the fully reciprocal but semantically wrong ID-reuse case and reload.
+
+Assert whether reconciliation produces no integrity warning despite the incarnation mismatch.
+
+For ID-reuse tests, capture at minimum:
+
+movement id;
+movement callsign;
+movement registration;
+movement DOF;
+movement bookingId;
+booking id;
+booking registration;
+booking date;
+booking linkedStripId.
+
+Systemic conclusion
+
+The ordinary happy-path restore implementation contains useful preflight controls, but restore itself is not an installation-state transaction.
+
+The dominant release risks are:
+
+partial destructive replacement after failure;
+stale runtime state capable of undoing successful restoration;
+false-success legacy persistence;
+cross-generation numeric identity reuse;
+insufficient semantic validation;
+ambiguous overlay semantics;
+unverified persistence accounting.
+
+Recommended remediation order
+
+1. Introduce transactional or rollback-capable full restore.
+2. Make the persistence boundary result-bearing and verify every restore write.
+3. Reload or invalidate every restored runtime subsystem before normal operation resumes.
+4. Remove legacy memory-first false-success behaviour.
+5. Add stable entity-incarnation identity and strengthen relationship reconciliation.
+6. Add complete record-level restore validation and input bounds.
+7. Define explicit replacement versus overlay semantics and show the resulting-state preview.
+8. Rebuild VKB/reporting derived caches as part of restore completion.
+9. Execute the 48-case destructive-restore acceptance suite in the packaged runtime.
+
+Overall disposition
+
+Audit 10 is complete.
+
+The four High findings and the three Medium-high findings require remediation before final regression and release acceptance.

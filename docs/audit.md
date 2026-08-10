@@ -613,27 +613,85 @@ retain a small mandatory packaged-Tauri acceptance suite alongside browser regre
 Detailed findings and the packaged-runtime parity test specification are recorded in docs/audit_findings.md.
 
 Priority: Complete - the three Medium-high findings and installed-runtime truthfulness gaps require remediation disposition and packaged-Tauri acceptance before final regression and release acceptance.
-10. Backup and restore destructive-behaviour audit
+10. Backup and restore destructive-behaviour audit - COMPLETED 10 August 2026
 
-Items 1â€“3 established coverage and validation, but a final scenario-based audit should still test:
+Status: Complete.
 
-backup with every dataset populated;
-restoring into a non-empty installation;
-missing optional keys;
-legacy movement-only backups;
-corrupt JSON;
-valid JSON with invalid shapes;
-unsupported versions;
-restore interruption;
-storage failure halfway through restore;
-reloading after restore;
-backup provenance and version messaging;
-restoring older backups into newer versions.
+The audit examined the destructive semantics of full and legacy backup restoration, including what happens to an existing installation when a restore is partial, older, malformed, incomplete, interrupted, only partly writable or followed by continued operation before reload.
 
-The critical question is not merely whether import succeeds, but whether the operator understands exactly what was replaced.
+Passes completed:
 
-Priority: High before final acceptance.
+backup format and restore contract;
+preflight and validation boundary;
+current-format mutation ordering and partial failure;
+legacy restore and movement replacement;
+post-restore runtime state, reload and reconciliation;
+consolidation and destructive-restore manual-test specification.
 
+Consolidated findings:
+
+Confirmed findings: 8
+Critical: 0
+High: 4
+Medium-high: 3
+Medium: 1
+Total: 8
+
+Principal findings:
+
+current-format restore is non-atomic and a failed restore can leave an arbitrary hybrid of restored and pre-restore datasets with no rollback or exact mutation-boundary report;
+successful full restore leaves writable Booking, Calendar and Booking Profile caches on pre-restore state until reload, allowing later operator activity to overwrite successfully restored data;
+legacy movement restore can report success after the movement persistence write failed, leaving imported movements only in memory and allowing the old durable movement population to reappear after restart;
+legacy movement replacement can combine preserved modern bookings with unrelated restored movements that reuse the same numeric IDs, and reciprocal-ID startup reconciliation cannot distinguish entity incarnations;
+restore preflight validates dataset containers rather than complete record semantics, so insufficiently validated current or legacy records can destructively replace valid operational data;
+a Full backup restore is an overlay rather than a complete installation-state replacement: omitted or null datasets and target-only dated generic-overflight state survive;
+restoredKeys and the success summary record attempted writes rather than verified durable persistence because the shared storage boundary has no write acknowledgement or read-back verification;
+restored VKB overrides are not comprehensively propagated through all loaded VKB and reporting caches until reload.
+
+Systemic conclusion:
+
+Restore is implemented as a sequence of ordinary LocalStorage mutations rather than as an installation-state transaction.
+
+The principal destructive risks are:
+
+a failed restore can permanently replace only part of the installation;
+a successful restore is not runtime-safe until stale writable module state has been discarded;
+legacy restore does not establish durable movement replacement or stable cross-generation entity identity;
+the operator cannot infer complete target state merely from a Full backup label or successful restore result.
+
+Confirmed strengths:
+
+current-format inspection runs before intended mutation;
+malformed outer JSON and unrecognised structures are blocked;
+unsupported future current-format versions are blocked;
+present fixed datasets must parse and satisfy defined top-level shapes;
+malformed fixed datasets block current restore rather than being silently skipped;
+dynamic generic-overflight keys are strictly allowlisted;
+unknown arbitrary storage keys are not restored;
+preview and import use the same inspection function and import reinspects before mutation;
+legacy formats are explicitly identified and warned as movement-only;
+current successful restore reloads movements and configuration;
+Hours data is read fresh from storage;
+fresh startup rebuilds JavaScript module state;
+booking reconciliation repairs simple dangling or inconsistent links and exposes detected repairs through an integrity banner;
+technical diagnostics provide separate evidence of persistence failures.
+
+Required remediation direction:
+
+make full restore transactional through staging plus verified commit or an exact pre-restore rollback snapshot;
+return structured per-key persistence results and verify durable writes before reporting restoration;
+on any failed restore, identify exactly which datasets changed and force recovery or safe restart before further operator mutation;
+invalidate and reload every restored writable subsystem before declaring success, or force immediate application reload before controls become usable;
+strengthen restore validation to record-level semantic validation with bounded inputs;
+define explicit replace-versus-overlay semantics and show the resulting target-state plan before confirmation;
+give restored entities stable incarnation identity so cross-generation numeric-ID reuse cannot satisfy relationship reconciliation incorrectly;
+rebuild VKB and reporting caches deterministically after restore.
+
+The final destructive-restore acceptance specification contains 48 scenario tests covering successful replacement, omitted/null/empty datasets, malformed and future backups, write failure at every significant mutation boundary, stale-cache overwrite, legacy false success, ID reuse, startup reconciliation, reload and packaged restart.
+
+Detailed findings and the destructive-restore test specification are recorded in docs/audit_findings.md.
+
+Priority: Complete - the four High findings require remediation before final regression and release acceptance.
 11. Release artefact and clean-install audit
 
 Before V1, test from outside the development environment:
