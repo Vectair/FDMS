@@ -744,35 +744,32 @@ export function computeLeaderboards(movements, hoursMap = null) {
     if (m.callsignCode?.trim()) callsignPresent++;
     if (m.registration?.trim()) registrationPresent++;
 
-    // FR-14: Formation element expansion — credit each element when it carries
-    // its own identity (pilotName or underlyingCallsign), so that stats are
-    // attributed to the real aircraft/pilot rather than the master formation label.
+    // FR-14/FR-14b: Formation element expansion — always credit each element
+    // individually (per §2/§10a "per-element, not lead-only"), routing through
+    // resolveFormationElementIdentity() so VKB inference (registration / EGOW
+    // lookup) is applied even when no controller has manually typed a pilot or
+    // attribution callsign. That resolver already degrades gracefully to the
+    // master callsign/captain when nothing else is known, so gating expansion
+    // on manually-entered identity fields would only suppress the VKB-derived
+    // credits this expansion exists to surface — do not reintroduce that gate.
     const hasFormation = m.formation && Array.isArray(m.formation.elements) && m.formation.elements.length > 0;
     if (hasFormation) {
-      const elements = m.formation.elements;
-      const hasElementIdentity = elements.some(
-        el => (el.underlyingCallsign || '').trim() || (el.pilotName || '').trim()
-      );
-      if (hasElementIdentity) {
-        for (const el of elements) {
-          // FR-14b: route through resolveFormationElementIdentity so VKB
-          // inference fills in any gaps left by manual-only FR-14 fields.
-          const resolved     = resolveFormationElementIdentity(el, m);
-          const captain      = resolved.pilot;
-          const callsign     = resolved.attributionCallsign;
-          const registration = (el.reg || m.registration || '').trim();
-          const ov           = el.overrides || {};
-          const osCount      = Number('osCount'  in ov ? ov.osCount  : (m.osCount  || 0));
-          const tngCount     = Number('tngCount' in ov ? ov.tngCount : (m.tngCount || 0));
-          // FIS has no per-element override; always from master.
-          const fisCount     = Number(m.fisCount || 0);
-          creditSortie(captain, callsign, registration, osCount, tngCount, fisCount);
-        }
-        continue; // Skip master-level attribution for this movement.
+      for (const el of m.formation.elements) {
+        const resolved     = resolveFormationElementIdentity(el, m);
+        const captain      = resolved.pilot;
+        const callsign     = resolved.attributionCallsign;
+        const registration = (el.reg || m.registration || '').trim();
+        const ov           = el.overrides || {};
+        const osCount      = Number('osCount'  in ov ? ov.osCount  : (m.osCount  || 0));
+        const tngCount     = Number('tngCount' in ov ? ov.tngCount : (m.tngCount || 0));
+        // FIS has no per-element override; always from master.
+        const fisCount     = Number(m.fisCount || 0);
+        creditSortie(captain, callsign, registration, osCount, tngCount, fisCount);
       }
+      continue; // Skip master-level attribution for this movement.
     }
 
-    // Non-formation or formation without element identity: attribute to master strip.
+    // Non-formation: attribute to master strip.
     const captain      = m.captain?.trim() || '';
     const callsign     = m.callsignCode?.trim() || '';
     const registration = m.registration?.trim() || '';

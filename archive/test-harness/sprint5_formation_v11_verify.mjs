@@ -142,6 +142,7 @@ const BASE_STRIP_DEP = {
 
   // Expand formation and set count = 2
   await page.click('button.modal-expander[data-target="newFormationSection"]');
+  await page.check('#newFormationEnabled');
   await page.waitForSelector('#newFormationCount', { state: 'visible', timeout: 5000 });
   await page.evaluate(() => {
     const inp = document.getElementById('newFormationCount');
@@ -180,6 +181,7 @@ const BASE_STRIP_DEP = {
   await page.fill('#newDOF', today());
 
   await page.click('button.modal-expander[data-target="newFormationSection"]');
+  await page.check('#newFormationEnabled');
   await page.waitForSelector('#newFormationCount', { state: 'visible', timeout: 5000 });
   await page.evaluate(() => {
     const inp = document.getElementById('newFormationCount');
@@ -308,6 +310,7 @@ const BASE_STRIP_DEP = {
   await page.fill('#newDOF', today());
 
   await page.click('button.modal-expander[data-target="newFormationSection"]');
+  await page.check('#newFormationEnabled');
   await page.waitForSelector('#newFormationCount', { state: 'visible', timeout: 5000 });
   await page.evaluate(() => {
     const inp = document.getElementById('newFormationCount');
@@ -351,6 +354,7 @@ const BASE_STRIP_DEP = {
   await page.fill('#newDOF', today());
 
   await page.click('button.modal-expander[data-target="newFormationSection"]');
+  await page.check('#newFormationEnabled');
   await page.waitForSelector('#newFormationCount', { state: 'visible', timeout: 5000 });
   await page.evaluate(() => {
     const inp = document.getElementById('newFormationCount');
@@ -393,6 +397,7 @@ const BASE_STRIP_DEP = {
 
   // Expand formation section but set count = 1 (below minimum)
   await page.click('button.modal-expander[data-target="newFormationSection"]');
+  await page.check('#newFormationEnabled');
   await page.waitForSelector('#newFormationCount', { state: 'visible', timeout: 5000 });
   await page.evaluate(() => {
     const inp = document.getElementById('newFormationCount');

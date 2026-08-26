@@ -167,6 +167,7 @@ const BASE_STRIP = {
 
   // Expand formation section
   await page.click('button.modal-expander[data-target="newFormationSection"]');
+  await page.check('#newFormationEnabled');
   await page.waitForSelector('#newFormationCount', { state: 'visible', timeout: 5000 });
   // Set count = 2 via evaluate (more reliable than fill for triggering custom listeners)
   await page.evaluate(() => {

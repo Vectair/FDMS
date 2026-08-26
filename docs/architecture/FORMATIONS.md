@@ -583,7 +583,7 @@ VKB lookups degrade gracefully (returns null/empty if VKB data is not loaded).
 
 ### Reporting integration
 
-When a formation has element identity data, `reporting.js` expands the formation into per-element contributions. Each element is credited to its resolved `attributionCallsign` and `pilot` rather than the master callsign and captain. This prevents all formation movements from being attributed to the lead only.
+`reporting.js` unconditionally expands every formation into per-element contributions — this is not gated on any element carrying manually-entered identity data. Each element is credited to its resolved `attributionCallsign` and `pilot` via `resolveFormationElementIdentity()`, which applies VKB inference (registration / EGOW lookup) before falling back to the master callsign and captain. This prevents all formation movements from being attributed to the lead only, including when identity is only resolvable through VKB data rather than manual entry.
 
 ---
 

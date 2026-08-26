@@ -86,6 +86,8 @@ async function openLocModalWithFormation(page, callsign, count) {
   // Expand the Formation section
   await page.locator('.modal-expander[data-target="newLocFormationSection"]').click();
   await page.waitForSelector('#newLocFormationSection:not([hidden])', { timeout: 3000 });
+  await page.check('#newLocFormationEnabled');
+  await page.waitForSelector('#newLocFormationCount', { state: 'visible', timeout: 3000 });
 
   // Set count — triggers buildFormationElementRows
   await page.fill('#newLocFormationCount', String(count));
