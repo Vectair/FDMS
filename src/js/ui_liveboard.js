@@ -2107,17 +2107,31 @@ function readFormationFromModal(baseCallsign, countInputId, containerId, masterS
       return { _error: true, message: `Element ${i + 1}: Arr AD "${arrAdRaw}" must be a 4-character ICAO code (A–Z, 0–9).` };
     }
 
-    // Resolved element aerodrome values (element input wins; fall back to shared default)
-    const resolvedDepAd = depAdRaw || shared.depAd;
-    const resolvedArrAd = arrAdRaw || shared.arrAd;
-
-    // Track element-level overrides.
-    // depAd/arrAd: override when non-empty and differs from shared (value comparison).
-    // reg/type/wtc: use draft override state when available; else fall back to value comparison.
-    const overrides = {};
-    if (depAdRaw && depAdRaw !== shared.depAd) overrides.depAd = depAdRaw;
-    if (arrAdRaw && arrAdRaw !== shared.arrAd) overrides.arrAd = arrAdRaw;
+    // Track element-level overrides — use draft override state when available
+    // (it records whether the user actually edited this field), else fall
+    // back to value comparison against shared.
+    //
+    // depAd/arrAd can't rely on value-comparison alone: fmnPropagateToInheriting()
+    // (FR-09) live-mirrors the master's field into a still-inheriting element's
+    // input as the operator types, so a blank depAd input can read back a
+    // non-empty value that simply equals shared.depAd. Value-comparison would
+    // then wrongly treat it as "not an override" for override-tracking purposes
+    // (harmless) but STORE the mirrored value as the element's actual depAd
+    // (not harmless — see below), rather than recognising the field was never
+    // touched. The draft's overrides dict is authoritative here because it's
+    // only set by the FR-09 input listener when the user actually edits the
+    // field (see the newFormationBody 'input' handler).
     const draftSlot = draft ? draft[i] : null;
+    const depAdIsOverride = draftSlot?.overrides
+      ? ('depAd' in draftSlot.overrides)
+      : (depAdRaw && depAdRaw !== shared.depAd);
+    const arrAdIsOverride = draftSlot?.overrides
+      ? ('arrAd' in draftSlot.overrides)
+      : (arrAdRaw && arrAdRaw !== shared.arrAd);
+
+    const overrides = {};
+    if (depAdIsOverride && depAdRaw) overrides.depAd = depAdRaw;
+    if (arrAdIsOverride && arrAdRaw) overrides.arrAd = arrAdRaw;
     if (draftSlot?.overrides) {
       if ('reg'  in draftSlot.overrides && reg)    overrides.reg  = reg;
       if ('type' in draftSlot.overrides && type)   overrides.type = type;
@@ -2137,8 +2151,14 @@ function readFormationFromModal(baseCallsign, countInputId, containerId, masterS
       reg, type,
       wtc: wtcRaw,
       status: "PLANNED",
-      depAd: resolvedDepAd,
-      arrAd: resolvedArrAd,
+      // Stored blank when not an override, even if the input currently reads
+      // a live-mirrored value from fmnPropagateToInheriting() — the shared
+      // layer supplies the display fallback (resolveElementForDisplay());
+      // storing the mirrored value here would freeze this element to
+      // whatever the master held at creation time instead of tracking it
+      // live (see FORMATIONS.md §3d/§7a).
+      depAd: depAdIsOverride ? depAdRaw : "",
+      arrAd: arrAdIsOverride ? arrAdRaw : "",
       depActual: "", arrActual: "",
       overrides
     });

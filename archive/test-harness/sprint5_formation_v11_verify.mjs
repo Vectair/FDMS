@@ -178,6 +178,7 @@ const BASE_STRIP_DEP = {
   await page.fill('#newDepPlanned', '13:00');
   await page.fill('#newArrPlanned', '14:00');
   await page.fill('#newEgowCode', 'BM');
+  await page.fill('#newUnitCode', 'RAF');  // BM requires a unit code (egowCodeRequiresUnitCode)
   await page.fill('#newDOF', today());
 
   await page.click('button.modal-expander[data-target="newFormationSection"]');
@@ -247,14 +248,17 @@ const BASE_STRIP_DEP = {
   await page.locator('.js-toggle-details').first().click();
   await page.waitForTimeout(400);
 
-  // Element 1 (CNNCT 2) has depAd="" — should show master depAd (EGOW) as fallback
+  // Element 1 (CNNCT 2) has depAd="" — the fallback is rendered as the input's
+  // placeholder text (resolveElementForDisplay() + the .fmn-el-ad markup in
+  // renderFormationDetails()), not as separate muted text content, so it must
+  // be read via getAttribute('placeholder') rather than textContent().
   const g4ss = await ss(page, 'G4_fallback_display');
-  // Look for .fmn-fallback text containing master depAd
-  const g4FallbackCount = await page.locator('.fmn-fallback').count();
-  const g4FallbackText  = await page.locator('.fmn-fallback').first().textContent().catch(() => '');
-  const g4Pass = g4FallbackCount > 0 && g4FallbackText.includes('EGOW') && jsErrors.length === 0;
+  const g4DepAdInputs   = page.locator('.fmn-el-ad');       // [0]=el0 dep,[1]=el0 arr,[2]=el1 dep,[3]=el1 arr
+  const g4El1DepValue   = await g4DepAdInputs.nth(2).inputValue();
+  const g4El1DepPlaceholder = await g4DepAdInputs.nth(2).getAttribute('placeholder');
+  const g4Pass = g4El1DepValue === '' && g4El1DepPlaceholder === 'EGOW' && jsErrors.length === 0;
   log('G4', 'Empty depAd shows master fallback (EGOW)', g4Pass,
-      `fallbacks=${g4FallbackCount} text="${g4FallbackText}"`, [g4ss]);
+      `value="${g4El1DepValue}" placeholder="${g4El1DepPlaceholder}"`, [g4ss]);
 
   // -----------------------------------------------------------------------
   // G5 — Invalid depAd (3-char) rejected with toast
@@ -351,6 +355,7 @@ const BASE_STRIP_DEP = {
   await page.fill('#newDepPlanned', '10:00');
   await page.fill('#newArrPlanned', '11:00');
   await page.fill('#newEgowCode', 'BM');
+  await page.fill('#newUnitCode', 'RAF');  // BM requires a unit code (egowCodeRequiresUnitCode)
   await page.fill('#newDOF', today());
 
   await page.click('button.modal-expander[data-target="newFormationSection"]');
@@ -471,21 +476,28 @@ const BASE_STRIP_DEP = {
     }
   }]);
 
-  // Register dialog handler BEFORE click (confirm fires synchronously on click)
-  page.once('dialog', d => d.accept());
-  // Open dropdown and cancel
+  // .js-cancel opens a custom "Cancel Strip" modal (reason code/note fields +
+  // a .js-confirm-cancel button) — it is not a native confirm() dialog, so
+  // there is nothing for a page.once('dialog', ...) handler to catch.
   await page.locator('.js-edit-dropdown').first().click();
   await page.waitForTimeout(200);
   await page.locator('.js-cancel').first().click();
+  await page.waitForSelector('.js-confirm-cancel', { state: 'visible', timeout: 3000 });
+  await page.locator('.js-confirm-cancel').click();
   await page.waitForTimeout(600);
 
   const g10ss = await ss(page, 'G10_cascade_cancel');
   const mvs10 = await getMovements(page);
   const mv10  = mvs10.find(m => m.callsignCode === 'CNNCT');
-  const g10AllCancelled = mv10?.formation?.elements?.every(el => el.status === 'CANCELLED');
-  const g10Pass = g10AllCancelled && jsErrors.length === 0;
-  log('G10', 'CANCEL cascade: all elements CANCELLED', g10Pass,
-      `statuses=${JSON.stringify(mv10?.formation?.elements?.map(e => e.status))}`, [g10ss]);
+  const g10Statuses = mv10?.formation?.elements?.map(e => e.status);
+  // cascadeFormationStatus() on CANCELLED only advances PLANNED/ACTIVE elements;
+  // an element already COMPLETED (CNNCT 3) is preserved, per FORMATIONS.md
+  // "Master status cascade rules" and datamodel.js cascadeFormationStatus().
+  const g10Pass = mv10?.status === 'CANCELLED' &&
+      g10Statuses?.[0] === 'CANCELLED' && g10Statuses?.[1] === 'CANCELLED' && g10Statuses?.[2] === 'COMPLETED' &&
+      jsErrors.length === 0;
+  log('G10', 'CANCEL cascade: PLANNED/ACTIVE elements CANCELLED, COMPLETED preserved', g10Pass,
+      `masterStatus=${mv10?.status} statuses=${JSON.stringify(g10Statuses)}`, [g10ss]);
 
   // -----------------------------------------------------------------------
   // G11 — Produce-arrival from formation DEP inherits formation + resets state

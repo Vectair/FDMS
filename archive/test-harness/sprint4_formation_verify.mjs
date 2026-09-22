@@ -163,6 +163,7 @@ const BASE_STRIP = {
   await page.fill('#newDepPlanned',   '13:00');
   await page.fill('#newArrPlanned',   '14:00');
   await page.fill('#newEgowCode',     'BM');
+  await page.fill('#newUnitCode', 'RAF');  // BM requires a unit code (egowCodeRequiresUnitCode)
   await page.fill('#newDOF', today());
 
   // Expand formation section
