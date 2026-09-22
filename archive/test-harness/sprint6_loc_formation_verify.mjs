@@ -82,6 +82,7 @@ async function openLocModalWithFormation(page, callsign, count) {
   await page.fill('#newLocCallsignCode', callsign);
   await page.fill('#newLocStart', '10:00');
   await page.fill('#newLocEnd',   '11:00');
+  await page.fill('#newLocEgowCode', 'BC');  // required: _buildLocData() blocks save without a valid EGOW code
 
   // Expand the Formation section
   await page.locator('.modal-expander[data-target="newLocFormationSection"]').click();
@@ -228,6 +229,7 @@ async function openLocModalWithFormation(page, callsign, count) {
   await page.fill('#newLocCallsignCode', 'ECHO');
   await page.fill('#newLocStart', '10:00');
   await page.fill('#newLocEnd',   '11:00');
+  await page.fill('#newLocEgowCode', 'BC');  // required: _buildLocData() blocks save without a valid EGOW code
   // Do NOT expand Formation section (count stays at default=2 but rows never rendered)
   await page.click('.js-save-loc');
   await page.waitForTimeout(500);
@@ -249,6 +251,11 @@ async function openLocModalWithFormation(page, callsign, count) {
   await clear(page);
 
   await openLocModalWithFormation(page, 'FOXTROT', 3);
+  // .js-save-complete-loc stays display:none until the Planned/Active timing
+  // toggle is switched to Active (bindNewFormTimingToggle()) — in Active mode
+  // _buildLocData() auto-fills blank actual times, so no further input is needed.
+  await page.click('#newLocTimingToggle');
+  await page.waitForSelector('.js-save-complete-loc', { state: 'visible', timeout: 3000 });
   await page.click('.js-save-complete-loc');
   await page.waitForTimeout(500);
 
