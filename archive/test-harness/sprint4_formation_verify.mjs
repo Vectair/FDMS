@@ -225,12 +225,17 @@ const BASE_STRIP = {
   await page.waitForTimeout(400);
 
   const f4ss = await ss(page, 'F4_expanded_panel');
-  const f4Tables   = await page.locator('.formation-table').count();
+  // The persisted-panel element layout (renderFormationDetails()) is a
+  // card/stack layout (.formation-expanded-panel > .formation-element-stack
+  // > .formation-element-strip per element), not an HTML <table> — that
+  // markup (.formation-table) belongs only to the authoring-modal element
+  // rows (buildFormationElementRows()), a different code path.
+  const f4Panels   = await page.locator('.formation-expanded-panel').count();
   const f4SaveBtns = await page.locator('.fmn-el-save').count();
   const f4HasLabel = (await page.locator('.expand-subsection').filter({ hasText: 'Formation' }).count()) > 0;
-  const f4Pass = f4Tables > 0 && f4SaveBtns === 3 && f4HasLabel && jsErrors.length === 0;
-  log('F4', 'Formation panel renders: table + 3 Save buttons', f4Pass,
-      `tables=${f4Tables} saveBtns=${f4SaveBtns} hasLabel=${f4HasLabel}`, [f4ss]);
+  const f4Pass = f4Panels > 0 && f4SaveBtns === 3 && f4HasLabel && jsErrors.length === 0;
+  log('F4', 'Formation panel renders: element cards + 3 Save buttons', f4Pass,
+      `panels=${f4Panels} saveBtns=${f4SaveBtns} hasLabel=${f4HasLabel}`, [f4ss]);
 
   // ------------------------------------------------------------------
   // F5 — Element inline save: status=ACTIVE, depActual=13:20
@@ -350,32 +355,28 @@ const BASE_STRIP = {
   let f8Removed = false;
   if (openedEditModal8) {
     try {
-      // Expand formation section if not already open
+      // There is no dedicated "Remove Formation" button in the current UI
+      // (.js-remove-formation doesn't exist) — a formation is removed by
+      // reducing the element count below 2 (readFormationFromModal() then
+      // returns null), per FORMATIONS.md §"Element count".
       const fmSect = page.locator('#editFormationSection');
       const fmVisible = await fmSect.isVisible({ timeout: 1000 }).catch(() => false);
       if (!fmVisible) {
         await page.locator('button.modal-expander[data-target="editFormationSection"]').click();
         await page.waitForTimeout(200);
       }
-      // Click Remove Formation
-      await page.locator('.js-remove-formation').click({ timeout: 3000 });
-      await page.waitForTimeout(200);
-      // Save
+      await page.evaluate(() => {
+        const inp = document.getElementById('editFormationCount');
+        if (inp) { inp.value = '1'; inp.dispatchEvent(new Event('input', {bubbles:true})); }
+      });
+      // BASE_STRIP's egowCode 'BM' requires a unit code (egowCodeRequiresUnitCode);
+      // BASE_STRIP's unitCode is blank, and the edit modal enforces this on save
+      // too, so it must be filled here or the save is silently blocked.
+      await page.fill('#editUnitCode', 'RAF');
       await page.locator('.js-save-edit').click();
       await page.waitForTimeout(600);
       f8Removed = true;
-    } catch (e) {
-      // Fallback: set count to 1 then save
-      try {
-        await page.evaluate(() => {
-          const inp = document.getElementById('editFormationCount');
-          if (inp) { inp.value = '1'; inp.dispatchEvent(new Event('input', {bubbles:true})); }
-        });
-        await page.locator('.js-save-edit').click();
-        await page.waitForTimeout(600);
-        f8Removed = true;
-      } catch {}
-    }
+    } catch {}
   }
 
   const f8ss = await ss(page, 'F8_formation_removed');
@@ -397,9 +398,13 @@ const BASE_STRIP = {
 
   let openedDupModal = false;
   try {
+    // "Duplicate" is reached through the Create From submenu now, not a
+    // standalone .js-duplicate button.
     await page.locator('.js-edit-dropdown').first().click({ timeout: 3000 });
     await page.waitForTimeout(200);
-    await page.locator('.js-duplicate').first().click({ timeout: 3000 });
+    await page.locator('.js-create-from-submenu-trigger').first().click({ timeout: 3000 });
+    await page.waitForTimeout(200);
+    await page.locator('.js-create-from[data-target="DUPLICATE"]').first().click({ timeout: 3000 });
     openedDupModal = true;
   } catch { }
   await page.waitForTimeout(500);

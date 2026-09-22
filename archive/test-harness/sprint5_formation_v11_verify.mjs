@@ -507,16 +507,25 @@ const BASE_STRIP_DEP = {
   // Seed a fresh DEP strip with formation
   await seed(page, [{ ...BASE_STRIP_DEP, status: 'ACTIVE' }]);
 
-  // Open dropdown → Arrival
+  // Open dropdown → Create From (submenu) → Arrival. There is no standalone
+  // .js-produce-arr button any more — "produce arrival" is reached through
+  // the Create From submenu, and it opens the standard New Flight modal
+  // (openReciprocalStripModal() → openNewFlightModal()), not the Edit modal.
   await page.locator('.js-edit-dropdown').first().click();
   await page.waitForTimeout(200);
-  await page.locator('.js-produce-arr').first().click();
+  await page.locator('.js-create-from-submenu-trigger').first().click();
+  await page.waitForTimeout(200);
+  await page.locator('.js-create-from[data-target="ARR"]').first().click();
   await page.waitForTimeout(600);
 
-  // Modal should be open — save it
-  const g11ModalOpen = await page.locator('.js-save-edit').count();
+  // Modal should be open — save it. BASE_STRIP_DEP's egowCode 'BM' requires a
+  // unit code (egowCodeRequiresUnitCode); the fixture's unitCode is blank and
+  // the reciprocal prefill carries that blank straight through, so it must be
+  // filled here or the save is silently blocked.
+  const g11ModalOpen = await page.locator('.js-save-flight').count();
   if (g11ModalOpen > 0) {
-    await page.locator('.js-save-edit').click();
+    await page.fill('#newUnitCode', 'RAF');
+    await page.locator('.js-save-flight').click();
     await page.waitForTimeout(500);
   }
 
@@ -528,7 +537,11 @@ const BASE_STRIP_DEP = {
   const g11ElementsReset = prodMv?.formation?.elements?.every(
     el => el.status === 'PLANNED' && el.depActual === '' && el.arrActual === ''
   );
-  const g11DepAdCopied = prodMv?.formation?.elements?.[0]?.depAd === 'EGOW'; // identity field preserved
+  // Element 0's depAd ('EGOW') happens to equal shared.depAd, so it's an
+  // ambiguous case for override-vs-inheriting bookkeeping; element 2 (CNNCT 3)
+  // has depAd 'EGOM', which unambiguously diverges from shared and so is an
+  // unambiguous per-element override to check survives being carried through.
+  const g11DepAdCopied = prodMv?.formation?.elements?.[2]?.depAd === 'EGOM'; // identity field preserved
   const g11Pass = g11HasFormation && g11ElementsReset && g11DepAdCopied && jsErrors.length === 0;
   log('G11', 'Produce-arrival inherits formation; elements reset to PLANNED', g11Pass,
       `hasFormation=${g11HasFormation} allReset=${g11ElementsReset} depAdCopied=${g11DepAdCopied}`,

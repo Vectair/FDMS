@@ -5163,6 +5163,23 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     refreshDepZzzzCompanion?.();
     refreshArrZzzzCompanion?.();
     refreshTypeZzzzCompanion?.();
+
+    // FORMATIONS.md "Produce-arrival / produce-departure inheritance" — seed
+    // the formation section from the reset elements openReciprocalStripModal()
+    // attached to prefill.formation, so the produced leg opens with the
+    // formation already enabled instead of requiring the operator to
+    // re-build it from scratch.
+    if (prefill.formation && Array.isArray(prefill.formation.elements) && prefill.formation.elements.length >= 2) {
+      const count = Math.min(Math.max(prefill.formation.elements.length, 2), 12);
+      prefill.formation.elements.forEach((el, idx) => { newFormationDraft[idx] = { ...el }; });
+      newFormationVisibleCount = count;
+      const countInput = document.getElementById("newFormationCount");
+      if (countInput) countInput.value = String(count);
+      if (newFormationCheckbox) newFormationCheckbox.checked = true;
+      if (newFormationBody) newFormationBody.hidden = false;
+      buildFormationElementRows(count, getNewFlightCallsign(), "newFormationElementsContainer", newFormationDraft, { flightType });
+      fmnSynthesizeMasterFromElements("newFormationElementsContainer", count, newFlightMasterIds);
+    }
   }
 
   // ── VKB button visibility helpers ────────────────────────────────────────
@@ -8903,6 +8920,23 @@ function openReciprocalStripModal(m, targetType) {
     unitCode:     m.unitCode    || "",
     remarks:      `Reciprocal of ${rawCallsign} ${sourceFT}`,
   };
+
+  // FORMATIONS.md "Produce-arrival / produce-departure inheritance": the
+  // produced movement inherits the formation structure (identity fields,
+  // per-element depAd/arrAd as they were) but resets each element's
+  // operational state, since the new leg hasn't happened yet.
+  if (m.formation && Array.isArray(m.formation.elements) && m.formation.elements.length > 0) {
+    const clonedElements = JSON.parse(JSON.stringify(m.formation.elements));
+    clonedElements.forEach(el => {
+      el.status = "PLANNED";
+      el.depActual = "";
+      el.arrActual = "";
+    });
+    prefill.formation = {
+      baseCallsign: m.formation.baseCallsign || splitCallsignCode,
+      elements: clonedElements,
+    };
+  }
 
   // Open the standard creation modal pre-filled; strip is only persisted on Save
   openNewFlightModal(targetType, prefill);

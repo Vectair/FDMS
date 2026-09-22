@@ -85,12 +85,14 @@ If count < 2, `movement.formation` is treated as null (no formation).
 - No cascade occurs on master activation (PLANNED→ACTIVE).
 
 ### Produce-arrival / produce-departure inheritance
-When producing the opposite leg from a formation-bearing movement:
+Reached via the strip's Edit ▾ menu → Create From → Arrival/Departure, which opens `openReciprocalStripModal()`. When producing the opposite leg from a formation-bearing movement:
 - The produced movement inherits the formation structure including identity fields and `depAd/arrAd`.
 - The produced movement resets element operational state:
   - `status = PLANNED`
   - `depActual = ""`
   - `arrActual = ""`
+
+The reset formation is carried through `openNewFlightModal()`'s `prefill.formation`, which seeds the modal's formation checkbox, count, and element draft so the operator sees the inherited formation already populated rather than needing to re-enter it.
 
 ### Scope boundaries
 - Booking objects and booking sync are formation-agnostic.
