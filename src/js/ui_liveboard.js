@@ -2377,8 +2377,7 @@ function resolveElementForDisplay(el, shared, m) {
   const flightType = String("flightType" in ov ? ov.flightType : (shared.flightType || m.flightType || "")).toUpperCase();
   const tngCount = "tngCount" in ov ? Number(ov.tngCount) : Number(shared.tngCount ?? m.tngCount ?? 0);
   const osCount  = "osCount"  in ov ? Number(ov.osCount)  : Number(shared.osCount  ?? m.osCount  ?? 0);
-  // FIS has no per-element override; always from shared/master.
-  const fisCount = Number(shared.fisCount ?? m.fisCount ?? 0);
+  const fisCount = "fisCount" in ov ? Number(ov.fisCount) : Number(shared.fisCount ?? m.fisCount ?? 0);
 
   const base = _fmnNominalBase(flightType);
   const movements = base + 2 * Math.max(0, Math.trunc(tngCount)) + Math.max(0, Math.trunc(osCount));
@@ -2393,7 +2392,7 @@ function resolveElementForDisplay(el, shared, m) {
     arrAd:    !("arrAd"    in ov),
     tngCount: !("tngCount" in ov),
     osCount:  !("osCount"  in ov),
-    fisCount: true,
+    fisCount: !("fisCount" in ov),
   };
 
   return {

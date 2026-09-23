@@ -762,8 +762,7 @@ export function computeLeaderboards(movements, hoursMap = null) {
         const ov           = el.overrides || {};
         const osCount      = Number('osCount'  in ov ? ov.osCount  : (m.osCount  || 0));
         const tngCount     = Number('tngCount' in ov ? ov.tngCount : (m.tngCount || 0));
-        // FIS has no per-element override; always from master.
-        const fisCount     = Number(m.fisCount || 0);
+        const fisCount     = Number('fisCount' in ov ? ov.fisCount : (m.fisCount || 0));
         creditSortie(captain, callsign, registration, osCount, tngCount, fisCount);
       }
       continue; // Skip master-level attribution for this movement.
