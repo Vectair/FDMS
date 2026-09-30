@@ -1604,6 +1604,14 @@ function normalizeFormation(formation, movement = null) {
     };
   });
 
+  // Migration: ensure label is a non-empty string (malformed/legacy data may
+  // carry label: null or omit it entirely — every other field on formation
+  // gets a backfilled default here except this one previously).
+  if (typeof formation.label !== "string" || !formation.label.trim()) {
+    const base = formation.baseCallsign || "Formation";
+    formation.label = `${base} flight of ${formation.elements.length}`;
+  }
+
   // Recompute derived WTC fields from resolved element state (shared fallback applied)
   const { wtcCurrent, wtcMax } = computeFormationWTC(formation.elements, formation.shared);
   formation.wtcCurrent = wtcCurrent;

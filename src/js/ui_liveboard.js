@@ -2107,17 +2107,31 @@ function readFormationFromModal(baseCallsign, countInputId, containerId, masterS
       return { _error: true, message: `Element ${i + 1}: Arr AD "${arrAdRaw}" must be a 4-character ICAO code (A–Z, 0–9).` };
     }
 
-    // Resolved element aerodrome values (element input wins; fall back to shared default)
-    const resolvedDepAd = depAdRaw || shared.depAd;
-    const resolvedArrAd = arrAdRaw || shared.arrAd;
-
-    // Track element-level overrides.
-    // depAd/arrAd: override when non-empty and differs from shared (value comparison).
-    // reg/type/wtc: use draft override state when available; else fall back to value comparison.
-    const overrides = {};
-    if (depAdRaw && depAdRaw !== shared.depAd) overrides.depAd = depAdRaw;
-    if (arrAdRaw && arrAdRaw !== shared.arrAd) overrides.arrAd = arrAdRaw;
+    // Track element-level overrides — use draft override state when available
+    // (it records whether the user actually edited this field), else fall
+    // back to value comparison against shared.
+    //
+    // depAd/arrAd can't rely on value-comparison alone: fmnPropagateToInheriting()
+    // (FR-09) live-mirrors the master's field into a still-inheriting element's
+    // input as the operator types, so a blank depAd input can read back a
+    // non-empty value that simply equals shared.depAd. Value-comparison would
+    // then wrongly treat it as "not an override" for override-tracking purposes
+    // (harmless) but STORE the mirrored value as the element's actual depAd
+    // (not harmless — see below), rather than recognising the field was never
+    // touched. The draft's overrides dict is authoritative here because it's
+    // only set by the FR-09 input listener when the user actually edits the
+    // field (see the newFormationBody 'input' handler).
     const draftSlot = draft ? draft[i] : null;
+    const depAdIsOverride = draftSlot?.overrides
+      ? ('depAd' in draftSlot.overrides)
+      : (depAdRaw && depAdRaw !== shared.depAd);
+    const arrAdIsOverride = draftSlot?.overrides
+      ? ('arrAd' in draftSlot.overrides)
+      : (arrAdRaw && arrAdRaw !== shared.arrAd);
+
+    const overrides = {};
+    if (depAdIsOverride && depAdRaw) overrides.depAd = depAdRaw;
+    if (arrAdIsOverride && arrAdRaw) overrides.arrAd = arrAdRaw;
     if (draftSlot?.overrides) {
       if ('reg'  in draftSlot.overrides && reg)    overrides.reg  = reg;
       if ('type' in draftSlot.overrides && type)   overrides.type = type;
@@ -2137,8 +2151,14 @@ function readFormationFromModal(baseCallsign, countInputId, containerId, masterS
       reg, type,
       wtc: wtcRaw,
       status: "PLANNED",
-      depAd: resolvedDepAd,
-      arrAd: resolvedArrAd,
+      // Stored blank when not an override, even if the input currently reads
+      // a live-mirrored value from fmnPropagateToInheriting() — the shared
+      // layer supplies the display fallback (resolveElementForDisplay());
+      // storing the mirrored value here would freeze this element to
+      // whatever the master held at creation time instead of tracking it
+      // live (see FORMATIONS.md §3d/§7a).
+      depAd: depAdIsOverride ? depAdRaw : "",
+      arrAd: arrAdIsOverride ? arrAdRaw : "",
       depActual: "", arrActual: "",
       overrides
     });
@@ -2357,8 +2377,7 @@ function resolveElementForDisplay(el, shared, m) {
   const flightType = String("flightType" in ov ? ov.flightType : (shared.flightType || m.flightType || "")).toUpperCase();
   const tngCount = "tngCount" in ov ? Number(ov.tngCount) : Number(shared.tngCount ?? m.tngCount ?? 0);
   const osCount  = "osCount"  in ov ? Number(ov.osCount)  : Number(shared.osCount  ?? m.osCount  ?? 0);
-  // FIS has no per-element override; always from shared/master.
-  const fisCount = Number(shared.fisCount ?? m.fisCount ?? 0);
+  const fisCount = "fisCount" in ov ? Number(ov.fisCount) : Number(shared.fisCount ?? m.fisCount ?? 0);
 
   const base = _fmnNominalBase(flightType);
   const movements = base + 2 * Math.max(0, Math.trunc(tngCount)) + Math.max(0, Math.trunc(osCount));
@@ -2373,7 +2392,7 @@ function resolveElementForDisplay(el, shared, m) {
     arrAd:    !("arrAd"    in ov),
     tngCount: !("tngCount" in ov),
     osCount:  !("osCount"  in ov),
-    fisCount: true,
+    fisCount: !("fisCount" in ov),
   };
 
   return {
@@ -5143,6 +5162,23 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     refreshDepZzzzCompanion?.();
     refreshArrZzzzCompanion?.();
     refreshTypeZzzzCompanion?.();
+
+    // FORMATIONS.md "Produce-arrival / produce-departure inheritance" — seed
+    // the formation section from the reset elements openReciprocalStripModal()
+    // attached to prefill.formation, so the produced leg opens with the
+    // formation already enabled instead of requiring the operator to
+    // re-build it from scratch.
+    if (prefill.formation && Array.isArray(prefill.formation.elements) && prefill.formation.elements.length >= 2) {
+      const count = Math.min(Math.max(prefill.formation.elements.length, 2), 12);
+      prefill.formation.elements.forEach((el, idx) => { newFormationDraft[idx] = { ...el }; });
+      newFormationVisibleCount = count;
+      const countInput = document.getElementById("newFormationCount");
+      if (countInput) countInput.value = String(count);
+      if (newFormationCheckbox) newFormationCheckbox.checked = true;
+      if (newFormationBody) newFormationBody.hidden = false;
+      buildFormationElementRows(count, getNewFlightCallsign(), "newFormationElementsContainer", newFormationDraft, { flightType });
+      fmnSynthesizeMasterFromElements("newFormationElementsContainer", count, newFlightMasterIds);
+    }
   }
 
   // ── VKB button visibility helpers ────────────────────────────────────────
@@ -8883,6 +8919,23 @@ function openReciprocalStripModal(m, targetType) {
     unitCode:     m.unitCode    || "",
     remarks:      `Reciprocal of ${rawCallsign} ${sourceFT}`,
   };
+
+  // FORMATIONS.md "Produce-arrival / produce-departure inheritance": the
+  // produced movement inherits the formation structure (identity fields,
+  // per-element depAd/arrAd as they were) but resets each element's
+  // operational state, since the new leg hasn't happened yet.
+  if (m.formation && Array.isArray(m.formation.elements) && m.formation.elements.length > 0) {
+    const clonedElements = JSON.parse(JSON.stringify(m.formation.elements));
+    clonedElements.forEach(el => {
+      el.status = "PLANNED";
+      el.depActual = "";
+      el.arrActual = "";
+    });
+    prefill.formation = {
+      baseCallsign: m.formation.baseCallsign || splitCallsignCode,
+      elements: clonedElements,
+    };
+  }
 
   // Open the standard creation modal pre-filled; strip is only persisted on Save
   openNewFlightModal(targetType, prefill);

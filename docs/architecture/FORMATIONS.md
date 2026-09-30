@@ -85,12 +85,14 @@ If count < 2, `movement.formation` is treated as null (no formation).
 - No cascade occurs on master activation (PLANNED→ACTIVE).
 
 ### Produce-arrival / produce-departure inheritance
-When producing the opposite leg from a formation-bearing movement:
+Reached via the strip's Edit ▾ menu → Create From → Arrival/Departure, which opens `openReciprocalStripModal()`. When producing the opposite leg from a formation-bearing movement:
 - The produced movement inherits the formation structure including identity fields and `depAd/arrAd`.
 - The produced movement resets element operational state:
   - `status = PLANNED`
   - `depActual = ""`
   - `arrActual = ""`
+
+The reset formation is carried through `openNewFlightModal()`'s `prefill.formation`, which seeds the modal's formation checkbox, count, and element draft so the operator sees the inherited formation already populated rather than needing to re-enter it.
 
 ### Scope boundaries
 - Booking objects and booking sync are formation-agnostic.
@@ -367,15 +369,22 @@ When an element field is edited and diverges from the shared-layer value, it is 
 
 This tracks which fields are element-specific overrides vs. falling back to the shared layer. The `overrides` dict is updated atomically by `updateFormationElement()` on every save.
 
-### 7c. What is NOT implemented (backlog)
+### 7c. Implemented, but session-scoped: live propagation and break-on-edit in the New/Edit Flight modals
+
+While the New Flight, New Local, or Edit Flight modal's formation section is open, editing a master-strip field (`depAd`, `arrAd`, `reg`, `type`, `wtc`) live-propagates that value into the input of every element still marked as inheriting that field (`fmnWireNewMasterPropagation()` / `fmnWireEditMasterPropagation()` → `fmnPropagateToInheriting()`). The moment the operator types into a specific element's own field, that field is marked as an explicit override for the rest of the session (`fmnSetElementOverride()`, wired to the formation body's `input` event) and stops tracking the master.
+
+`readFormationFromModal()` — the shared save-time reader for all three modals — persists this correctly: for a field that was never marked an override in the modal's session draft, it stores `""` (or, for `reg`/`type`/`wtc`, omits the field) regardless of what the live-mirrored input currently displays, so an inheriting element is never frozen to the master's value at save time.
+
+This mechanism is real but **session-scoped to the modal**: it only runs while that specific New/Edit Flight modal instance is open. There is no propagation path for editing a formation-bearing movement's master fields outside that modal (there is no other UI for editing those fields), and `formation.shared` itself is not re-derived from the master's persisted top-level fields outside of it (see §11 caveat below).
+
+### 7d. What is NOT implemented (backlog)
 
 The following inheritance behaviors are **deferred** and not in the current codebase:
 
-- **Master → element propagation on master edit**: editing a field on the master strip does not automatically push that value to elements that have not individually overridden it. This was described in earlier notes but is not implemented.
-- **Break-inheritance on individual edit via UI**: the `overrides` dict is maintained by the data layer, but there is no UI mechanism that explicitly "breaks" inheritance and tracks it as a distinct user action.
+- **Background/always-on master → element sync**: outside of an open New/Edit Flight modal session, there is no mechanism that pushes a master-field change to `formation.shared` or to non-overridden elements. `normalizeFormation()` only fills gaps in `formation.shared` (`??`) and never overwrites an already-populated shared field, so `formation.shared` can drift from the master's live top-level fields once a formation has been created.
 - **`formation_groups` table and `is_formation_master` / `element_index` fields**: the earlier roadmap's relational data model is deferred. The current model stores everything on the master movement record.
 
-### 7d. Deferred data model (backlog reference)
+### 7e. Deferred data model (backlog reference)
 
 Earlier roadmap notes described a `formation_groups` table:
 
@@ -583,7 +592,7 @@ VKB lookups degrade gracefully (returns null/empty if VKB data is not loaded).
 
 ### Reporting integration
 
-When a formation has element identity data, `reporting.js` expands the formation into per-element contributions. Each element is credited to its resolved `attributionCallsign` and `pilot` rather than the master callsign and captain. This prevents all formation movements from being attributed to the lead only.
+`reporting.js` unconditionally expands every formation into per-element contributions — this is not gated on any element carrying manually-entered identity data. Each element is credited to its resolved `attributionCallsign` and `pilot` via `resolveFormationElementIdentity()`, which applies VKB inference (registration / EGOW lookup) before falling back to the master callsign and captain. This prevents all formation movements from being attributed to the lead only, including when identity is only resolvable through VKB data rather than manual entry.
 
 ---
 
@@ -629,6 +638,7 @@ When a formation has element identity data, `reporting.js` expands the formation
 | Reporting per-element expansion (credits to resolved identity, not master only) | FR-14 / FR-14b |
 | Demo formations (CNNCT, MEMORIAL) | — |
 | Master status cascade (COMPLETED / CANCELLED) | — |
+| Live master → element propagation + break-on-edit, scoped to an open New/Edit Flight modal session (§7c) | FR-09 |
 | Documentation closeout (this document) | FR-15 |
 
 ### Backlog (not yet implemented)
@@ -636,7 +646,7 @@ When a formation has element identity data, `reporting.js` expands the formation
 | Feature | Notes |
 |---|---|
 | Formation creation via "Number of aircraft" count field in New Flight modal | Auto-generation of element set with callsigns — deferred |
-| Automatic master → element field propagation on master edit | Break-inheritance semantics — deferred |
+| Background/always-on master → element sync outside an open modal session (§7d) | `formation.shared` can drift from the master's live fields between formation creation and the next New/Edit Flight modal session — deferred |
 | `formation_groups` table, `is_formation_master`, `element_index` fields | Deferred relational data model — not blocking current use |
 | Multiple WTC scheme support per formation (UK dep/arr vs RECAT) | Deferred |
 | Deeper pilot / aircraft profile architecture | V2 direction |

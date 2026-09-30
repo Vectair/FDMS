@@ -142,6 +142,7 @@ const BASE_STRIP_DEP = {
 
   // Expand formation and set count = 2
   await page.click('button.modal-expander[data-target="newFormationSection"]');
+  await page.check('#newFormationEnabled');
   await page.waitForSelector('#newFormationCount', { state: 'visible', timeout: 5000 });
   await page.evaluate(() => {
     const inp = document.getElementById('newFormationCount');
@@ -177,9 +178,11 @@ const BASE_STRIP_DEP = {
   await page.fill('#newDepPlanned', '13:00');
   await page.fill('#newArrPlanned', '14:00');
   await page.fill('#newEgowCode', 'BM');
+  await page.fill('#newUnitCode', 'RAF');  // BM requires a unit code (egowCodeRequiresUnitCode)
   await page.fill('#newDOF', today());
 
   await page.click('button.modal-expander[data-target="newFormationSection"]');
+  await page.check('#newFormationEnabled');
   await page.waitForSelector('#newFormationCount', { state: 'visible', timeout: 5000 });
   await page.evaluate(() => {
     const inp = document.getElementById('newFormationCount');
@@ -245,14 +248,17 @@ const BASE_STRIP_DEP = {
   await page.locator('.js-toggle-details').first().click();
   await page.waitForTimeout(400);
 
-  // Element 1 (CNNCT 2) has depAd="" — should show master depAd (EGOW) as fallback
+  // Element 1 (CNNCT 2) has depAd="" — the fallback is rendered as the input's
+  // placeholder text (resolveElementForDisplay() + the .fmn-el-ad markup in
+  // renderFormationDetails()), not as separate muted text content, so it must
+  // be read via getAttribute('placeholder') rather than textContent().
   const g4ss = await ss(page, 'G4_fallback_display');
-  // Look for .fmn-fallback text containing master depAd
-  const g4FallbackCount = await page.locator('.fmn-fallback').count();
-  const g4FallbackText  = await page.locator('.fmn-fallback').first().textContent().catch(() => '');
-  const g4Pass = g4FallbackCount > 0 && g4FallbackText.includes('EGOW') && jsErrors.length === 0;
+  const g4DepAdInputs   = page.locator('.fmn-el-ad');       // [0]=el0 dep,[1]=el0 arr,[2]=el1 dep,[3]=el1 arr
+  const g4El1DepValue   = await g4DepAdInputs.nth(2).inputValue();
+  const g4El1DepPlaceholder = await g4DepAdInputs.nth(2).getAttribute('placeholder');
+  const g4Pass = g4El1DepValue === '' && g4El1DepPlaceholder === 'EGOW' && jsErrors.length === 0;
   log('G4', 'Empty depAd shows master fallback (EGOW)', g4Pass,
-      `fallbacks=${g4FallbackCount} text="${g4FallbackText}"`, [g4ss]);
+      `value="${g4El1DepValue}" placeholder="${g4El1DepPlaceholder}"`, [g4ss]);
 
   // -----------------------------------------------------------------------
   // G5 — Invalid depAd (3-char) rejected with toast
@@ -308,6 +314,7 @@ const BASE_STRIP_DEP = {
   await page.fill('#newDOF', today());
 
   await page.click('button.modal-expander[data-target="newFormationSection"]');
+  await page.check('#newFormationEnabled');
   await page.waitForSelector('#newFormationCount', { state: 'visible', timeout: 5000 });
   await page.evaluate(() => {
     const inp = document.getElementById('newFormationCount');
@@ -348,9 +355,11 @@ const BASE_STRIP_DEP = {
   await page.fill('#newDepPlanned', '10:00');
   await page.fill('#newArrPlanned', '11:00');
   await page.fill('#newEgowCode', 'BM');
+  await page.fill('#newUnitCode', 'RAF');  // BM requires a unit code (egowCodeRequiresUnitCode)
   await page.fill('#newDOF', today());
 
   await page.click('button.modal-expander[data-target="newFormationSection"]');
+  await page.check('#newFormationEnabled');
   await page.waitForSelector('#newFormationCount', { state: 'visible', timeout: 5000 });
   await page.evaluate(() => {
     const inp = document.getElementById('newFormationCount');
@@ -393,6 +402,7 @@ const BASE_STRIP_DEP = {
 
   // Expand formation section but set count = 1 (below minimum)
   await page.click('button.modal-expander[data-target="newFormationSection"]');
+  await page.check('#newFormationEnabled');
   await page.waitForSelector('#newFormationCount', { state: 'visible', timeout: 5000 });
   await page.evaluate(() => {
     const inp = document.getElementById('newFormationCount');
@@ -466,21 +476,28 @@ const BASE_STRIP_DEP = {
     }
   }]);
 
-  // Register dialog handler BEFORE click (confirm fires synchronously on click)
-  page.once('dialog', d => d.accept());
-  // Open dropdown and cancel
+  // .js-cancel opens a custom "Cancel Strip" modal (reason code/note fields +
+  // a .js-confirm-cancel button) — it is not a native confirm() dialog, so
+  // there is nothing for a page.once('dialog', ...) handler to catch.
   await page.locator('.js-edit-dropdown').first().click();
   await page.waitForTimeout(200);
   await page.locator('.js-cancel').first().click();
+  await page.waitForSelector('.js-confirm-cancel', { state: 'visible', timeout: 3000 });
+  await page.locator('.js-confirm-cancel').click();
   await page.waitForTimeout(600);
 
   const g10ss = await ss(page, 'G10_cascade_cancel');
   const mvs10 = await getMovements(page);
   const mv10  = mvs10.find(m => m.callsignCode === 'CNNCT');
-  const g10AllCancelled = mv10?.formation?.elements?.every(el => el.status === 'CANCELLED');
-  const g10Pass = g10AllCancelled && jsErrors.length === 0;
-  log('G10', 'CANCEL cascade: all elements CANCELLED', g10Pass,
-      `statuses=${JSON.stringify(mv10?.formation?.elements?.map(e => e.status))}`, [g10ss]);
+  const g10Statuses = mv10?.formation?.elements?.map(e => e.status);
+  // cascadeFormationStatus() on CANCELLED only advances PLANNED/ACTIVE elements;
+  // an element already COMPLETED (CNNCT 3) is preserved, per FORMATIONS.md
+  // "Master status cascade rules" and datamodel.js cascadeFormationStatus().
+  const g10Pass = mv10?.status === 'CANCELLED' &&
+      g10Statuses?.[0] === 'CANCELLED' && g10Statuses?.[1] === 'CANCELLED' && g10Statuses?.[2] === 'COMPLETED' &&
+      jsErrors.length === 0;
+  log('G10', 'CANCEL cascade: PLANNED/ACTIVE elements CANCELLED, COMPLETED preserved', g10Pass,
+      `masterStatus=${mv10?.status} statuses=${JSON.stringify(g10Statuses)}`, [g10ss]);
 
   // -----------------------------------------------------------------------
   // G11 — Produce-arrival from formation DEP inherits formation + resets state
@@ -490,16 +507,25 @@ const BASE_STRIP_DEP = {
   // Seed a fresh DEP strip with formation
   await seed(page, [{ ...BASE_STRIP_DEP, status: 'ACTIVE' }]);
 
-  // Open dropdown → Arrival
+  // Open dropdown → Create From (submenu) → Arrival. There is no standalone
+  // .js-produce-arr button any more — "produce arrival" is reached through
+  // the Create From submenu, and it opens the standard New Flight modal
+  // (openReciprocalStripModal() → openNewFlightModal()), not the Edit modal.
   await page.locator('.js-edit-dropdown').first().click();
   await page.waitForTimeout(200);
-  await page.locator('.js-produce-arr').first().click();
+  await page.locator('.js-create-from-submenu-trigger').first().click();
+  await page.waitForTimeout(200);
+  await page.locator('.js-create-from[data-target="ARR"]').first().click();
   await page.waitForTimeout(600);
 
-  // Modal should be open — save it
-  const g11ModalOpen = await page.locator('.js-save-edit').count();
+  // Modal should be open — save it. BASE_STRIP_DEP's egowCode 'BM' requires a
+  // unit code (egowCodeRequiresUnitCode); the fixture's unitCode is blank and
+  // the reciprocal prefill carries that blank straight through, so it must be
+  // filled here or the save is silently blocked.
+  const g11ModalOpen = await page.locator('.js-save-flight').count();
   if (g11ModalOpen > 0) {
-    await page.locator('.js-save-edit').click();
+    await page.fill('#newUnitCode', 'RAF');
+    await page.locator('.js-save-flight').click();
     await page.waitForTimeout(500);
   }
 
@@ -511,7 +537,11 @@ const BASE_STRIP_DEP = {
   const g11ElementsReset = prodMv?.formation?.elements?.every(
     el => el.status === 'PLANNED' && el.depActual === '' && el.arrActual === ''
   );
-  const g11DepAdCopied = prodMv?.formation?.elements?.[0]?.depAd === 'EGOW'; // identity field preserved
+  // Element 0's depAd ('EGOW') happens to equal shared.depAd, so it's an
+  // ambiguous case for override-vs-inheriting bookkeeping; element 2 (CNNCT 3)
+  // has depAd 'EGOM', which unambiguously diverges from shared and so is an
+  // unambiguous per-element override to check survives being carried through.
+  const g11DepAdCopied = prodMv?.formation?.elements?.[2]?.depAd === 'EGOM'; // identity field preserved
   const g11Pass = g11HasFormation && g11ElementsReset && g11DepAdCopied && jsErrors.length === 0;
   log('G11', 'Produce-arrival inherits formation; elements reset to PLANNED', g11Pass,
       `hasFormation=${g11HasFormation} allReset=${g11ElementsReset} depAdCopied=${g11DepAdCopied}`,
