@@ -231,6 +231,7 @@ Release maintainers:
 - The private signing key (C:\Users\dmshs\.tauri\vectair-flite.key) must not be committed to the repository.
 - The public key is embedded in src-tauri/tauri.conf.json and is safe to commit.
 - The TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD environment variables must be set for release builds that produce signed updater artifacts.
+- The signing key's password is stored in Bitwarden (EU region) under the item `Flite Signing Key` — see STATE.md §3.5 for the exact retrieval commands. Do not rely on memory for this password.
 
 Current project status
 

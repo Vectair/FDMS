@@ -292,9 +292,31 @@ The current updater is a regression baseline. Do not modify it casually.
 
 The updater signing public key is embedded in project configuration.
 
-The signing private key must never be committed.
+The signing private key must never be committed. It lives only at
+`C:\Users\dmshs\.tauri\vectair-flite.key` on the release machine.
 
-Signing-key rotation is planned later as post-launch preparation and is not a blocker for the current Pre-V1 engineering sequence unless circumstances change.
+The private key's password is stored in Bitwarden (EU region —
+`vault.bitwarden.eu`; the CLI must have `bw config server
+https://vault.bitwarden.eu` set before login), under the vault item
+`Flite Signing Key`. Retrieve it for a release build rather than typing
+it from memory:
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY_PATH = "C:\Users\dmshs\.tauri\vectair-flite.key"
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = bw get password "Flite Signing Key"
+```
+
+The keypair was rotated once already (see git history for `src-tauri/tauri.conf.json`,
+commit `24df5cb`) after the original key's password was lost with no
+recoverable record of it anywhere — this is exactly the failure mode the
+Bitwarden setup above exists to prevent happening again. If it ever needs
+rotating again (lost password, suspected compromise, etc.), the process is:
+`cargo tauri signer generate -w <path>` on the release machine, save the new
+password to the Bitwarden item immediately, then update the embedded
+`pubkey` in `src-tauri/tauri.conf.json`. Any already-installed build verifies
+updates against whatever public key was embedded in *that* build, so a
+rotation breaks the in-app update path for existing installs until they're
+manually reinstalled once from a freshly-signed installer.
 
 ---
 
