@@ -643,10 +643,7 @@ const registrationTypeLookup = {
   // UK Military (ZM, ZJ, ZK, etc.)
   "ZM300": "JUNO",
   "ZJ": "MERLIN",
-  "ZK": "SEA KING",
-  // Prefix-based inference
-  "G-B": "Various UK Civil",
-  "G-C": "Various UK Civil"
+  "ZK": "SEA KING"
 };
 
 /**
