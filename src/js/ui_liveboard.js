@@ -8722,6 +8722,86 @@ export function initHistoryRetroEntry() {
   });
 }
 
+// ─── Live-keystroke uppercase ──────────────────────────────────────────────
+//
+// Project-wide convention: codes, identifiers and free-text fields display
+// uppercase as the operator types, matching the save-time normalisation
+// (normOperationalText()/normalizeEuCivilRegistration()) that already
+// applied to most of these fields — this just makes it live instead of
+// visible only after save. Time fields, counts, and anything numeric are
+// excluded: toUpperCase() is a no-op on digits, so there's nothing to gain
+// by including them, and keeping them out keeps this list an honest
+// reflection of what's actually in scope.
+//
+// Deliberately excluded, not an oversight: ebContactPhone/ppContactPhone
+// (phone numbers), every *Actual/*Planned/*Time/newLocStart/newLocEnd field
+// (HH:MM times), and anything with a native non-text input type (date,
+// number, checkbox, radio, select) — those never reach this handler at all
+// since the id/selector list below doesn't name them.
+const LIVE_UPPERCASE_FIELD_IDS = new Set([
+  // Identity / codes — New, Edit, Duplicate, Retrospective, New Local modals
+  "newCallsignCode", "newFlightNumber", "newReg", "newType",
+  "newDepAd", "newArrAd", "newEgowCode", "newUnitCode",
+  "newAircraftTypeText", "newDepAdText", "newArrAdText",
+  "editCallsignCode", "editFlightNumber", "editReg", "editType",
+  "editDepAd", "editArrAd", "editEgowCode", "editUnitCode", "editWtcDisplay",
+  "editAircraftTypeText", "editDepAdText", "editArrAdText",
+  "editActualDestAd", "editActualDestText", "editOutcomeReason",
+  "dupCallsign", "dupReg", "dupType", "dupDepAd", "dupArrAd",
+  "retroCallsignCode", "retroReg", "retroType", "retroDepAd", "retroArrAd",
+  "retroEgowCode", "retroUnitCode",
+  "newLocCallsignCode", "newLocFlightNumber", "newLocReg", "newLocType",
+  "newLocEgowCode", "newLocUnitCode", "newLocRoute", "newLocSquawk",
+  // Pilot / route / squawk
+  "newCaptain", "editCaptain", "retroCaptain", "newLocCaptain",
+  "atcRoute", "atcSquawk", "editAtcRoute", "editAtcSquawk",
+  // Free-text areas — Remarks, Warnings, Clearance, cancellation notes
+  "rwRemarks", "rwWarnings", "atcClearance",
+  "editRwRemarks", "editRwWarnings", "editAtcClearance",
+  "dupRemarks", "retroRemarks",
+  "newLocRemarks", "newLocWarnings", "newLocClearance",
+  "cancelReasonNote", "editCancelReasonNote",
+  // Booking / calendar modals (ui_booking.js) — contact phone deliberately excluded
+  "ebCallsign", "ebReg", "ebType", "ebContactName", "ebNotes",
+  "ppCallsign", "ppReg", "ppType", "ppContactName", "ppNotes",
+  "eventTitle", "eventDescription", "eeTitle", "eeDescription",
+]);
+
+// Formation element tables — both the authoring modal's compact rows
+// (buildFormationElementRows(), matched by data-el-* attribute presence)
+// and the Live Board expanded panel's cards (renderFormationDetails(),
+// matched by its existing per-field fmn-el-* classes). T&G/O/S/FIS
+// (number inputs) and actual/outcome times are not listed, so they're
+// excluded automatically.
+const LIVE_UPPERCASE_FORMATION_SELECTOR =
+  "[data-el-callsign], [data-el-reg], [data-el-type], [data-el-wtc], " +
+  ".fmn-el-ad, .fmn-el-attr-cs, .fmn-el-pilot, " +
+  ".fmn-el-act-dest-ad, .fmn-el-act-dest-text, .fmn-el-reason";
+
+/**
+ * Force an <input>/<textarea>'s displayed value to uppercase as the operator
+ * types, preserving cursor/selection position so mid-string editing isn't
+ * disrupted. A no-op when the value is already uppercase (e.g. pure digits),
+ * so running this on every keystroke of a matched field is cheap.
+ */
+function liveUppercaseTransform(el) {
+  const before = el.value;
+  const after = before.toUpperCase();
+  if (after === before) return;
+  const selStart = el.selectionStart;
+  const selEnd = el.selectionEnd;
+  el.value = after;
+  if (selStart !== null && selEnd !== null) {
+    el.setSelectionRange(selStart, selEnd);
+  }
+}
+
+function isLiveUppercaseField(el) {
+  if (!el || (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA")) return false;
+  if (el.id && LIVE_UPPERCASE_FIELD_IDS.has(el.id)) return true;
+  return el.matches && el.matches(LIVE_UPPERCASE_FORMATION_SELECTOR);
+}
+
 // ─── Create From workflow ─────────────────────────────────────────────────────
 
 const CREATE_FROM_ORDER = {
@@ -9432,6 +9512,15 @@ export function initLiveBoard() {
   safeOn(btnNewDep, "click", () => openNewFlightModal("DEP"));
   safeOn(btnNewArr, "click", () => openNewFlightModal("ARR"));
   safeOn(btnNewOvr, "click", () => openNewFlightModal("OVR"));
+
+  // Delegated: live uppercase as the operator types, across every matched
+  // field project-wide (see LIVE_UPPERCASE_FIELD_IDS / _FORMATION_SELECTOR
+  // above). One listener for the whole document — covers fields rendered by
+  // this file and by ui_booking.js alike, and any modal opened after this
+  // wiring runs, since it's delegated rather than bound per-element.
+  document.addEventListener("input", (e) => {
+    if (isLiveUppercaseField(e.target)) liveUppercaseTransform(e.target);
+  });
 
   // Delegated: formation element "Save" buttons in expanded rows
   // Handles both Live Board and History panel (both rendered inside document)
